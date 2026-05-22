@@ -18,7 +18,7 @@
 #define STRIPPABLE_ITEM_RHAND "right_hand"
 #define STRIPPABLE_ITEM_HANDCUFFS "handcuffs"
 #define STRIPPABLE_ITEM_LEGCUFFS "legcuffs"
-#define STRIPPABLE_ITEM_CORGI_COLLAR "corgi_collar"
+#define STRIPPABLE_ITEM_PET_COLLAR "pet_collar"
 #define STRIPPABLE_ITEM_PARROT_HEADSET "parrot_headset"
 
 /// This slot is not obscured.
@@ -29,3 +29,6 @@
 
 /// This slot can't be seen, but can be accessed.
 #define STRIPPABLE_OBSCURING_HIDDEN 2
+
+/// This slot can be seen, but cannot be accessed
+#define STRIPPABLE_OBSCURING_INACCESSIBLE 3

@@ -3,7 +3,7 @@
 /obj/machinery/field/containment
 	name = "containment field"
 	desc = "An energy field."
-	icon = 'icons/obj/singularity.dmi'
+	icon = 'icons/obj/machines/engine/singularity.dmi'
 	icon_state = "Contain_F"
 	density = FALSE
 	move_resist = INFINITY
@@ -14,19 +14,22 @@
 	can_atmos_pass = ATMOS_PASS_NO
 	light_range = 4
 	layer = ABOVE_OBJ_LAYER
+	explosion_block = INFINITY
 	///First of the generators producing the containment field
 	var/obj/machinery/field/generator/field_gen_1 = null
 	///Second of the generators producing the containment field
 	var/obj/machinery/field/generator/field_gen_2 = null
 
 /obj/machinery/field/containment/Initialize(mapload)
+	AddElement(/datum/element/blocks_explosives)
 	. = ..()
 	air_update_turf(TRUE, TRUE)
-	RegisterSignal(src, COMSIG_ATOM_SINGULARITY_TRY_MOVE, .proc/block_singularity)
+	RegisterSignal(src, COMSIG_ATOM_SINGULARITY_TRY_MOVE, PROC_REF(block_singularity))
 	var/static/list/loc_connections = list(
-		COMSIG_ATOM_ENTERED = .proc/on_entered,
+		COMSIG_ATOM_ENTERED = PROC_REF(on_entered),
 	)
 	AddElement(/datum/element/connect_loc, loc_connections)
+	AddElement(/datum/element/give_turf_traits, string_list(list(TRAIT_CONTAINMENT_FIELD)))
 
 /obj/machinery/field/containment/Destroy()
 	if(field_gen_1)
@@ -44,11 +47,11 @@
 	if(get_dist(src, user) > 1)
 		return FALSE
 	else
-		shock(user)
+		yeet_shock(user)
 		return TRUE
 
-/obj/machinery/field/containment/attackby(obj/item/W, mob/user, params)
-	shock(user)
+/obj/machinery/field/containment/attackby(obj/item/W, mob/user, list/modifiers, list/attack_modifiers)
+	yeet_shock(user)
 	return TRUE
 
 /obj/machinery/field/containment/play_attack_sound(damage_amount, damage_type = BRUTE, damage_flag = 0)
@@ -80,7 +83,7 @@
 	if(isliving(considered_atom))
 		var/mob/living/living_moving_through_field = considered_atom
 		if(!living_moving_through_field.incorporeal_move)
-			shock(considered_atom)
+			yeet_shock(considered_atom)
 
 	if(ismachinery(considered_atom) || isstructure(considered_atom) || ismecha(considered_atom))
 		bump_field(considered_atom)
@@ -97,7 +100,7 @@
 
 	return SINGULARITY_TRY_MOVE_BLOCK
 
-/obj/machinery/field/containment/shock(mob/living/user)
+/obj/machinery/field/containment/yeet_shock(mob/living/user)
 	if(!field_gen_1 || !field_gen_2)
 		qdel(src)
 		return FALSE
@@ -119,9 +122,9 @@
 	if(has_shocked)
 		return
 	if(isliving(mover))
-		shock(mover)
+		yeet_shock(mover)
 		return
-	if(ismachinery(mover) || isstructure(mover) || ismecha(mover))
+	if(ismachinery(mover) || isstructure(mover) || isvehicle(mover))
 		bump_field(mover)
 		return
 
@@ -131,7 +134,7 @@
 	if(has_shocked || isliving(mover) || ismachinery(mover) || isstructure(mover) || ismecha(mover))
 		return FALSE
 
-/obj/machinery/field/proc/shock(mob/living/user)
+/obj/machinery/field/proc/yeet_shock(mob/living/user)
 	var/shock_damage = min(rand(30,40),rand(30,40))
 
 	if(iscarbon(user))
@@ -141,8 +144,8 @@
 	else if(issilicon(user))
 		if(prob(20))
 			user.Stun(40)
-		user.take_overall_damage(0, shock_damage)
-		user.visible_message(span_danger("[user.name] is shocked by the [src.name]!"), \
+		user.take_overall_damage(burn = shock_damage)
+		user.visible_message(span_danger("[user.name] is shocked by \the [src]!"), \
 		span_userdanger("Energy pulse detected, system damaged!"), \
 		span_hear("You hear an electrical crack."))
 
@@ -162,4 +165,4 @@
 		to_chat(considered_atom, span_userdanger("The field repels you with tremendous force!"))
 	playsound(src, 'sound/effects/gravhit.ogg', 50, TRUE)
 	considered_atom.throw_at(target, 200, 4)
-	addtimer(CALLBACK(src, .proc/clear_shock), 5)
+	addtimer(CALLBACK(src, PROC_REF(clear_shock)), 0.5 SECONDS)

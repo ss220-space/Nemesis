@@ -18,9 +18,9 @@ GLOBAL_PROTECT(poll_options)
 		var/datum/poll_question/poll = p
 		if((poll.admin_only && !client.holder) || poll.future_poll)
 			continue
-		output += "<tr bgcolor='#e2e2e2'><td><a href='?src=[rs];viewpoll=[REF(poll)]'><b>[poll.question]</b></a></td></tr>"
+		output += "<tr bgcolor='#e2e2e2'><td><a href='byond://?src=[rs];viewpoll=[REF(poll)]'><b>[poll.question]</b></a></td></tr>"
 	output += "</table>"
-	src << browse(jointext(output, ""),"window=playerpolllist;size=500x300")
+	src << browse(HTML_SKELETON(jointext(output, "")),"window=playerpolllist;size=500x300")
 
 /**
  * Redirects a player to the correct poll window based on poll type.
@@ -86,7 +86,7 @@ GLOBAL_PROTECT(poll_options)
 	if(!voted_option_id || poll.allow_revoting)
 		output += "<p><input type='submit' value='Vote'></form>"
 	output += "</div>"
-	src << browse(jointext(output, ""),"window=playerpoll;size=500x250")
+	src << browse(HTML_SKELETON(jointext(output, "")),"window=playerpoll;size=500x250")
 
 /**
  * Shows voting window for a text response type poll, listing its relevant details.
@@ -123,7 +123,7 @@ GLOBAL_PROTECT(poll_options)
 	else
 		output += "[reply_text]"
 	output += "</div>"
-	src << browse(jointext(output, ""),"window=playerpoll;size=500x500")
+	src << browse(HTML_SKELETON(jointext(output, "")),"window=playerpoll;size=500x500")
 
 /**
  * Shows voting window for a rating type poll, listing its options and relevant details.
@@ -178,7 +178,7 @@ GLOBAL_PROTECT(poll_options)
 	if(!length(voted_ratings) || poll.allow_revoting)
 		output += "<p><input type='submit' value='Submit'></form>"
 	output += "</div>"
-	src << browse(jointext(output, ""),"window=playerpoll;size=500x500")
+	src << browse(HTML_SKELETON(jointext(output, "")),"window=playerpoll;size=500x500")
 
 /**
  * Shows voting window for a multiple choice type poll, listing its options and relevant details.
@@ -222,7 +222,7 @@ GLOBAL_PROTECT(poll_options)
 	if(!length(voted_for) || poll.allow_revoting)
 		output += "<p><input type='submit' value='Vote'></form>"
 	output += "</div>"
-	src << browse(jointext(output, ""),"window=playerpoll;size=500x300")
+	src << browse(HTML_SKELETON(jointext(output, "")),"window=playerpoll;size=500x300")
 
 /**
  * Shows voting window for an IRV type poll, listing its options and relevant details.
@@ -295,7 +295,7 @@ GLOBAL_PROTECT(poll_options)
 		output += "<font size='2'>Revoting is enabled.</font>"
 	output += "Please sort the options in the order of <b>most preferred</b> to <b>least preferred</b><br></div>"
 	if(!length(voted_for) || poll.allow_revoting)
-		output += {"<form action='?src=[REF(src)]' method='POST'>
+		output += {"<form action='?src=[REF(src)]' method='get'>
 		<input type='hidden' name='src' value='[REF(src)]'>
 		<input type='hidden' name='votepollref' value='[REF(poll)]'>
 		<input type='hidden' name='IRVdata' id='IRVdata'>
@@ -307,7 +307,7 @@ GLOBAL_PROTECT(poll_options)
 	output += "</ol><b><center>Least Preferred</center></b><br>"
 	if(!length(voted_for) || poll.allow_revoting)
 		output += "<p><input type='submit' value='Vote'></form>"
-	output += "</div>"
+	output += "</div></html>"
 	src << browse(jointext(output, ""),"window=playerpoll;size=500x500")
 
 /**
@@ -325,14 +325,14 @@ GLOBAL_PROTECT(poll_options)
 	if(!poll || !href_list)
 		return
 	if(IsAdminAdvancedProcCall())
-		log_game("[key_name(usr)] attempted to rig the vote by voting as [key]")
-		message_admins("[key_name_admin(usr)] attempted to rig the vote by voting as [key]")
+		usr.log_message("attempted to rig the vote by voting as [key].", LOG_ADMIN)
+		message_admins("[key_name_admin(usr)] attempted to rig the vote by voting as [key].")
 		to_chat(usr, span_danger("You don't seem to be [key]."))
-		to_chat(src, span_danger("Something went horribly wrong processing your vote. Please contact an administrator, they should have gotten a message about this"))
+		to_chat(src, span_danger("Something went horribly wrong processing your vote. Please contact an administrator, they should have gotten a message about this."))
 		return
 	var/admin_rank
 	if(client.holder)
-		admin_rank = client.holder.rank.name
+		admin_rank = client.holder.rank_names()
 	else
 		if(poll.admin_only)
 			return

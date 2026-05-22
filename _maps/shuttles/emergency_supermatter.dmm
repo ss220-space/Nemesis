@@ -3,8 +3,11 @@
 /turf/template_noop,
 /area/template_noop)
 "ac" = (
-/obj/structure/sign/warning/radiation,
-/turf/closed/wall/mineral/titanium,
+/obj/structure/chair/comfy/shuttle{
+	dir = 4
+	},
+/obj/structure/sign/warning/radiation/directional/south,
+/turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
 "ad" = (
 /obj/effect/spawner/structure/window/reinforced/shuttle,
@@ -34,9 +37,7 @@
 /turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
 "al" = (
-/obj/machinery/shower{
-	dir = 8
-	},
+/obj/machinery/shower/directional/west,
 /turf/open/floor/noslip,
 /area/shuttle/escape)
 "am" = (
@@ -62,9 +63,7 @@
 /turf/open/floor/plating,
 /area/shuttle/escape)
 "ap" = (
-/obj/machinery/shower{
-	dir = 4
-	},
+/obj/machinery/shower/directional/east,
 /turf/open/floor/noslip,
 /area/shuttle/escape)
 "ar" = (
@@ -104,21 +103,23 @@
 /turf/open/floor/plating,
 /area/shuttle/escape)
 "aB" = (
-/obj/machinery/power/supermatter_crystal/shard/hugbox/fakecrystal,
+/obj/machinery/power/supermatter_crystal/hugbox,
 /turf/open/floor/plating,
 /area/shuttle/escape)
 "aD" = (
 /obj/structure/table/reinforced,
-/obj/item/storage/firstaid/toxin,
+/obj/item/storage/medkit/toxin,
 /obj/item/crowbar/red,
 /obj/item/storage/box/snappops{
 	pixel_x = 4;
 	pixel_y = -4
 	},
+/obj/structure/sign/warning/radiation/directional/west,
 /turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
 "aE" = (
 /obj/structure/reagent_dispensers/fueltank,
+/obj/structure/sign/warning/radiation/directional/east,
 /turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
 "aF" = (
@@ -131,14 +132,17 @@
 /turf/open/floor/plating,
 /area/shuttle/escape)
 "aI" = (
-/obj/structure/sign/warning/radiation,
-/turf/closed/wall/mineral/titanium/nodiagonal,
+/obj/structure/chair/comfy/shuttle{
+	dir = 8
+	},
+/obj/structure/sign/warning/radiation/directional/south,
+/turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
 "aL" = (
 /obj/machinery/door/airlock/external/ruin{
-	name = "Emergency Launch Catwalk";
-	req_access_txt = "10"
+	name = "Emergency Launch Catwalk"
 	},
+/obj/effect/mapping_helpers/airlock/access/all/engineering/general,
 /turf/open/floor/plating,
 /area/shuttle/escape)
 "aM" = (
@@ -232,7 +236,7 @@
 /turf/open/floor/plating/airless,
 /area/shuttle/escape)
 "bc" = (
-/obj/structure/shuttle/engine/heater,
+/obj/machinery/power/shuttle_engine/heater,
 /turf/open/floor/plating/airless,
 /area/shuttle/escape)
 "bd" = (
@@ -242,7 +246,7 @@
 /turf/open/floor/plating/airless,
 /area/shuttle/escape)
 "be" = (
-/obj/structure/shuttle/engine/propulsion,
+/obj/machinery/power/shuttle_engine/propulsion,
 /turf/open/floor/plating/airless,
 /area/shuttle/escape)
 "bf" = (
@@ -268,7 +272,8 @@
 	anchored = 1
 	},
 /obj/item/clothing/glasses/meson/engine,
-/obj/machinery/light/directional/west,
+/obj/machinery/light/small/directional/east,
+/obj/structure/sign/warning/radiation/directional/north,
 /turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
 "bj" = (
@@ -276,21 +281,22 @@
 	anchored = 1
 	},
 /obj/item/clothing/glasses/meson/engine,
-/obj/machinery/light/directional/east,
+/obj/machinery/light/small/directional/west,
+/obj/structure/sign/warning/radiation/directional/north,
 /turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
 "bk" = (
 /obj/effect/turf_decal/stripes/line{
 	dir = 8
 	},
-/obj/machinery/light/directional/west,
+/obj/machinery/light/warm/directional/west,
 /turf/open/floor/plating,
 /area/shuttle/escape)
 "bl" = (
 /obj/effect/turf_decal/stripes/line{
 	dir = 4
 	},
-/obj/machinery/light/directional/east,
+/obj/machinery/light/warm/directional/east,
 /turf/open/floor/plating,
 /area/shuttle/escape)
 "hD" = (
@@ -307,6 +313,14 @@
 	},
 /turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
+"yI" = (
+/obj/structure/closet/radiation{
+	anchored = 1
+	},
+/obj/item/clothing/glasses/meson/engine,
+/obj/structure/sign/warning/radiation/directional/west,
+/turf/open/floor/mineral/titanium/yellow,
+/area/shuttle/escape)
 "Bi" = (
 /obj/structure/closet/radiation{
 	anchored = 1
@@ -315,6 +329,14 @@
 /obj/machinery/status_display/evac{
 	pixel_x = -32
 	},
+/turf/open/floor/mineral/titanium/yellow,
+/area/shuttle/escape)
+"Op" = (
+/obj/structure/closet/radiation{
+	anchored = 1
+	},
+/obj/item/clothing/glasses/meson/engine,
+/obj/structure/sign/warning/radiation/directional/east,
 /turf/open/floor/mineral/titanium/yellow,
 /area/shuttle/escape)
 "UA" = (
@@ -333,7 +355,7 @@ aa
 aa
 aw
 aA
-ac
+ae
 aF
 aw
 aa
@@ -352,7 +374,7 @@ aa
 aw
 ae
 ad
-ac
+ae
 ae
 ad
 aw
@@ -373,10 +395,10 @@ bc
 be
 "}
 (3,1,1) = {"
-ac
+ae
+bj
 ag
-ag
-bi
+yI
 Bi
 ag
 ag
@@ -406,8 +428,8 @@ ar
 ar
 ar
 ar
-ar
 aI
+aw
 aw
 aa
 aM
@@ -502,8 +524,8 @@ av
 av
 av
 av
-av
-aI
+ac
+aw
 aw
 aa
 aM
@@ -517,10 +539,10 @@ aa
 aa
 "}
 (9,1,1) = {"
-ac
+ae
+bi
 ag
-ag
-bj
+Op
 pb
 ag
 ag
@@ -544,7 +566,7 @@ be
 aw
 ae
 ad
-ac
+ae
 ae
 ad
 aw
@@ -573,7 +595,7 @@ aa
 aa
 aw
 aA
-ac
+ae
 aA
 aw
 aa

@@ -24,12 +24,9 @@
 	icon = 'icons/obj/machines/roulette.dmi'
 	icon_state = "idle"
 	density = TRUE
-	use_power = IDLE_POWER_USE
 	anchored = FALSE
-	idle_power_usage = 10
-	active_power_usage = 100
 	max_integrity = 500
-	armor = list(MELEE = 45, BULLET = 30, LASER = 30, ENERGY = 30, BOMB = 10, BIO = 30, FIRE = 30, ACID = 30)
+	armor_type = /datum/armor/machinery_roulette
 	var/static/list/numbers = list("0" = "green", "1" = "red", "3" = "red", "5" = "red", "7" = "red", "9" = "red", "12" = "red", "14" = "red", "16" = "red",\
 	"18" = "red", "19" = "red", "21" = "red", "23" = "red", "25" = "red", "27" = "red", "30" = "red", "32" = "red", "34" = "red", "36" = "red",\
 	"2" = "black", "4" = "black", "6" = "black", "8" = "black", "10" = "black", "11" = "black", "13" = "black", "15" = "black", "17" = "black", "20" = "black",\
@@ -43,16 +40,25 @@
 	var/playing = FALSE
 	var/locked = FALSE
 	var/drop_dir = SOUTH
-	var/static/list/coin_values = list(/obj/item/coin/diamond = 100, /obj/item/coin/gold = 25, /obj/item/coin/silver = 10, /obj/item/coin/iron = 1) //Make sure this is ordered from left to right.
+	var/static/list/coin_values = list(/obj/item/poker_chip/black = 1000, /obj/item/poker_chip/green = 250, /obj/item/poker_chip/blue = 100, /obj/item/poker_chip/red = 25, /obj/item/poker_chip/white_blue = 10, /obj/item/poker_chip/white_black = 1) //Make sure this is ordered from left to right.
 	var/list/coins_to_dispense = list()
 	var/datum/looping_sound/jackpot/jackpot_loop
 	var/on = TRUE
 	var/last_spin = 13
 
+/datum/armor/machinery_roulette
+	melee = 45
+	bullet = 30
+	laser = 30
+	energy = 30
+	bomb = 10
+	fire = 30
+	acid = 30
+
 /obj/machinery/roulette/Initialize(mapload)
 	. = ..()
 	jackpot_loop = new(src, FALSE)
-	wires = new /datum/wires/roulette(src)
+	set_wires(new /datum/wires/roulette(src))
 
 /obj/machinery/roulette/Destroy()
 	QDEL_NULL(jackpot_loop)
@@ -92,7 +98,7 @@
 
 	return data
 
-/obj/machinery/roulette/ui_act(action, params)
+/obj/machinery/roulette/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	. = ..()
 	if(.)
 		return
@@ -110,24 +116,36 @@
 	update_appearance() // Not applicable to all objects.
 
 ///Handles setting ownership and the betting itself.
-/obj/machinery/roulette/attackby(obj/item/W, mob/user, params)
+/obj/machinery/roulette/attackby(obj/item/W, mob/user, list/modifiers, list/attack_modifiers)
 	if(machine_stat & MAINT && is_wire_tool(W))
 		wires.interact(user)
 		return
 	if(playing)
 		return ..()
-	if(istype(W, /obj/item/card/id))
-		playsound(src, 'sound/machines/card_slide.ogg', 50, TRUE)
+	var/obj/item/card/id/player_card = W.GetID()
+	if(player_card)
+		if(isidcard(W))
+			playsound(src, 'sound/machines/card_slide.ogg', 50, TRUE)
+		else
+			playsound(src, 'sound/machines/terminal/terminal_success.ogg', 50, TRUE)
 
 		if(machine_stat & MAINT || !on || locked)
 			to_chat(user, span_notice("The machine appears to be disabled."))
 			return FALSE
 
+		if(!player_card.registered_account)
+			say("You don't have a bank account!")
+			playsound(src, 'sound/machines/buzz/buzz-two.ogg', 30, TRUE)
+			return FALSE
+
 		if(my_card)
-			var/obj/item/card/id/player_card = W
+			if(IS_DEPARTMENTAL_CARD(player_card)) // Are they using a department ID
+				say("You cannot gamble with the department budget!")
+				playsound(src, 'sound/machines/buzz/buzz-two.ogg', 30, TRUE)
+				return FALSE
 			if(player_card.registered_account.account_balance < chosen_bet_amount) //Does the player have enough funds
 				say("You do not have the funds to play! Lower your bet or get more money.")
-				playsound(src, 'sound/machines/buzz-two.ogg', 30, TRUE)
+				playsound(src, 'sound/machines/buzz/buzz-two.ogg', 30, TRUE)
 				return FALSE
 			if(!chosen_bet_amount || isnull(chosen_bet_type))
 				return FALSE
@@ -153,8 +171,8 @@
 					potential_payout_mult = ROULETTE_SIMPLE_PAYOUT
 			var/potential_payout = chosen_bet_amount * potential_payout_mult
 
-			if(!check_bartender_funds(potential_payout))
-				return FALSE  //bartender is too poor
+			if(!check_owner_funds(potential_payout))
+				return FALSE  //owner is too poor
 
 			if(last_anti_spam > world.time) //do not cheat me
 				return FALSE
@@ -163,24 +181,22 @@
 
 			icon_state = "rolling" //Prepare the new icon state for rolling before hand.
 			flick("flick_up", src)
-			playsound(src, 'sound/machines/piston_raise.ogg', 70)
+			playsound(src, 'sound/machines/piston/piston_raise.ogg', 70)
 			playsound(src, 'sound/machines/chime.ogg', 50)
 
-			addtimer(CALLBACK(src, .proc/play, user, player_card, chosen_bet_type, chosen_bet_amount, potential_payout), 4) //Animation first
+			addtimer(CALLBACK(src, PROC_REF(play), user, player_card, chosen_bet_type, chosen_bet_amount, potential_payout), 4) //Animation first
 			return TRUE
 		else
-			var/obj/item/card/id/new_card = W
-			if(new_card.registered_account)
-				var/msg = tgui_input_text(user, "Name of your roulette wheel", "Roulette Customization", "Roulette Machine", MAX_NAME_LEN)
-				if(!msg)
-					return
-				name = msg
-				desc = "Owned by [new_card.registered_account.account_holder], draws directly from [user.p_their()] account."
-				my_card = new_card
-				RegisterSignal(my_card, COMSIG_PARENT_QDELETING, .proc/on_my_card_deleted)
-				to_chat(user, span_notice("You link the wheel to your account."))
-				power_change()
+			var/msg = tgui_input_text(user, "Name of your roulette wheel", "Roulette Customization", "Roulette Machine", max_length = MAX_NAME_LEN)
+			if(!msg)
 				return
+			name = msg
+			desc = "Owned by [player_card.registered_account.account_holder], draws directly from [user.p_their()] account."
+			my_card = player_card
+			RegisterSignal(my_card, COMSIG_QDELETING, PROC_REF(on_my_card_deleted))
+			to_chat(user, span_notice("You link the wheel to your account."))
+			power_change()
+			return
 	return ..()
 
 ///deletes the my_card ref to prevent harddels
@@ -193,30 +209,36 @@
 	if(!my_card?.registered_account) // Something happened to my_card during the 0.4 seconds delay of the timed callback.
 		icon_state = "idle"
 		flick("flick_down", src)
-		playsound(src, 'sound/machines/piston_lower.ogg', 70)
+		playsound(src, 'sound/machines/piston/piston_lower.ogg', 70)
 		return
 
 	var/payout = potential_payout
 
-	my_card.registered_account.transfer_money(player_id.registered_account, bet_amount)
+	my_card.registered_account.transfer_money(player_id.registered_account, bet_amount, "Roulette: Bet")
 
 	playing = TRUE
+	cut_overlays()
 	update_appearance()
 	set_light(0)
+	if(isliving(user))
+		var/mob/living/living_user = user
+		living_user.add_mood_event("roulette", /datum/mood_event/slots)
 
 	var/rolled_number = rand(0, 36)
 
-	playsound(src, 'sound/machines/roulettewheel.ogg', 50)
-	addtimer(CALLBACK(src, .proc/finish_play, player_id, bet_type, bet_amount, payout, rolled_number), 34) //4 deciseconds more so the animation can play
-	addtimer(CALLBACK(src, .proc/finish_play_animation), 30)
+	playsound(src, 'sound/machines/roulette/roulettewheel.ogg', 50)
+	addtimer(CALLBACK(src, PROC_REF(finish_play), player_id, bet_type, bet_amount, payout, rolled_number, user), 34) //4 deciseconds more so the animation can play
+	addtimer(CALLBACK(src, PROC_REF(finish_play_animation)), 3 SECONDS)
+
+	use_energy(active_power_usage)
 
 /obj/machinery/roulette/proc/finish_play_animation()
 	icon_state = "idle"
 	flick("flick_down", src)
-	playsound(src, 'sound/machines/piston_lower.ogg', 70)
+	playsound(src, 'sound/machines/piston/piston_lower.ogg', 70)
 
 ///Ran after a while to check if the player won or not.
-/obj/machinery/roulette/proc/finish_play(obj/item/card/id/player_id, bet_type, bet_amount, potential_payout, rolled_number)
+/obj/machinery/roulette/proc/finish_play(obj/item/card/id/player_id, bet_type, bet_amount, potential_payout, rolled_number, mob/user)
 	last_spin = rolled_number
 
 	var/is_winner = check_win(bet_type, bet_amount, rolled_number) //Predetermine if we won
@@ -230,17 +252,22 @@
 	handle_color_light(color)
 
 	if(!is_winner)
-		say("You lost! Better luck next time")
-		playsound(src, 'sound/machines/synth_no.ogg', 50)
+		say("You lost! Better luck next time.")
+		playsound(src, 'sound/machines/synth/synth_no.ogg', 50)
+		if(isliving(user) && (user in viewers(src)))
+			var/mob/living/living_user = user
+			living_user.add_mood_event("roulette", /datum/mood_event/slots/loss)
 		return FALSE
 
 	// Prevents money generation exploits. Doesn't prevent the owner being a scrooge and running away with the money.
 	var/account_balance = my_card?.registered_account?.account_balance
 	potential_payout = (account_balance >= potential_payout) ? potential_payout : account_balance
 
-	say("You have won [potential_payout] credits! Congratulations!")
-	playsound(src, 'sound/machines/synth_yes.ogg', 50)
-
+	say("You have won [potential_payout] [MONEY_NAME]! Congratulations!")
+	playsound(src, 'sound/machines/synth/synth_yes.ogg', 50)
+	if(isliving(user) && (user in viewers(src)))
+		var/mob/living/living_user = user
+		living_user.add_mood_event("roulette", potential_payout >= ROULETTE_JACKPOT_AMOUNT ? /datum/mood_event/slots/win/jackpot : /datum/mood_event/slots/win/big)
 	dispense_prize(potential_payout)
 
 ///Fills a list of coins that should be dropped.
@@ -253,13 +280,13 @@
 
 	var/remaining_payout = payout
 
-	my_card.registered_account.adjust_money(-payout)
+	my_card.registered_account.adjust_money(-payout, "Roulette: Payout")
 
 	for(var/coin_type in coin_values) //Loop through all coins from most valuable to least valuable. Try to give as much of that coin (the iterable) as possible until you can't anymore, then move to the next.
 		var/value = coin_values[coin_type] //Change this to use initial value once we change to mat datum coins.
 		var/coin_count = round(remaining_payout / value)
 
-		if(!coin_count) //Cant make coins of this type, as we can't reach it's value.
+		if(!coin_count) //Cant make coins of this type, as we can't reach its value.
 			continue
 
 		remaining_payout -= value * coin_count
@@ -285,9 +312,16 @@
 
 	var/turf/drop_loc = get_step(loc, drop_dir)
 	var/obj/item/cash = new coin_to_drop(drop_loc)
+	//We animate the chip with a cool drop, bounce and slide effect with random offsets to fan out the chips
+	cash.pixel_y = 16
+	cash.pixel_z = 8
+	var/extra_x = rand(0, 8)
+	var/extra_y = round(extra_x * 0.7)
+	animate(cash, 250 MILLISECONDS, pixel_z = 0, easing = BOUNCE_EASING | EASE_OUT) //fall to the ground
+	animate(300 MILLISECONDS, pixel_y = rand(-6, 6) + extra_y, pixel_x = rand(0 + extra_x, 8 + extra_x) * pick(1, -1), flags = ANIMATION_PARALLEL) //midnight shitcode instead of proper maths
 	playsound(cash, pick(list('sound/machines/coindrop.ogg', 'sound/machines/coindrop2.ogg')), 40, TRUE)
 
-	addtimer(CALLBACK(src, .proc/drop_coin), 3) //Recursion time
+	addtimer(CALLBACK(src, PROC_REF(drop_coin)), 3) //Recursion time
 
 
 ///Fills a list of coins that should be dropped.
@@ -340,11 +374,11 @@
 
 
 ///Returns TRUE if the owner has enough funds to payout
-/obj/machinery/roulette/proc/check_bartender_funds(payout)
+/obj/machinery/roulette/proc/check_owner_funds(payout)
 	if(my_card.registered_account.account_balance >= payout)
 		return TRUE //We got the betting amount
 	say("The bank account of [my_card.registered_account.account_holder] does not have enough funds to pay out the potential prize, contact them to fill up their account or lower your bet!")
-	playsound(src, 'sound/machines/buzz-two.ogg', 30, TRUE)
+	playsound(src, 'sound/machines/buzz/buzz-two.ogg', 30, TRUE)
 	return FALSE
 
 /obj/machinery/roulette/update_overlays()
@@ -376,13 +410,13 @@
 
 	if(numberleft != 0) //Don't make the number if we are 0.
 		var/mutable_appearance/number1 = mutable_appearance(icon, "[numberleft]")
-		number1.pixel_x = -shift_amount
+		number1.pixel_w = -shift_amount
 		add_overlay(number1)
 	else
 		shift_amount = 0 //We can stay centered.
 
 	var/mutable_appearance/number2 = mutable_appearance(icon, "[numberright]")
-	number2.pixel_x = shift_amount
+	number2.pixel_w = shift_amount
 	add_overlay(number2)
 
 /obj/machinery/roulette/proc/handle_color_light(color)
@@ -407,21 +441,15 @@
 			set_machine_stat(machine_stat | MAINT)
 			icon_state = "open"
 
-/obj/machinery/roulette/proc/shock(mob/user, prb)
+/obj/machinery/roulette/shock(mob/living/shocking, chance, shock_source, siemens_coeff)
 	if(!on) // unpowered, no shock
 		return FALSE
-	if(!prob(prb))
-		return FALSE //you lucked out, no shock for you
-	do_sparks(5, TRUE, src)
-	if(electrocute_mob(user, get_area(src), src, 1, TRUE))
-		return TRUE
-	else
-		return FALSE
+	return ..()
 
 /obj/item/roulette_wheel_beacon
 	name = "roulette wheel beacon"
 	desc = "N.T. approved roulette wheel beacon, toss it down and you will have a complementary roulette wheel delivered to you."
-	icon = 'icons/obj/objects.dmi'
+	icon = 'icons/obj/machines/floor.dmi'
 	icon_state = "floor_beacon"
 	var/used
 
@@ -430,15 +458,25 @@
 		return
 	loc.visible_message(span_warning("\The [src] begins to beep loudly!"))
 	used = TRUE
-	addtimer(CALLBACK(src, .proc/launch_payload), 40)
+	addtimer(CALLBACK(src, PROC_REF(launch_payload)), 4 SECONDS)
 
 /obj/item/roulette_wheel_beacon/proc/launch_payload()
-	var/obj/structure/closet/supplypod/centcompod/toLaunch = new()
+	podspawn(list(
+		"target" = drop_location(),
+		"path" = /obj/structure/closet/supplypod/centcompod,
+		"spawn" = /obj/machinery/roulette
+	))
 
-	new /obj/machinery/roulette(toLaunch)
-
-	new /obj/effect/pod_landingzone(drop_location(), toLaunch)
 	qdel(src)
+
+#undef ROULETTE_DOZ_COL_PAYOUT
+#undef ROULETTE_BET_1TO12
+#undef ROULETTE_BET_13TO24
+#undef ROULETTE_BET_25TO36
+
+#undef ROULETTE_BET_2TO1_FIRST
+#undef ROULETTE_BET_2TO1_SECOND
+#undef ROULETTE_BET_2TO1_THIRD
 
 #undef ROULETTE_SINGLES_PAYOUT
 #undef ROULETTE_SIMPLE_PAYOUT

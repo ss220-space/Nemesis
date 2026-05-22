@@ -1,17 +1,10 @@
-/*
-//////////////////////////////////////
-Viral adaptation
-
-	Moderate stealth boost.
-	Major Increases to resistance.
-	Reduces stage speed.
-	No change to transmission
-	Critical Level.
-
-BONUS
-	Extremely useful for buffing viruses
-
-//////////////////////////////////////
+/*Viral adaptation
+ * Greatly increases stealth
+ * Tremendous buff for resistance
+ * Greatly decreases stage speed
+ * No effect to transmissibility
+ *
+ * Bonus: Buffs resistance & stealth. Extremely useful for buffing viruses
 */
 /datum/symptom/viraladaptation
 	name = "Viral self-adaptation"
@@ -21,21 +14,15 @@ BONUS
 	stage_speed = -3
 	transmittable = 0
 	level = 3
+	symptom_cure = null
 
-/*
-//////////////////////////////////////
-Viral evolution
-
-	Moderate stealth reductopn.
-	Major decreases to resistance.
-	increases stage speed.
-	increase to transmission
-	Critical Level.
-
-BONUS
-	Extremely useful for buffing viruses
-
-//////////////////////////////////////
+/*Viral evolution
+ * Reduces stealth
+ * Greatly reduces resistance
+ * Tremendous buff for stage speed
+ * Greatly increases transmissibility
+ *
+ * Bonus: Buffs transmission and speed. Extremely useful for buffing viruse*
 */
 /datum/symptom/viralevolution
 	name = "Viral evolutionary acceleration"
@@ -46,3 +33,4 @@ BONUS
 	stage_speed = 5
 	transmittable = 3
 	level = 3
+	symptom_cure = null

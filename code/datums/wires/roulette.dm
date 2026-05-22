@@ -23,7 +23,7 @@
 /datum/wires/roulette/get_status()
 	var/obj/machinery/roulette/R = holder
 	var/list/status = list()
-	status += "The machines bolts [R.anchored ? "have fallen!" : "look up."]"
+	status += "The machines bolts [R.anchored ? "have engaged!" : "have disengaged."]"
 	status += "The main circuit is [R.on ? "on" : "off"]."
 	status += "The main system lock appears to be [R.locked ? "on" : "off"]."
 	status += "The account balance system appears to be [R.my_card ? "connected to [R.my_card.registered_account.account_holder]" : "disconnected"]."
@@ -33,8 +33,7 @@
 	var/obj/machinery/roulette/R = holder
 	switch(wire)
 		if(WIRE_SHOCK)
-			if(isliving(usr))
-				R.shock(usr, 50)
+			R.shock(usr, 50)
 		if(WIRE_BOLTS) // Pulse to toggle bolts (but only raise if power is on).
 			if(!R.on)
 				return
@@ -44,19 +43,17 @@
 			R.audible_message(span_warning("Owner reset!"))
 			R.locked = FALSE
 		if(WIRE_PRIZEVEND)
-			if(isliving(usr))
-				R.shock(usr, 70)
+			R.shock(usr, 70)
 			if(R.locked)
 				return
 			R.audible_message(span_warning("Unauthorized prize vend detected! Locking down machine!"))
 			R.prize_theft(0.20)
 
-/datum/wires/roulette/on_cut(wire, mend)
+/datum/wires/roulette/on_cut(wire, mend, source)
 	var/obj/machinery/roulette/R = holder
 	switch(wire)
 		if(WIRE_SHOCK)
-			if(isliving(usr))
-				R.shock(usr, 60)
+			R.shock(usr, 60)
 			if(mend)
 				R.on = TRUE
 			else
@@ -66,13 +63,10 @@
 				return
 			R.set_anchored(TRUE)
 		if(WIRE_RESETOWNER)
-			if(isliving(usr))
-				R.shock(usr, 70)
+			R.shock(usr, 70)
 		if(WIRE_PRIZEVEND)
-			if(isliving(usr))
-				R.shock(usr, 75)
+			R.shock(usr, 75)
 			if(R.locked)
 				return
 			R.audible_message(span_warning("Unauthorized prize vend detected! Locking down machine!"))
 			R.prize_theft(0.10)
-

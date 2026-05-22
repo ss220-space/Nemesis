@@ -1,19 +1,12 @@
 /obj/item/clothing/head
 	name = BODY_ZONE_HEAD
-	icon = 'icons/obj/clothing/hats.dmi'
-	icon_state = "tophat"
-	inhand_icon_state = "that"
+	icon = 'icons/obj/clothing/head/default.dmi'
+	worn_icon = 'icons/mob/clothing/head/default.dmi'
+	lefthand_file = 'icons/mob/inhands/clothing/hats_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/clothing/hats_righthand.dmi'
+	abstract_type = /obj/item/clothing/head
 	body_parts_covered = HEAD
 	slot_flags = ITEM_SLOT_HEAD
-	var/blockTracking = 0 //For AI tracking
-	var/can_toggle = null
-	dynamic_hair_suffix = "+generic"
-
-/obj/item/clothing/head/Initialize(mapload)
-	. = ..()
-	if(ishuman(loc) && dynamic_hair_suffix)
-		var/mob/living/carbon/human/H = loc
-		H.update_hair()
 
 ///Special throw_impact for hats to frisbee hats at people to place them on their heads/attempt to de-hat them.
 /obj/item/clothing/head/throw_impact(atom/hit_atom, datum/thrownthing/thrownthing)
@@ -47,7 +40,7 @@
 				H.visible_message(span_warning("[src] knocks [WH] off [H]'s head!"), span_warning("[WH] is suddenly knocked off your head by [src]!"))
 		if(H.equip_to_slot_if_possible(src, ITEM_SLOT_HEAD, 0, 1, 1))
 			H.visible_message(span_notice("[src] lands neatly on [H]'s head!"), span_notice("[src] lands perfectly onto your head!"))
-			H.update_inv_hands() //force update hands to prevent ghost sprites appearing when throw mode is on
+			H.update_held_items() //force update hands to prevent ghost sprites appearing when throw mode is on
 		return
 	if(iscyborg(hit_atom))
 		var/mob/living/silicon/robot/R = hit_atom
@@ -62,24 +55,23 @@
 			R.visible_message(span_notice("[src] lands neatly on top of [R]!"), span_notice("[src] lands perfectly on top of you."))
 			R.place_on_head(src) //hats aren't designed to snugly fit borg heads or w/e so they'll always manage to knock eachother off
 
-
-
-
 /obj/item/clothing/head/worn_overlays(mutable_appearance/standing, isinhands = FALSE)
 	. = ..()
 	if(isinhands)
 		return
-
 	if(damaged_clothes)
 		. += mutable_appearance('icons/effects/item_damage.dmi', "damagedhelmet")
-	if(HAS_BLOOD_DNA(src))
-		if(clothing_flags & LARGE_WORN_ICON)
-			. += mutable_appearance('icons/effects/64x64.dmi', "helmetblood_large")
-		else
-			. += mutable_appearance('icons/effects/blood.dmi', "helmetblood")
+
+/obj/item/clothing/head/separate_worn_overlays(mutable_appearance/standing, mutable_appearance/draw_target, isinhands, icon_file)
+	. = ..()
+	if (isinhands)
+		return
+	var/blood_overlay = get_blood_overlay("helmet")
+	if (blood_overlay)
+		. += blood_overlay
 
 /obj/item/clothing/head/update_clothes_damaged_state(damaged_state = CLOTHING_DAMAGED)
 	..()
 	if(ismob(loc))
 		var/mob/M = loc
-		M.update_inv_head()
+		M.update_worn_head()

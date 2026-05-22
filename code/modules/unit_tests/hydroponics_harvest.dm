@@ -20,22 +20,29 @@
  * they aren't the same type so everything that works with one isn't guaranteed to work with the other.
  */
 /datum/unit_test/hydroponics_harvest/Run()
-	var/obj/machinery/hydroponics/hydroponics_tray = allocate(/obj/machinery/hydroponics)
+	var/obj/machinery/hydroponics/soil/testing_soil = allocate(/obj/machinery/hydroponics/soil)
 	var/obj/item/seeds/planted_food_seed = allocate(/obj/item/seeds/apple) //grown food
 	var/obj/item/seeds/planted_not_food_seed = allocate(/obj/item/seeds/sunflower) //grown inedible
 	var/obj/item/seeds/planted_densified_seed = allocate(/obj/item/seeds/redbeet) //grown + densified chemicals
 
-	var/mob/living/carbon/human/human = allocate(/mob/living/carbon/human)
+	var/mob/living/carbon/human/human = allocate(/mob/living/carbon/human/consistent)
 
-	hydroponics_tray.forceMove(run_loc_floor_bottom_left)
-	human.forceMove(locate((run_loc_floor_bottom_left.x + 1), run_loc_floor_bottom_left.y, run_loc_floor_bottom_left.z))
+	testing_soil.forceMove(run_loc_floor_bottom_left)
+
+	var/nearby_loc = locate((run_loc_floor_bottom_left.x + 1), run_loc_floor_bottom_left.y, run_loc_floor_bottom_left.z)
+	human.forceMove(nearby_loc)
+
+	var/seeds_loc = locate((run_loc_floor_bottom_left.x + 1), (run_loc_floor_bottom_left.y + 1), run_loc_floor_bottom_left.z)
+	planted_food_seed.forceMove(seeds_loc)
+	planted_not_food_seed.forceMove(seeds_loc)
+	planted_densified_seed.forceMove(seeds_loc)
 
 	// Apples should harvest 10 apples with 10u nutrients and 4u vitamins.
-	test_seed(hydroponics_tray, planted_food_seed, human)
-	// Sunflowers should harvest 10 sunflowers with 4u nutriment and 0u vitamins. It should also have 8u corn oil.
-	test_seed(hydroponics_tray, planted_not_food_seed, human)
+	test_seed(testing_soil, planted_food_seed, human)
+	// Sunflowers should harvest 10 sunflowers with 4u nutriment and 0u vitamins. It should also have 8u oil.
+	test_seed(testing_soil, planted_not_food_seed, human)
 	// Redbeets should harvest 5 beets (10 / 2) with 10u nutriments (5 x 2) and 10u vitamins (5 x 2) thanks to densified chemicals.
-	test_seed(hydroponics_tray, planted_densified_seed, human)
+	test_seed(testing_soil, planted_densified_seed, human)
 
 /datum/unit_test/hydroponics_harvest/proc/plant_and_update_seed(obj/machinery/hydroponics/tray, obj/item/seeds/seed)
 	seed.set_yield(10) // Sets the seed yield to 10. This gets clamped to 5 if the plant has traits to half the yield.
@@ -56,10 +63,10 @@
 	var/saved_name = tray.name // Name gets cleared when some plants are harvested.
 
 	if(!tray.myseed)
-		Fail("Hydroponics harvest from [saved_name] had no seed set properly to test.")
+		TEST_FAIL("Hydroponics harvest from [saved_name] had no seed set properly to test.")
 
 	if(tray.myseed != seed)
-		Fail("Hydroponics harvest from [saved_name] had [tray.myseed] planted when it was testing [seed].")
+		TEST_FAIL("Hydroponics harvest from [saved_name] had [tray.myseed] planted when it was testing [seed].")
 
 	var/double_chemicals = seed.get_gene(/datum/plant_gene/trait/maxchem)
 	var/expected_yield = seed.getYield()
@@ -74,7 +81,7 @@
 		all_harvested_items += harvested_food
 
 	if(!all_harvested_items.len)
-		Fail("Hydroponics harvest from [saved_name] resulted in 0 harvest.")
+		TEST_FAIL("Hydroponics harvest from [saved_name] resulted in 0 harvest.")
 
 	TEST_ASSERT_EQUAL(all_harvested_items.len, expected_yield, "Hydroponics harvest from [saved_name] only harvested [all_harvested_items.len] items instead of [expected_yield] items.")
 	TEST_ASSERT(all_harvested_items[1].reagents, "Hydroponics harvest from [saved_name] had no reagent container.")
@@ -85,10 +92,11 @@
 
 	var/found_nutriments = all_harvested_items[1].reagents.get_reagent_amount(/datum/reagent/consumable/nutriment)
 	var/found_vitamins = all_harvested_items[1].reagents.get_reagent_amount(/datum/reagent/consumable/nutriment/vitamin)
+
 	QDEL_LIST(all_harvested_items) //We got everything we needed from our harvest, we can clean it up.
 
 	TEST_ASSERT_EQUAL(found_nutriments, expected_nutriments * max_volume, "Hydroponics harvest from [saved_name] has a [expected_nutriments] nutriment gene (expecting [expected_nutriments * max_volume]) but only had [found_nutriments] units of nutriment inside.")
-	TEST_ASSERT_EQUAL(found_vitamins, expected_vitamins * max_volume, "Hydroponics harvest from [saved_name] has a [expected_vitamins] vitamin gene (expecting [expected_nutriments * max_volume]) but only had [found_vitamins] units of vitamins inside.")
+	TEST_ASSERT_EQUAL(found_vitamins, expected_vitamins * max_volume, "Hydroponics harvest from [saved_name] has a [expected_vitamins] vitamin gene (expecting [expected_vitamins * max_volume]) but only had [found_vitamins] units of vitamins inside.")
 
 	if(tray.myseed)
 		tray.age = 0

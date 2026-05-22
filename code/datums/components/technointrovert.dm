@@ -14,13 +14,13 @@
 		src.message = message
 
 /datum/component/technointrovert/RegisterWithParent()
-	RegisterSignal(parent, COMSIG_TRY_USE_MACHINE, .proc/on_try_use_machine)
-	RegisterSignal(parent, COMSIG_TRY_WIRES_INTERACT, .proc/on_try_wires_interact)
+	RegisterSignal(parent, COMSIG_TRY_USE_MACHINE, PROC_REF(on_try_use_machine))
+	RegisterSignal(parent, COMSIG_TRY_WIRES_INTERACT, PROC_REF(on_try_wires_interact))
 
 /datum/component/technointrovert/UnregisterFromParent()
 	UnregisterSignal(parent, list(COMSIG_TRY_USE_MACHINE, COMSIG_TRY_WIRES_INTERACT))
 
-/datum/component/technointrovert/PostTransfer()
+/datum/component/technointrovert/PostTransfer(datum/new_parent)
 	if(!ismob(parent))
 		return COMPONENT_INCOMPATIBLE
 

@@ -4,20 +4,24 @@
 
 /obj/item/mecha_parts
 	name = "mecha part"
-	icon = 'icons/mecha/mech_construct.dmi'
+	icon = 'icons/mob/rideables/mech_construct.dmi'
 	icon_state = "blank"
+	abstract_type = /obj/item/mecha_parts
 	w_class = WEIGHT_CLASS_GIGANTIC
-	flags_1 = CONDUCT_1
+	obj_flags = CONDUCTS_ELECTRICITY
+	sound_vary = TRUE
+	pickup_sound = SFX_GENERIC_DEVICE_PICKUP
+	drop_sound = SFX_GENERIC_DEVICE_DROP
 
-/obj/item/mecha_parts/proc/try_attach_part(mob/user, obj/vehicle/sealed/mecha/M) //For attaching parts to a finished mech
+/obj/item/mecha_parts/proc/try_attach_part(mob/user, obj/vehicle/sealed/mecha/M, attach_right = FALSE) //For attaching parts to a finished mech
 	if(!user.transferItemToLoc(src, M))
 		to_chat(user, span_warning("\The [src] is stuck to your hand, you cannot put it in \the [M]!"))
-		return FALSE
+		return ITEM_INTERACT_BLOCKING
 	user.visible_message(span_notice("[user] attaches [src] to [M]."), span_notice("You attach [src] to [M]."))
-	return TRUE
+	return ITEM_INTERACT_SUCCESS
 
-/obj/item/mecha_parts/part/try_attach_part(mob/user, obj/vehicle/sealed/mecha/M)
-	return
+/obj/item/mecha_parts/part/try_attach_part(mob/user, obj/vehicle/sealed/mecha/M, attach_right = FALSE)
+	return ITEM_INTERACT_SUCCESS
 
 /obj/item/mecha_parts/chassis
 	name = "Mecha Chassis"
@@ -251,14 +255,9 @@
 	name = "\improper Phazon chassis"
 	construct_type = /datum/component/construction/unordered/mecha_chassis/phazon
 
-/obj/item/mecha_parts/chassis/phazon/attackby(obj/item/I, mob/user, params)
-	. = ..()
-	if(istype(I, /obj/item/assembly/signaler/anomaly) && !istype(I, /obj/item/assembly/signaler/anomaly/bluespace))
-		to_chat(user, "The anomaly core socket only accepts bluespace anomaly cores!")
-
 /obj/item/mecha_parts/part/phazon_torso
 	name="\improper Phazon torso"
-	desc="A Phazon torso part. The socket for the bluespace core that powers the exosuit's unique phase drives is located in the middle."
+	desc="A Phazon torso part. The socket for the ectoplasmic core that powers the exosuit's unique phase drives is located in the middle."
 	icon_state = "phazon_harness"
 
 /obj/item/mecha_parts/part/phazon_head
@@ -336,12 +335,12 @@
 
 /obj/item/circuitboard/mecha
 	name = "exosuit circuit board"
-	icon = 'icons/obj/module.dmi'
+	icon = 'icons/obj/devices/circuitry_n_data.dmi'
 	icon_state = "std_mod"
 	inhand_icon_state = "electronic"
-	lefthand_file = 'icons/mob/inhands/misc/devices_lefthand.dmi'
-	righthand_file = 'icons/mob/inhands/misc/devices_righthand.dmi'
-	flags_1 = CONDUCT_1
+	lefthand_file = 'icons/mob/inhands/items/devices_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/items/devices_righthand.dmi'
+	obj_flags = CONDUCTS_ELECTRICITY
 	force = 5
 	w_class = WEIGHT_CLASS_SMALL
 	throwforce = 0

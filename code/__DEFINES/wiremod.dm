@@ -1,4 +1,3 @@
-/// Helper define that can only be used in /obj/item/circuit_component/input_received()
 #define COMPONENT_TRIGGERED_BY(trigger, port) (trigger.value && trigger == port)
 
 /// Define to be placed at any proc that is triggered by a port.
@@ -30,6 +29,8 @@
 #define PORT_TYPE_TABLE "table"
 /// Options datatype. Derivative of string.
 #define PORT_TYPE_OPTION "option"
+/// Boolean datatype. Derivative of number.
+#define PORT_TYPE_BOOLEAN "boolean"
 
 // Composite datatypes
 #define PORT_COMPOSITE_TYPE_LIST "list"
@@ -45,6 +46,8 @@
 #define PORT_TYPE_ATOM "entity"
 /// Datum datatype
 #define PORT_TYPE_DATUM "datum"
+/// User datatype
+#define PORT_TYPE_USER "user"
 
 
 /// The maximum range between a port and an atom
@@ -77,7 +80,7 @@
 #define COMP_COMPARISON_LESS_THAN_OR_EQUAL "<="
 
 // Clock component
-#define COMP_CLOCK_DELAY 0.9 SECONDS
+#define COMP_CLOCK_DELAY (0.9 SECONDS)
 
 // Shells
 
@@ -119,6 +122,10 @@
 #define CIRCUIT_FLAG_INSTANT (1<<4)
 /// This circuit component can't be loaded in module component. Saves us some headaches.
 #define CIRCUIT_FLAG_REFUSE_MODULE (1<<5)
+/// This circuit component cannot be inserted into the same circuit multiple times. Only use this for major headaches.
+#define CIRCUIT_NO_DUPLICATES (1<<6)
+/// This circuit component is currently disabled via configs
+#define CIRCUIT_FLAG_DISABLED (1<<7)
 
 // Datatype flags
 /// The datatype supports manual inputs

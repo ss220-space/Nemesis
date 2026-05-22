@@ -7,9 +7,15 @@
 	dismemberment = 90
 	armour_penetration = 100
 	damage_type = BRUTE
-	flag = BULLET
+	armor_flag = BULLET
+	mouse_opacity = MOUSE_OPACITY_ICON
+	obj_flags = NONE
 
-/obj/projectile/meteor/on_hit(atom/target, blocked = FALSE)
+/obj/projectile/meteor/Initialize(mapload)
+	. = ..()
+	AddComponent(/datum/component/meteor_combat, CALLBACK(src, PROC_REF(deflect)))
+
+/obj/projectile/meteor/on_hit(atom/target, blocked = 0, pierce_hit)
 	. = ..()
 	if(. == BULLET_ACT_HIT && isliving(target))
 		explosion(target, devastation_range = -1, light_impact_range = 2, flame_range = 0, flash_range = 1, adminlog = FALSE)
@@ -28,3 +34,8 @@
 		if(!onlookers_in_range.stat)
 			shake_camera(onlookers_in_range, 3, 1)
 	qdel(src)
+
+///Called by component/meteor_combat to direct us away from whatever has punched us.
+/obj/projectile/meteor/proc/deflect(mob/user)
+	firer = user
+	set_angle(get_angle(user, src) + rand(-45, 45))

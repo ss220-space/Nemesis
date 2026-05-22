@@ -7,7 +7,7 @@
 	initialize_dirs = DISP_DIR_RIGHT | DISP_DIR_FLIP
 
 /obj/structure/disposalpipe/sorting/nextdir(obj/structure/disposalholder/H)
-	var/sortdir = dpdir & ~(dir | turn(dir, 180))
+	var/sortdir = dpdir & ~(dir | REVERSE_DIR(dir))
 	if(H.dir != sortdir) // probably came from the negdir
 		if(check_sorting(H)) // if destination matches filtered type...
 			return sortdir // exit through sortdirection
@@ -15,7 +15,7 @@
 	// go with the flow to positive direction
 	return dir
 
-// Sorting check, to be overridden in subtypes
+/// Sorting check, to be overridden in subtypes
 /obj/structure/disposalpipe/sorting/proc/check_sorting(obj/structure/disposalholder/H)
 	return FALSE
 
@@ -55,7 +55,7 @@
 	else
 		. += "It has no sorting tags set."
 
-/obj/structure/disposalpipe/sorting/mail/attackby(obj/item/I, mob/user, params)
+/obj/structure/disposalpipe/sorting/mail/attackby(obj/item/I, mob/user, list/modifiers, list/attack_modifiers)
 	if(istype(I, /obj/item/dest_tagger))
 		var/obj/item/dest_tagger/O = I
 
@@ -66,7 +66,7 @@
 			else
 				sortTypes |= O.currTag
 				to_chat(user, span_notice("Added \"[GLOB.TAGGERLOCATIONS[O.currTag]]\" filter."))
-			playsound(src, 'sound/machines/twobeep_high.ogg', 100, TRUE)
+			playsound(src, 'sound/machines/beep/twobeep_high.ogg', 100, TRUE)
 	else
 		return ..()
 
@@ -76,7 +76,7 @@
 
 
 
-// Wrap sorting junction, sorts objects destined for the mail office mail table (tomail = 1)
+// Wrap sorting junction, sorts objects destined for the mail office mail table (tomail = TRUE)
 /obj/structure/disposalpipe/sorting/wrap
 	desc = "An underfloor disposal pipe which sorts wrapped and unwrapped objects."
 	flip_type = /obj/structure/disposalpipe/sorting/wrap/flip

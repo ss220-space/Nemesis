@@ -13,52 +13,40 @@
  * * user - checks if we can remove the object from the inventory
  * *
  */
-/proc/seedify(obj/item/O, t_max, obj/machinery/seed_extractor/extractor, mob/living/user)
-	var/t_amount = 0
+/proc/seedify(obj/item/object, t_max, obj/machinery/seed_extractor/extractor, mob/living/user)
+	//try to get the seed from this item
+	var/obj/item/seeds/seed = object.get_plant_seed()
+	if(isnull(seed))
+		return null
+
+	//generate a random multiplier if value is not specified
 	var/list/seeds = list()
 	if(t_max == -1)
 		if(extractor)
 			t_max = rand(1,4) * extractor.seed_multiplier
 		else
 			t_max = rand(1,4)
-
-	var/seedloc = O.loc
+	//drop location for the newly generated seeds
+	var/seedloc = object.loc
 	if(extractor)
 		seedloc = extractor.loc
 
-	if(istype(O, /obj/item/food/grown/))
-		var/obj/item/food/grown/F = O
-		if(F.seed)
-			if(user && !user.temporarilyRemoveItemFromInventory(O)) //couldn't drop the item
-				return
-			while(t_amount < t_max)
-				var/obj/item/seeds/t_prod = F.seed.Copy()
-				seeds.Add(t_prod)
-				t_prod.forceMove(seedloc)
-				t_amount++
-			qdel(O)
-			return seeds
-
-	else if(istype(O, /obj/item/grown))
-		var/obj/item/grown/F = O
-		if(F.seed)
-			if(user && !user.temporarilyRemoveItemFromInventory(O))
-				return
-			while(t_amount < t_max)
-				var/obj/item/seeds/t_prod = F.seed.Copy()
-				t_prod.forceMove(seedloc)
-				t_amount++
-			qdel(O)
-		return 1
-
-	return 0
-
+	//multiply the seeds and delete the item
+	if(user && !user.temporarilyRemoveItemFromInventory(object)) //couldn't drop the item
+		return null
+	for(var/_ in 0 to t_max)
+		var/obj/item/seeds/t_prod = seed.Copy()
+		seeds.Add(t_prod)
+		t_prod.forceMove(seedloc)
+	qdel(object)
+	return seeds
 
 /obj/machinery/seed_extractor
 	name = "seed extractor"
 	desc = "Extracts and bags seeds from produce."
-	icon = 'icons/obj/hydroponics/equipment.dmi'
+	icon = 'icons/obj/service/hydroponics/equipment.dmi'
 	icon_state = "sextractor"
+	base_icon_state = "sextractor"
 	density = TRUE
 	circuit = /obj/item/circuitboard/machine/seed_extractor
 	/// Associated list of seeds, they are all weak refs.  We check the len to see how many refs we have for each
@@ -67,57 +55,103 @@
 	var/max_seeds = 1000
 	var/seed_multiplier = 1
 
+/obj/machinery/seed_extractor/Initialize(mapload, obj/item/seeds/new_seed)
+	. = ..()
+	register_context()
+
+/obj/machinery/seed_extractor/add_context(
+	atom/source,
+	list/context,
+	obj/item/held_item,
+	mob/living/user,
+)
+
+	if(held_item?.get_plant_seed())
+		context[SCREENTIP_CONTEXT_LMB] = "Make seeds"
+		context[SCREENTIP_CONTEXT_RMB] = "Make & Store seeds"
+		return CONTEXTUAL_SCREENTIP_SET
+
+	if(istype(held_item, /obj/item/storage/bag/plants) && (locate(/obj/item/seeds) in held_item.contents))
+		context[SCREENTIP_CONTEXT_LMB] = "Store seeds"
+		return CONTEXTUAL_SCREENTIP_SET
+
+	return NONE
+
 /obj/machinery/seed_extractor/RefreshParts()
-	for(var/obj/item/stock_parts/matter_bin/B in component_parts)
-		max_seeds = initial(max_seeds) * B.rating
-	for(var/obj/item/stock_parts/manipulator/M in component_parts)
-		seed_multiplier = initial(seed_multiplier) * M.rating
+	. = ..()
+	for(var/datum/stock_part/matter_bin/matter_bin in component_parts)
+		max_seeds = initial(max_seeds) * matter_bin.tier
+	for(var/datum/stock_part/servo/servo in component_parts)
+		seed_multiplier = initial(seed_multiplier) * servo.tier
 
 /obj/machinery/seed_extractor/examine(mob/user)
 	. = ..()
 	if(in_range(user, src) || isobserver(user))
 		. += span_notice("The status display reads: Extracting <b>[seed_multiplier] to [seed_multiplier * 4]</b> seed(s) per piece of produce.<br>Machine can store up to <b>[max_seeds]</b> seeds.")
 
-/obj/machinery/seed_extractor/attackby(obj/item/O, mob/living/user, params)
+/obj/machinery/seed_extractor/update_icon_state()
+	. = ..()
+	icon_state = panel_open ? "[base_icon_state]_open" : base_icon_state
 
-	if(default_deconstruction_screwdriver(user, "sextractor_open", "sextractor", O))
-		return
+/obj/machinery/seed_extractor/wrench_act(mob/living/user, obj/item/tool)
+	. = ..()
+	default_unfasten_wrench(user, tool)
+	return ITEM_INTERACT_SUCCESS
 
-	if(default_pry_open(O))
-		return
+/obj/machinery/seed_extractor/screwdriver_act(mob/living/user, obj/item/tool)
+	return default_deconstruction_screwdriver(user, tool)
 
-	if(default_unfasten_wrench(user, O))
-		return
+/obj/machinery/seed_extractor/crowbar_act(mob/living/user, obj/item/tool)
+	return default_pry_open(user, tool, close_after_pry = TRUE, deconstruct_on_fail = TRUE)
 
-	if(default_deconstruction_crowbar(O))
-		return
-
-	if(istype(O, /obj/item/storage/bag/plants))
-		var/obj/item/storage/P = O
+/obj/machinery/seed_extractor/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	if(istype(tool, /obj/item/storage/bag/plants))
 		var/loaded = 0
-		for(var/obj/item/seeds/G in P.contents)
+		for(var/obj/item/seeds/to_store in tool.contents)
 			if(contents.len >= max_seeds)
+				to_chat(user, span_warning("[src] is full."))
 				break
-			++loaded
-			add_seed(G)
-		if (loaded)
-			to_chat(user, span_notice("You put as many seeds from \the [O.name] into [src] as you can."))
-		else
-			to_chat(user, span_notice("There are no seeds in \the [O.name]."))
-		return
+			if(!add_seed(to_store, tool))
+				continue
+			loaded += 1
 
-	else if(seedify(O,-1, src, user))
+		if(loaded)
+			to_chat(user, span_notice("You put as many seeds from [tool] into [src] as you can."))
+			return ITEM_INTERACT_SUCCESS
+		to_chat(user, span_warning("There are no seeds in [tool]."))
+		return ITEM_INTERACT_BLOCKING
+
+	var/list/generated_seeds = seedify(tool, -1, src, user)
+	if(!isnull(generated_seeds))
+		if(LAZYACCESS(modifiers, RIGHT_CLICK))
+			//find all seeds lying on the turf and add them to the machine
+			for(var/obj/item/seeds/seed as anything in generated_seeds)
+				//machine is full
+				if(contents.len >= max_seeds)
+					to_chat(user, span_warning("[src] is full."))
+					break
+				//add seed to machine. second argument is null which means just force move into the machine
+				add_seed(seed)
 		to_chat(user, span_notice("You extract some seeds."))
-		return
-	else if (istype(O, /obj/item/seeds))
-		if(add_seed(O))
-			to_chat(user, span_notice("You add [O] to [src.name]."))
-			updateUsrDialog()
-		return
-	else if(!user.combat_mode)
-		to_chat(user, span_warning("You can't extract any seeds from \the [O.name]!"))
-	else
-		return ..()
+		return ITEM_INTERACT_SUCCESS
+
+	if(istype(tool, /obj/item/seeds))
+		if(contents.len >= max_seeds)
+			to_chat(user, span_warning("[src] is full."))
+			return ITEM_INTERACT_BLOCKING
+
+		if(add_seed(tool, user))
+			to_chat(user, span_notice("You add [tool] to [src]."))
+			return ITEM_INTERACT_SUCCESS
+
+		to_chat(user, span_warning("You can't seem to add [tool] to [src]."))
+		return ITEM_INTERACT_BLOCKING
+
+	if(!tool.tool_behaviour || !user.combat_mode) // Using the wrong tool shouldn't assume you want to turn it into seeds.
+		to_chat(user, span_warning("You can't extract any seeds from [tool]!"))
+		return ITEM_INTERACT_BLOCKING
+
+	return NONE
 
 /**
  * Generate seed string
@@ -129,37 +163,81 @@
  * Arguments:
  * * O - seed to generate the string from
  */
-/obj/machinery/seed_extractor/proc/generate_seed_string(obj/item/seeds/O)
-	return "name=[O.name];lifespan=[O.lifespan];endurance=[O.endurance];maturation=[O.maturation];production=[O.production];yield=[O.yield];potency=[O.potency];instability=[O.instability]"
-
+/obj/machinery/seed_extractor/proc/generate_seed_hash(obj/item/seeds/O)
+	var/genes = list2params(O.genes)
+	return md5("[O.name][O.lifespan][O.endurance][O.maturation][O.production][O.yield][O.potency][O.instability][genes]");
 
 /** Add Seeds Proc.
  *
  * Adds the seeds to the contents and to an associated list that pregenerates the data
  * needed to go to the ui handler
  *
+ * to_add - what seed are we adding?
+ * taking_from - where are we taking the seed from? A mob, a bag, etc? If null its means it's just laying on the turf so force move it in
  **/
-/obj/machinery/seed_extractor/proc/add_seed(obj/item/seeds/O)
-	if(contents.len >= 999)
-		to_chat(usr, span_notice("\The [src] is full."))
-		return FALSE
-
-	var/datum/component/storage/STR = O.loc.GetComponent(/datum/component/storage)
-	if(STR)
-		if(!STR.remove_from_storage(O,src))
-			return FALSE
-	else if(ismob(O.loc))
-		var/mob/M = O.loc
-		if(!M.transferItemToLoc(O, src))
-			return FALSE
-
-	var/seed_string = generate_seed_string(O)
-	if(piles[seed_string])
-		piles[seed_string] += WEAKREF(O)
+/obj/machinery/seed_extractor/proc/add_seed(obj/item/seeds/to_add, atom/taking_from)
+	var/seed_id = generate_seed_hash(to_add)
+	var/list/seed_data
+	var/has_seed_data // so we remember to add a seed obj weakref to piles[seed_id] at the end of the proc. That way if some reason we runtime in this proc it won't incorrectly add data to the list
+	if(piles[seed_id])
+		has_seed_data = TRUE
 	else
-		piles[seed_string] = list(WEAKREF(O))
+		seed_data = list()
+		seed_data["icon"] = sanitize_css_class_name("[initial(to_add.icon)][initial(to_add.icon_state)]")
+		seed_data["name"] = capitalize(replacetext(to_add.name,"pack of ", ""));
+		seed_data["lifespan"] = to_add.lifespan
+		seed_data["endurance"] = to_add.endurance
+		seed_data["maturation"] = to_add.maturation
+		seed_data["production"] = to_add.production
+		seed_data["yield"] = to_add.yield
+		seed_data["potency"] = to_add.potency
+		seed_data["instability"] = to_add.instability
+		seed_data["refs"] = list(WEAKREF(to_add))
+		seed_data["traits"] = list()
+		for(var/datum/plant_gene/trait/trait in to_add.genes)
+			seed_data["traits"] += trait.type
+		seed_data["reagents"] = list()
+		for(var/datum/plant_gene/reagent/reagent in to_add.genes)
+			seed_data["reagents"] += list(list(
+				"name" = reagent.name,
+				"rate" = reagent.rate
+			))
+		var/datum/plant_gene/trait/maxchem/volume_trait = locate(/datum/plant_gene/trait/maxchem) in to_add.genes
+		var/datum/plant_gene/trait/modified_volume/volume_unit_trait = locate(/datum/plant_gene/trait/modified_volume) in to_add.genes
+		seed_data["volume_mod"] = volume_trait ? volume_trait.rate : 1
+		seed_data["volume_units"] = volume_unit_trait ? volume_unit_trait.new_capcity : PLANT_REAGENT_VOLUME
+		seed_data["mutatelist"] = list()
+		for(var/obj/item/seeds/mutant as anything in to_add.mutatelist)
+			seed_data["mutatelist"] += initial(mutant.plantname)
+		if(to_add.product)
+			var/obj/item/food/grown/product = new to_add.product
+			var/datum/reagent/product_distill_reagent = product.distill_reagent
+			seed_data["distill_reagent"] = initial(product_distill_reagent.name)
+			var/datum/reagent/product_juice_typepath = product.juice_typepath()
+			seed_data["juice_name"] = initial(product_juice_typepath.name)
+			seed_data["grind_results"] = list()
+			for(var/datum/reagent/reagent as anything in product.grind_results())
+				seed_data["grind_results"] += initial(reagent.name)
+			qdel(product)
 
-	. = TRUE
+	if(!isnull(taking_from))
+		if(ismob(taking_from))
+			var/mob/mob_loc = taking_from
+			if(!mob_loc.transferItemToLoc(to_add, src))
+				return FALSE
+
+		else if(!taking_from.atom_storage?.attempt_remove(to_add, src, silent = TRUE))
+			return FALSE
+	else
+		to_add.forceMove(src)
+
+	// do this at the end, in case any of the previous steps failed
+	if(has_seed_data)
+		piles[seed_id]["refs"] += WEAKREF(to_add)
+	else
+		piles[seed_id] = seed_data
+
+	return TRUE
 
 /obj/machinery/seed_extractor/ui_state(mob/user)
 	return GLOB.notcontained_state
@@ -171,31 +249,54 @@
 		ui.open()
 
 /obj/machinery/seed_extractor/ui_data()
-	var/list/V = list()
-	for(var/key in piles)
-		if(piles[key])
-			var/len = length(piles[key])
-			if(len)
-				V[key] = len
-
+	var/list/seeds = list()
+	for(var/seed_id in piles)
+		if (!length(piles[seed_id]["refs"]))
+			piles.Remove(seed_id) // This shouldn't happen but still
+			continue
+		var/list/seed_data = piles[seed_id]
+		seed_data = seed_data.Copy()
+		seed_data["key"] = seed_id
+		seed_data["amount"] = length(seed_data["refs"])
+		seed_data.Remove("refs")
+		seeds += list(seed_data)
 	. = list()
-	.["seeds"] = V
+	.["seeds"] = seeds
 
-/obj/machinery/seed_extractor/ui_act(action, params)
+/obj/machinery/seed_extractor/ui_static_data(mob/user)
+	var/list/data = list()
+	data["cycle_seconds"] = HYDROTRAY_CYCLE_DELAY / 10
+	data["trait_db"] = list()
+	for(var/datum/plant_gene/trait as anything in GLOB.plant_traits)
+		var/trait_data = list(list(
+			"path" = trait.type,
+			"name" = trait.get_name(),
+			"icon" = trait.icon,
+			"description" = trait.description
+		))
+		data["trait_db"] += trait_data
+	return data
+
+/obj/machinery/seed_extractor/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	. = ..()
 	if(.)
 		return
 
 	switch(action)
-		if("select")
+		if("scrap")
+			var/item = params["item"]
+			if(piles[item])
+				piles.Remove(item)
+				. = TRUE
+		if("take")
 			var/item = params["item"]
 			if(piles[item] && length(piles[item]) > 0)
-				var/datum/weakref/found_seed_weakref = piles[item][1]
+				var/datum/weakref/found_seed_weakref = piles[item]["refs"][1]
 				var/obj/item/seeds/found_seed = found_seed_weakref.resolve()
 				if(!found_seed)
 					return
 
-				piles[item] -= found_seed_weakref
+				piles[item]["refs"] -= found_seed_weakref
 				if(usr)
 					var/mob/user = usr
 					if(user.put_in_hands(found_seed))
@@ -206,3 +307,8 @@
 					found_seed.forceMove(drop_location())
 					visible_message(span_notice("[found_seed] falls onto the floor."), null, span_hear("You hear a soft clatter."), COMBAT_MESSAGE_RANGE)
 				. = TRUE
+
+/obj/machinery/seed_extractor/ui_assets(mob/user)
+	return list(
+		get_asset_datum(/datum/asset/spritesheet_batched/seeds)
+	)

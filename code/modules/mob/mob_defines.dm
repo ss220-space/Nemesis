@@ -7,10 +7,9 @@
  * Has a lot of the creature game world logic, such as health etc
  */
 /mob
-	datum_flags = DF_USE_TAG
 	density = TRUE
 	layer = MOB_LAYER
-	plane = GAME_PLANE_FOV_HIDDEN
+	abstract_type = /mob
 	animate_movement = SLIDE_STEPS
 	hud_possible = list(ANTAG_HUD)
 	pressure_resistance = 8
@@ -18,19 +17,35 @@
 	throwforce = 10
 	blocks_emissive = EMISSIVE_BLOCK_GENERIC
 	pass_flags_self = PASSMOB
+	// we never want to hide a turf because it's not lit
+	// We can rely on the lighting plane to handle that for us
+	see_in_dark = 1e6
+	// A list of factions that this mob is currently in, for hostile mob targeting, amongst other things
+	faction = list(FACTION_NEUTRAL)
 	/// The current client inhabiting this mob. Managed by login/logout
 	/// This exists so we can do cleanup in logout for occasions where a client was transfere rather then destroyed
 	/// We need to do this because the mob on logout never actually has a reference to client
 	/// We also need to clear this var/do other cleanup in client/Destroy, since that happens before logout
 	/// HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
 	var/client/canon_client
+	/// It's like a client, but persists! Persistent clients will stick to a mob until the client in question is logged into a different mob.
+	var/datum/persistent_client/persistent_client
 
 	var/shift_to_open_context_menu = TRUE
 
-	///when this be added to vis_contents of something it inherit something.plane, important for visualisation of mob in openspace.
-	vis_flags = VIS_INHERIT_PLANE
-
-	var/lighting_alpha = LIGHTING_PLANE_ALPHA_VISIBLE
+	/// Percentage of how much rgb to max the lighting plane at
+	/// This lets us brighten it without washing out color
+	/// Scale from 0-100, reset off update_sight()
+	var/lighting_cutoff = LIGHTING_CUTOFF_VISIBLE
+	// Individual color max for red, we can use this to color darkness without tinting the light
+	var/lighting_cutoff_red = 0
+	// Individual color max for green, we can use this to color darkness without tinting the light
+	var/lighting_cutoff_green = 0
+	// Individual color max for blue, we can use this to color darkness without tinting the light
+	var/lighting_cutoff_blue = 0
+	/// A list of red, green and blue cutoffs
+	/// This is what actually gets applied to the mob, it's modified by things like glasses
+	var/list/lighting_color_cutoffs = null
 	var/datum/mind/mind
 	var/static/next_mob_id = 0
 
@@ -48,16 +63,28 @@
 	var/cached_multiplicative_actions_slowdown
 	/// List of action hud items the user has
 	var/list/datum/action/actions
-	/// A special action? No idea why this lives here
-	var/list/datum/action/chameleon_item_actions
 	///Cursor icon used when holding shift over things
 	var/examine_cursor_icon = 'icons/effects/mouse_pointers/examine_pointer.dmi'
 
-	///Whether this mob has or is in the middle of committing suicide.
-	var/suiciding = FALSE
+	/// Mob bitflags
+	var/mob_flags = NONE
 
 	/// Whether a mob is alive or dead. TODO: Move this to living - Nodrak (2019, still here)
 	var/stat = CONSCIOUS
+
+	/**
+	 * Whether and how a mob is incapacitated
+	 *
+	 * Normally being restrained, agressively grabbed, or in stasis counts as incapacitated
+	 * unless there is a flag being used to check if it's ignored
+	 *
+	 * * bitflags: (see code/__DEFINES/status_effects.dm)
+	 * * INCAPABLE_RESTRAINTS - if our mob is in a restraint (handcuffs)
+	 * * INCAPABLE_STASIS - if our mob is in stasis (stasis bed, etc.)
+	 * * INCAPABLE_GRAB - if our mob is being agressively grabbed
+	 *
+	**/
+	VAR_FINAL/incapacitated = NONE
 
 	/* A bunch of this stuff really needs to go under their own defines instead of being globally attached to mob.
 	A variable should only be globally attached to turfs/objects/whatever, when it is in fact needed as such.
@@ -72,44 +99,18 @@
 	var/computer_id = null
 	var/list/logging = list()
 
-	/// The machine the mob is interacting with (this is very bad old code btw)
-	var/obj/machinery/machine = null
-
 	/// Tick time the mob can next move
 	var/next_move = null
 
-	/**
-	  * Magic var that stops you moving and interacting with anything
-	  *
-	  * Set when you're being turned into something else and also used in a bunch of places
-	  * it probably shouldn't really be
-	  */
-	var/notransform = null //Carbon
-
-	/// Is the mob blind
-	var/eye_blind = 0 //Carbon
-	/// Does the mob have blurry sight
-	var/eye_blurry = 0 //Carbon
 	/// What is the mobs real name (name is overridden for disguises etc)
 	var/real_name = null
 
-	/**
-	  * back up of the real name during admin possession
-	  *
-	  * If an admin possesses an object it's real name is set to the admin name and this
-	  * stores whatever the real name was previously. When possession ends, the real name
-	  * is reset to this value
-	  */
-	var/name_archive //For admin things like possession
 
 	/// Default body temperature
 	var/bodytemperature = BODYTEMP_NORMAL //310.15K / 98.6F
-	/// Drowsyness level of the mob
-	var/drowsyness = 0//Carbon
-	/// Dizziness level of the mob
-	var/dizziness = 0//Carbon
-	/// Jitteryness level of the mob
-	var/jitteriness = 0//Carbon
+	/// Our body temperatue as of the last process, prevents pointless work when handling alerts
+	var/old_bodytemperature = 0
+
 	/// Hunger level of the mob
 	var/nutrition = NUTRITION_LEVEL_START_MIN // randomised in Initialize
 	/// Satiation level of the mob
@@ -117,9 +118,6 @@
 
 	/// How many ticks this mob has been over reating
 	var/overeatduration = 0 // How long this guy is overeating //Carbon
-
-	/// The movement intent of the mob (run/wal)
-	var/m_intent = MOVE_INTENT_RUN//Living
 
 	/// The last known IP of the client who was in this mob
 	var/lastKnownIP = null
@@ -142,15 +140,15 @@
 	  * [get_active_held_item()][/mob/proc/get_active_held_item] instead, because OOP
 	  */
 	var/list/held_items = list()
+	///How many hands this mob has by default, which we divide by to know what y offset to give open inventories.
+	var/default_hand_amount = 2
 
 	//HUD things
 
 	/// Storage component (for mob inventory)
-	var/datum/component/storage/active_storage
+	var/datum/storage/active_storage
 	/// Active hud
 	var/datum/hud/hud_used = null
-	/// I have no idea tbh
-	var/research_scanner = FALSE
 
 	/// Is the mob throw intent on
 	var/throw_mode = THROW_MODE_DISABLED
@@ -158,42 +156,11 @@
 	/// What job does this mob have
 	var/job = null//Living
 
-	/// A list of factions that this mob is currently in, for hostile mob targetting, amongst other things
-	var/list/faction = list("neutral")
-
-	/// Can this mob enter shuttles
-	var/move_on_shuttle = 1
-
-	///A weakref to the last mob/living/carbon to push/drag/grab this mob (exclusively used by slimes friend recognition)
-	var/datum/weakref/LAssailant = null
-
-	/**
-	  * construct spells and mime spells.
-	  *
-	  * Spells that do not transfer from one mob to another and can not be lost in mindswap.
-	  * obviously do not live in the mind
-	  */
-	var/list/mob_spell_list
-
-
 	/// bitflags defining which status effects can be inflicted (replaces canknockdown, canstun, etc)
 	var/status_flags = CANSTUN|CANKNOCKDOWN|CANUNCONSCIOUS|CANPUSH
 
-	/// Can they interact with station electronics
-	var/has_unlimited_silicon_privilege = FALSE
-
-	///Used by admins to possess objects. All mobs should have this var
-	var/obj/control_object
-
 	///Calls relay_move() to whatever this is set to when the mob tries to move
 	var/atom/movable/remote_control
-
-	/**
-	  * The sound made on death
-	  *
-	  * leave null for no sound. used for *deathgasp
-	  */
-	var/deathsound
 
 	///the current turf being examined in the stat panel
 	var/turf/listed_turf = null
@@ -210,7 +177,7 @@
 	///Allows a datum to intercept all click calls this mob is the source of
 	var/datum/click_intercept
 
-	///THe z level this mob is currently registered in
+	///The z level this mob is currently registered in
 	var/registered_z = null
 
 	var/memory_throttle_time = 0
@@ -220,10 +187,11 @@
 	/// On [/mob] so clientless mobs will throw alerts properly.
 	var/list/alerts = list()
 	var/list/screens = list()
+	/// Assoc list of client_colour datum -> source it came from
 	var/list/client_colours = list()
-	var/hud_type = /datum/hud
-
-	var/datum/h_sandbox/sandbox = null
+	/// List of filter names used in the past client color update for cleanup
+	var/list/color_filter_store = list()
+	var/datum/hud/hud_type = /datum/hud
 
 	var/datum/focus //What receives our keyboard inputs. src by default
 
@@ -239,4 +207,12 @@
 	/// A mock client, provided by tests and friends
 	var/datum/client_interface/mock_client
 
-	var/interaction_range = 1 //how far a mob has to be to interact with something, defaulted to 1 tile
+	var/interaction_range = 0 //how far a mob has to be to interact with something without caring about obsctruction, defaulted to 0 tiles
+
+	///the icon currently used for the typing indicator's bubble
+	var/active_typing_indicator
+	///the icon currently used for the thinking indicator's bubble
+	var/active_thinking_indicator
+
+	/// A ref of the area we're taking our ambient loop from.
+	var/area/ambience_tracked_area

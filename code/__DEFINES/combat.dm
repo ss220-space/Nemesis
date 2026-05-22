@@ -11,61 +11,78 @@
 #define TOX "toxin"
 /// Suffocation.
 #define OXY "oxygen"
-/// Cellular degredation. Rare and difficult to treat.
-#define CLONE "clone"
 /// Exhaustion and nonlethal damage.
 #define STAMINA "stamina"
-/// Brain damage. Should probably be decomissioned and replaced with proper organ damage.
+/// Brain damage. Should probably be decommissioned and replaced with proper organ damage.
 #define BRAIN "brain"
 
 //Damage flag defines //
-/// Involves a melee attack or a thrown object.
-#define MELEE "melee"
-/// Involves a solid projectile.
-#define BULLET "bullet"
-/// Involves a laser.
-#define LASER "laser"
-/// Involves an EMP or energy-based projectile.
-#define ENERGY "energy"
-/// Involves a shockwave, usually from an explosion.
-#define BOMB "bomb"
-/// Involved in checking wheter a disease can infect or spread. Also involved in xeno neurotoxin.
-#define BIO "bio"
-/// Involves fire or temperature extremes.
-#define FIRE "fire"
+
 /// Involves corrosive substances.
 #define ACID "acid"
-/// Involved in checking the likelyhood of applying a wound to a mob.
-#define WOUND "wound"
+/// Involved in checking whether a disease can infect or spread. Also involved in xeno neurotoxin.
+#define BIO "bio"
+/// Involves a shockwave, usually from an explosion.
+#define BOMB "bomb"
+/// Involves a solid projectile.
+#define BULLET "bullet"
 /// Involves being eaten
 #define CONSUME "consume"
+/// Involves an EMP or energy-based projectile.
+#define ENERGY "energy"
+/// Involves fire or temperature extremes.
+#define FIRE "fire"
+/// Involves a laser.
+#define LASER "laser"
+/// Involves a melee attack or a thrown object.
+#define MELEE "melee"
+/// Involved in checking the likelihood of applying a wound to a mob.
+#define WOUND "wound"
+
+#define ARMOR_ALL "all_damage_types"
+
+/// Armor values that are used for damage
+#define ARMOR_LIST_DAMAGE list(BIO, BOMB, BULLET, ENERGY, LASER, MELEE, WOUND)
+
+/// Armor values that are used for durability
+#define ARMOR_LIST_DURABILITY list(ACID, FIRE)
+
+/// All armors, preferable in the order as seen above
+#define ARMOR_LIST_ALL list(ACID, BIO, BOMB, BULLET, CONSUME, ENERGY, FIRE, LASER, MELEE, WOUND)
 
 //bitflag damage defines used for suicide_act
 #define BRUTELOSS (1<<0)
 #define FIRELOSS (1<<1)
 #define TOXLOSS (1<<2)
 #define OXYLOSS (1<<3)
-#define SHAME             (1<<4)
-#define MANUAL_SUICIDE (1<<5) //suicide_act will do the actual killing.
-#define MANUAL_SUICIDE_NONLETHAL (1<<6)  //when the suicide is conditionally lethal
+#define STAMINALOSS (1<<4)
+#define SHAME (1<<5)
+#define MANUAL_SUICIDE (1<<6) //suicide_act will do the actual killing.
+#define MANUAL_SUICIDE_NONLETHAL (1<<7) //when the suicide is conditionally lethal
 
 #define EFFECT_STUN "stun"
 #define EFFECT_KNOCKDOWN "knockdown"
 #define EFFECT_UNCONSCIOUS "unconscious"
 #define EFFECT_PARALYZE "paralyze"
 #define EFFECT_IMMOBILIZE "immobilize"
-#define EFFECT_STUTTER "stutter"
-#define EFFECT_SLUR "slur"
-#define EFFECT_EYE_BLUR "eye_blur"
-#define EFFECT_DROWSY "drowsy"
-#define EFFECT_JITTER "jitter"
-
 //Bitflags defining which status effects could be or are inflicted on a mob
+/// If set, this mob can be stunned.
 #define CANSTUN (1<<0)
+/// If set, this mob can be knocked down
 #define CANKNOCKDOWN (1<<1)
+/// If set, this mob can be knocked unconscious via status effect.
+/// NOTE, does not mean immune to sleep. Unconscious and sleep are two different things.
+/// NOTE, does not relate to the unconscious stat either. Only the status effect.
 #define CANUNCONSCIOUS (1<<2)
+/// If set, this mob can be grabbed or pushed when bumped into
 #define CANPUSH (1<<3)
-#define GODMODE (1<<4)
+
+DEFINE_BITFIELD(status_flags, list(
+	"CAN STUN" = CANSTUN,
+	"CAN KNOCKDOWN" = CANKNOCKDOWN,
+	"CAN UNCONSCIOUS" = CANUNCONSCIOUS,
+	"CAN PUSH" = CANPUSH,
+))
 
 //Health Defines
 #define HEALTH_THRESHOLD_CRIT 0
@@ -78,9 +95,13 @@
 
 //click cooldowns, in tenths of a second, used for various combat actions
 #define CLICK_CD_MELEE 8
+#define CLICK_CD_RAPID 2
+#define CLICK_CD_HYPER_RAPID 1
+#define CLICK_CD_SLOW 10
+#define CLICK_CD_ACTIVATE_ABILITY 1
+
 #define CLICK_CD_THROW 8
 #define CLICK_CD_RANGE 4
-#define CLICK_CD_RAPID 2
 #define CLICK_CD_CLICK_ABILITY 6
 #define CLICK_CD_BREAKOUT 100
 #define CLICK_CD_HANDCUFFED 10
@@ -98,6 +119,11 @@
 #define GRAB_NECK 2
 #define GRAB_KILL 3
 
+// Grab attack chain results
+#define GRAB_SKIP 0
+#define GRAB_FAILURE 1
+#define GRAB_SUCCESS 2
+
 //Grab breakout odds
 #define BASE_GRAB_RESIST_CHANCE 60 //base chance for whether or not you can escape from a grab
 
@@ -106,12 +132,23 @@
 //slowdown when crawling
 #define CRAWLING_ADD_SLOWDOWN 4
 
-//Attack types for checking shields/hit reactions
+//Attack types for checking block reactions
+/// Attack was made with a melee weapon
 #define MELEE_ATTACK 1
+/// Attack is a punch or kick.
+/// Mob attacks are not classified as unarmed (currently).
 #define UNARMED_ATTACK 2
+/// A projectile is hitting us.
 #define PROJECTILE_ATTACK 3
+/// A thrown item is hitting us.
 #define THROWN_PROJECTILE_ATTACK 4
+/// We're being tackled or leaped at.
 #define LEAP_ATTACK 5
+/// We're being attacked with an oversized object, perhaps a road roller. Not that anyone use such a thing as a waepon. So only relevant for certain mech based attacks.
+#define OVERWHELMING_ATTACK 6
+
+/// Used in check block to get what mob is attacking the blocker.
+#define GET_ASSAILANT(weapon) (get(weapon, /mob/living))
 
 //attack visual effects
 #define ATTACK_EFFECT_PUNCH "punch"
@@ -124,6 +161,14 @@
 #define ATTACK_EFFECT_MECHFIRE "mech_fire"
 #define ATTACK_EFFECT_MECHTOXIN "mech_toxin"
 #define ATTACK_EFFECT_BOOP "boop" //Honk
+#define ATTACK_EFFECT_VOID "void"
+
+/// Attack animation for sharp items
+#define ATTACK_ANIMATION_SLASH "slash"
+/// Attack animation for pointy items
+#define ATTACK_ANIMATION_PIERCE "pierce"
+/// Animation for blunt attacks
+#define ATTACK_ANIMATION_BLUNT "blunt"
 
 //the define for visible message range in combat
 #define SAMETILE_MESSAGE_RANGE 1
@@ -131,55 +176,36 @@
 #define DEFAULT_MESSAGE_RANGE 7
 
 //Shove knockdown lengths (deciseconds)
-#define SHOVE_KNOCKDOWN_SOLID 20
-#define SHOVE_KNOCKDOWN_HUMAN 20
-#define SHOVE_KNOCKDOWN_TABLE 20
+#define SHOVE_KNOCKDOWN_SOLID 2 SECONDS
+#define SHOVE_KNOCKDOWN_HUMAN 2 SECONDS
+#define SHOVE_KNOCKDOWN_TABLE 2 SECONDS
 #define SHOVE_KNOCKDOWN_COLLATERAL 1
-#define SHOVE_CHAIN_PARALYZE 30
-//Shove slowdown
-#define SHOVE_SLOWDOWN_LENGTH 30
-#define SHOVE_SLOWDOWN_STRENGTH 0.85 //multiplier
+#define SHOVE_CHAIN_PARALYZE 3 SECONDS
+//Staggered slowdown, an effect caused by shoving and a few other features, such as tackling
+#define STAGGERED_SLOWDOWN_LENGTH 3 SECONDS
+#define STAGGERED_SLOWDOWN_STRENGTH 0.85 //multiplier
 //Shove disarming item list
 GLOBAL_LIST_INIT(shove_disarming_types, typecacheof(list(
 	/obj/item/gun)))
 
+//The define for base unarmed miss chance
+#define UNARMED_MISS_CHANCE_BASE 20
+#define UNARMED_MISS_CHANCE_MAX 80
+//Minimum value used to determine if a punched target can be affected by a stagger combo from a punch
+#define UNARMED_COMBO_HIT_HEALTH_BASE 40
 
 //Combat object defines
-
-//Embedded objects
-///Chance for embedded objects to cause pain (damage user)
-#define EMBEDDED_PAIN_CHANCE 15
-///Chance for embedded object to fall out (causing pain but removing the object)
-#define EMBEDDED_ITEM_FALLOUT 5
-///Chance for an object to embed into somebody when thrown
-#define EMBED_CHANCE 45
-///Coefficient of multiplication for the damage the item does while embedded (this*item.w_class)
-#define EMBEDDED_PAIN_MULTIPLIER 2
-///Coefficient of multiplication for the damage the item does when it first embeds (this*item.w_class)
-#define EMBEDDED_IMPACT_PAIN_MULTIPLIER 4
-///The minimum value of an item's throw_speed for it to embed (Unless it has embedded_ignore_throwspeed_threshold set to 1)
+/// The minimum value of an item's throw_speed for it to embed (Unless it has embedded_ignore_throwspeed_threshold set to 1)
 #define EMBED_THROWSPEED_THRESHOLD 4
-///Coefficient of multiplication for the damage the item does when it falls out or is removed without a surgery (this*item.w_class)
-#define EMBEDDED_UNSAFE_REMOVAL_PAIN_MULTIPLIER 6
-///A Time in ticks, total removal time = (this*item.w_class)
-#define EMBEDDED_UNSAFE_REMOVAL_TIME 30
-///Chance for embedded objects to cause pain every time they move (jostle)
-#define EMBEDDED_JOSTLE_CHANCE 5
-///Coefficient of multiplication for the damage the item does while
-#define EMBEDDED_JOSTLE_PAIN_MULTIPLIER 1
-///This percentage of all pain will be dealt as stam damage rather than brute (0-1)
-#define EMBEDDED_PAIN_STAM_PCT 0.0
-///For thrown weapons, every extra speed it's thrown at above its normal throwspeed will add this to the embed chance
+/// For thrown embedding weapons, every extra speed it's thrown at above its normal throwspeed will add this to the embed chance
 #define EMBED_CHANCE_SPEED_BONUS 10
 
-#define EMBED_HARMLESS list("pain_mult" = 0, "jostle_pain_mult" = 0, "ignore_throwspeed_threshold" = TRUE)
-#define EMBED_HARMLESS_SUPERIOR list("pain_mult" = 0, "jostle_pain_mult" = 0, "ignore_throwspeed_threshold" = TRUE, "embed_chance" = 100, "fall_chance" = 0.1)
-#define EMBED_POINTY list("ignore_throwspeed_threshold" = TRUE)
-#define EMBED_POINTY_SUPERIOR list("embed_chance" = 100, "ignore_throwspeed_threshold" = TRUE)
-
 //Gun weapon weight
+/// Default normal ol' gun. Akimboable, one handed.
 #define WEAPON_LIGHT 1
+/// Can't be used akimbo, but only needs one hand to fire
 #define WEAPON_MEDIUM 2
+/// Can't be used akimbo, and needs two hands to fire
 #define WEAPON_HEAVY 3
 //Gun trigger guards
 #define TRIGGER_GUARD_ALLOW_ALL -1
@@ -190,7 +216,7 @@ GLOBAL_LIST_INIT(shove_disarming_types, typecacheof(list(
 ///  Example: c20, shotguns, m90
 #define BOLT_TYPE_STANDARD 1
 ///Gun has a bolt, it is open when ready to fire. The gun can never have a chambered bullet with no magazine, but the bolt stays ready when a mag is removed.
-///  Example: Some SMGs, the L6
+///  Example: Tomson, Uzi, the L6 SAW
 #define BOLT_TYPE_OPEN 2
 ///Gun has no moving bolt mechanism, it cannot be racked. Also dumps the entire contents when emptied instead of a magazine.
 ///  Example: Break action shotguns, revolvers
@@ -209,16 +235,33 @@ GLOBAL_LIST_INIT(shove_disarming_types, typecacheof(list(
 #define AMMO_BOX_ONE_SPRITE 0
 ///ammo box will have a different state for each bullet; <icon_state>-<bullets left>
 #define AMMO_BOX_PER_BULLET 1
-///ammo box will have a different state for full and empty; <icon_state>-max_ammo and <icon_state>-0
+/// Ammo box will have a different sprite for any ammo at all, and no ammo, <icon_state>-full <icon_state>-empty
 #define AMMO_BOX_FULL_EMPTY 2
+
+// Ammo box multiload defines
+/// Ammo box does not accept multiload in or out, e.g. ammo box CANNOT transfer multiple casings in one action, either IN or OUT.
+#define AMMO_BOX_MULTILOAD_NONE	0
+/// Ammo box accepts multiload going in, e.g. a magazine being fed from a stripper clip.
+#define AMMO_BOX_MULTILOAD_IN	(1 << 0)
+/// Ammo box can multiload going out to other ammo boxes, but not loaded magazines, e.g. an ammo box feeding into an unloaded magazine.
+#define AMMO_BOX_MULTILOAD_OUT	(1 << 1)
+/// Ammo box can multiload going out into loaded magazines, e.g. a speedloader feeding into a revolver's cylinder or a stripper clip feeding into a loaded magazine.
+#define AMMO_BOX_MULTILOAD_OUT_LOADED	(1 << 2)
+/// Ammo box accepts multiload in AND out, e.g. ammo box can transfer multiple casings IN at once *and* OUT at once.
+/// Ammo boxes are assumed to have some variety of magazine loading assistance.
+#define AMMO_BOX_MULTILOAD_BOTH	(AMMO_BOX_MULTILOAD_IN | AMMO_BOX_MULTILOAD_OUT)
+/// Ammo box can accept multiloads, AND can give multiloads to boxes that are loaded or not loaded. Individual stripper clips would count for this.
+#define AMMO_BOX_MULTILOAD_ALL	(AMMO_BOX_MULTILOAD_IN | AMMO_BOX_MULTILOAD_OUT | AMMO_BOX_MULTILOAD_OUT_LOADED)
+
+DEFINE_BITFIELD(ammo_box_multiload, list(
+	"LOAD_IN" = AMMO_BOX_MULTILOAD_IN,
+	"LOAD_OUT" = AMMO_BOX_MULTILOAD_OUT,
+	"LOAD_OUT_LOADED" = AMMO_BOX_MULTILOAD_OUT_LOADED,
+))
 
 #define SUPPRESSED_NONE 0
 #define SUPPRESSED_QUIET 1 ///standard suppressed
 #define SUPPRESSED_VERY 2 /// no message
-
-//Projectile Reflect
-#define REFLECT_NORMAL (1<<0)
-#define REFLECT_FAKEPROJECTILE (1<<1)
 
 //His Grace.
 #define HIS_GRACE_SATIATED 0 //He hungers not. If bloodthirst is set to this, His Grace is asleep.
@@ -234,12 +277,11 @@ GLOBAL_LIST_INIT(shove_disarming_types, typecacheof(list(
 /// ex_act() with EXPLODE_DEVASTATE severity will gib mobs with less than this much bomb armor
 #define EXPLODE_GIB_THRESHOLD 50
 
-#define EMP_HEAVY 1
 #define EMP_LIGHT 2
+#define EMP_HEAVY 1
 
 #define GRENADE_CLUMSY_FUMBLE 1
 #define GRENADE_NONCLUMSY_FUMBLE 2
-#define GRENADE_NO_FUMBLE 3
 
 #define BODY_ZONE_HEAD "head"
 #define BODY_ZONE_CHEST "chest"
@@ -255,6 +297,13 @@ GLOBAL_LIST_INIT(shove_disarming_types, typecacheof(list(
 #define BODY_ZONE_PRECISE_R_HAND "r_hand"
 #define BODY_ZONE_PRECISE_L_FOOT "l_foot"
 #define BODY_ZONE_PRECISE_R_FOOT "r_foot"
+
+// These lists are ordered as bodyparts would be ordered
+GLOBAL_LIST_INIT(all_body_zones, list(BODY_ZONE_CHEST, BODY_ZONE_HEAD, BODY_ZONE_L_LEG, BODY_ZONE_R_LEG, BODY_ZONE_L_ARM, BODY_ZONE_R_ARM))
+GLOBAL_LIST_INIT(limb_zones, list(BODY_ZONE_L_LEG, BODY_ZONE_R_LEG, BODY_ZONE_L_ARM, BODY_ZONE_R_ARM))
+GLOBAL_LIST_INIT(arm_zones, list(BODY_ZONE_L_ARM, BODY_ZONE_R_ARM))
+GLOBAL_LIST_INIT(leg_zones, list(BODY_ZONE_L_LEG, BODY_ZONE_R_LEG))
+GLOBAL_LIST_INIT(all_precise_body_zones, list(BODY_ZONE_PRECISE_EYES, BODY_ZONE_PRECISE_MOUTH, BODY_ZONE_PRECISE_GROIN, BODY_ZONE_PRECISE_L_HAND, BODY_ZONE_PRECISE_R_HAND, BODY_ZONE_PRECISE_L_FOOT, BODY_ZONE_PRECISE_R_FOOT))
 
 //We will round to this value in damage calculations.
 #define DAMAGE_PRECISION 0.1
@@ -294,21 +343,110 @@ GLOBAL_LIST_INIT(shove_disarming_types, typecacheof(list(
 	#define COMPONENT_AUTOFIRE_SHOT_SUCCESS (1<<0)
 
 /// Martial arts attack requested but is not available, allow a check for a regular attack.
-#define MARTIAL_ATTACK_INVALID -1
+#define MARTIAL_ATTACK_INVALID NONE
 
 /// Martial arts attack happened but failed, do not allow a check for a regular attack.
-#define MARTIAL_ATTACK_FAIL FALSE
+#define MARTIAL_ATTACK_FAIL COMPONENT_SKIP_ATTACK
 
 /// Martial arts attack happened and succeeded, do not allow a check for a regular attack.
-#define MARTIAL_ATTACK_SUCCESS TRUE
+#define MARTIAL_ATTACK_SUCCESS COMPONENT_CANCEL_ATTACK_CHAIN
+
+/// Get the active martial art of a mob.
+#define GET_ACTIVE_MARTIAL_ART(goku) (LAZYACCESS(goku.martial_arts, 1))
+/// Get what martial art will be used after cycling through the active martial art.
+#define GET_NEXT_MARTIAL_ART(goku) (LAZYACCESS(goku.martial_arts, 2))
 
 /// IF an object is weak against armor, this is the value that any present armor is multiplied by
 #define ARMOR_WEAKENED_MULTIPLIER 2
+/// Armor can't block more than this as a percentage
+#define ARMOR_MAX_BLOCK 90
+/// Calculates the new armour value after armour penetration. Can return negative values, and those must be caught.
+#define PENETRATE_ARMOUR(armour, penetration) (penetration >= 100 ? 0 : 100 * (armour - penetration) / (100 - penetration))
 
-/// Return values used in item/melee/baton/baton_attack.
-/// Does a normal item attack.
-#define BATON_DO_NORMAL_ATTACK 1
-/// The attack has been stopped. Either because the user was clumsy or the attack was blocked.
-#define BATON_ATTACK_DONE 2
-/// The baton attack is still going. baton_effect() is called.
-#define BATON_ATTACKING 3
+// Defines for combo attack component
+/// LMB Attack
+#define LEFT_ATTACK "Left Attack"
+/// RMB Attack
+#define RIGHT_ATTACK "Right Attack"
+/// Steps for the combo
+#define COMBO_STEPS "steps"
+/// The proc the combo calls
+#define COMBO_PROC "proc"
+
+///Checks If the target can be moved at all by shoving them
+#define SHOVE_CAN_MOVE (1<<0)
+///If the target can be shoved into something something with perhaps special interactions.
+#define SHOVE_CAN_HIT_SOMETHING (1<<1)
+///Keeps knockdowns at bay for the target
+#define SHOVE_KNOCKDOWN_BLOCKED (1<<2)
+///If the target can be briefly paralized by shoving them once again after knocking them down.
+#define SHOVE_CAN_KICK_SIDE (1<<3)
+///Whether the staggered status effect can be applied on the target
+#define SHOVE_CAN_STAGGER (1<<4)
+///If the target could move, but didn't because there's an obstacle in the path.
+#define SHOVE_BLOCKED (1<<5)
+///If the obstacle is an object at the border of the turf (so no signal from being sent to the other turf)
+#define SHOVE_DIRECTIONAL_BLOCKED (1<<6)
+
+///Bitfield returned by listeners for COMSIG_LIVING_ENTER_STAMCRIT when they perform some action that prevents a mob going into stamcrit.
+#define STAMCRIT_CANCELLED (1<<0)
+
+///Deathmatch lobby current status
+#define DEATHMATCH_NOT_PLAYING 0
+#define DEATHMATCH_PRE_PLAYING 1
+#define DEATHMATCH_PLAYING 2
+
+/// The amount of energy needed to increase the burn force by 1 damage during electrocution.
+#define JOULES_PER_DAMAGE (25 KILO JOULES)
+/// Calculates the amount of burn force when applying this much energy to a mob via electrocution from an energy source.
+#define ELECTROCUTE_DAMAGE(energy) (energy >= 1 KILO JOULES ? clamp(20 + round(energy / JOULES_PER_DAMAGE), 20, 195) + rand(-5,5) : 0)
+
+// Attack chain attack_modifier modifiers
+/// Sets the weapon's base force to this. Use carefully (as multiple overrides may collide). Set via [SET_ATTACK_FORCE]
+#define FORCE_OVERRIDE "force_override"
+/// Flat addition or subtration to the weapon's force. Set via [MODIFY_ATTACK_FORCE]
+#define FORCE_MODIFIER "force_modifier"
+/// Multiplication of the weapon's force. Applied AFTER [FORCE_MODIFIER]. Set via [MODIFY_ATTACK_FORCE_MULTIPLIER]
+#define FORCE_MULTIPLIER "force_multiplier"
+/// If set in modifiers, default messages ("You hit the thing with the thing") are silenced
+#define SILENCE_DEFAULT_MESSAGES "silence_default_messages"
+/// If set in modifiers, default hitsound is silenced
+#define SILENCE_HITSOUND "silence_hitsound"
+
+/// Used in attack chain to set the force of the attack without changing the base force of the item.
+#define SET_ATTACK_FORCE(atk_mods, value) \
+	if(!islist(atk_mods)) { atk_mods = list() }; \
+	atk_mods[FORCE_OVERRIDE] = value;
+
+/// Used in attack chain to add or remove force from the attack without changing the base force of the item.
+#define MODIFY_ATTACK_FORCE(atk_mods, amount) \
+	if(!islist(atk_mods)) { atk_mods = list() }; \
+	atk_mods[FORCE_MODIFIER] += amount;
+
+/// Used in attack chain to multiply the force of the attack without changing the base force of the item.
+#define MODIFY_ATTACK_FORCE_MULTIPLIER(atk_mods, amount) \
+	if(!islist(atk_mods)) { atk_mods = list() }; \
+	if(!(FORCE_MULTIPLIER in atk_mods)) { atk_mods[FORCE_MULTIPLIER] = 1 }; \
+	atk_mods[FORCE_MULTIPLIER] *= amount;
+
+/// Used in attack chain to prevent hitsounds on attack (to allow for custom sounds)
+#define MUTE_ATTACK_HITSOUND(atk_mods) \
+	if(!islist(atk_mods)) { atk_mods = list() }; \
+	atk_mods[SILENCE_HITSOUND] = TRUE;
+
+/// Used in attack chain to prevent default visible messages from being sent (to allow for custom messages)
+#define HIDE_ATTACK_MESSAGES(atk_mods) \
+	if(!islist(atk_mods)) { atk_mods = list() }; \
+	atk_mods[SILENCE_DEFAULT_MESSAGES] = TRUE;
+
+/// Calculates the final force of some item based on atk_mods
+/// Needs to have support for force overrides and multipliers of 0 (hence why we ternaries are used over 'or's)
+#define CALCULATE_FORCE(some_item, atk_mods) \
+	((((FORCE_OVERRIDE in atk_mods) ? atk_mods[FORCE_OVERRIDE] : some_item.force) + (atk_mods?[FORCE_MODIFIER] || 0)) * ((FORCE_MULTIPLIER in atk_mods) ? atk_mods[FORCE_MULTIPLIER] : 1))
+
+/// Return from attacked_by to indicate the attack did not connect
+/// A negative number is used here to people can easily check "attacks that failed or did 0 damage" with <= 0
+#define ATTACK_FAILED -1
+
+///Do we block carbon-level flash_act() from performing its default stamina damage/knockdown?
+#define FLASH_COMPLETED "flash_completed"

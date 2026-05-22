@@ -7,7 +7,7 @@
 	suit = /obj/item/clothing/suit/armor/riot/knight/red
 	gloves = /obj/item/clothing/gloves/plate/red
 	head = /obj/item/clothing/head/helmet/knight/red
-	r_hand = /obj/item/claymore
+	l_hand = /obj/item/claymore
 
 	ears = null
 	id = null
@@ -26,9 +26,9 @@
 	name = "Redfield Castle Archer"
 	icon_state = "medisim_archer"
 
-	belt = /obj/item/storage/bag/quiver
+	belt = /obj/item/storage/bag/quiver/full
 	suit = /obj/item/clothing/suit/armor/vest/cuirass
-	r_hand = /obj/item/gun/ballistic/bow
+	l_hand = /obj/item/gun/ballistic/bow
 
 	class_description = "Ranged class. Armed with a bow and arrows."
 

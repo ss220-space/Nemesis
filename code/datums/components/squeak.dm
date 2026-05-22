@@ -1,5 +1,5 @@
 /datum/component/squeak
-	var/static/list/default_squeak_sounds = list('sound/items/toysqueak1.ogg'=1, 'sound/items/toysqueak2.ogg'=1, 'sound/items/toysqueak3.ogg'=1)
+	var/static/list/default_squeak_sounds = list('sound/items/toy_squeak/toysqueak1.ogg'=1, 'sound/items/toy_squeak/toysqueak2.ogg'=1, 'sound/items/toy_squeak/toysqueak3.ogg'=1)
 	var/list/override_squeak_sounds
 	var/mob/holder
 
@@ -11,8 +11,8 @@
 	var/step_delay = 1
 
 	// This is to stop squeak spam from inhand usage
-	var/last_use = 0
-	var/use_delay = 20
+	COOLDOWN_DECLARE(spam_cooldown)
+	var/use_delay = 2 SECONDS
 
 	///extra-range for this component's sound
 	var/sound_extra_range = -1
@@ -23,32 +23,32 @@
 
 	///what we set connect_loc to if parent is an item
 	var/static/list/item_connections = list(
-		COMSIG_ATOM_ENTERED = .proc/play_squeak_crossed,
+		COMSIG_ATOM_ENTERED = PROC_REF(play_squeak_crossed),
 	)
 
 
 /datum/component/squeak/Initialize(custom_sounds, volume_override, chance_override, step_delay_override, use_delay_override, extrarange, falloff_exponent, fallof_distance)
 	if(!isatom(parent))
 		return COMPONENT_INCOMPATIBLE
-	RegisterSignal(parent, list(COMSIG_ATOM_ENTERED, COMSIG_ATOM_BLOB_ACT, COMSIG_ATOM_HULK_ATTACK, COMSIG_PARENT_ATTACKBY), .proc/play_squeak)
+	RegisterSignals(parent, list(COMSIG_ATOM_ENTERED, COMSIG_ATOM_BLOB_ACT, COMSIG_ATOM_HULK_ATTACK, COMSIG_ATOM_ATTACKBY), PROC_REF(play_squeak))
 	if(ismovable(parent))
-		RegisterSignal(parent, list(COMSIG_MOVABLE_BUMP, COMSIG_MOVABLE_IMPACT, COMSIG_PROJECTILE_BEFORE_FIRE), .proc/play_squeak)
+		RegisterSignals(parent, list(COMSIG_MOVABLE_BUMP, COMSIG_MOVABLE_IMPACT, COMSIG_PROJECTILE_BEFORE_FIRE), PROC_REF(play_squeak))
 
 		AddComponent(/datum/component/connect_loc_behalf, parent, item_connections)
-		RegisterSignal(parent, COMSIG_MOVABLE_DISPOSING, .proc/disposing_react)
+		RegisterSignal(parent, COMSIG_MOVABLE_DISPOSING, PROC_REF(disposing_react))
 		if(isitem(parent))
-			RegisterSignal(parent, list(COMSIG_ITEM_ATTACK, COMSIG_ITEM_ATTACK_OBJ, COMSIG_ITEM_HIT_REACT), .proc/play_squeak)
-			RegisterSignal(parent, COMSIG_ITEM_ATTACK_SELF, .proc/use_squeak)
-			RegisterSignal(parent, COMSIG_ITEM_EQUIPPED, .proc/on_equip)
-			RegisterSignal(parent, COMSIG_ITEM_DROPPED, .proc/on_drop)
-			if(istype(parent, /obj/item/clothing/shoes))
-				RegisterSignal(parent, COMSIG_SHOES_STEP_ACTION, .proc/step_squeak)
+			RegisterSignals(parent, list(COMSIG_ITEM_ATTACK, COMSIG_ITEM_ATTACK_ATOM, COMSIG_ITEM_HIT_REACT), PROC_REF(play_squeak))
+			RegisterSignal(parent, COMSIG_ITEM_ATTACK_SELF, PROC_REF(use_squeak))
+			RegisterSignal(parent, COMSIG_ITEM_EQUIPPED, PROC_REF(on_equip))
+			RegisterSignal(parent, COMSIG_ITEM_DROPPED, PROC_REF(on_drop))
+			if(istype(parent, /obj/item/clothing))
+				RegisterSignal(parent, COMSIG_SHOES_STEP_ACTION, PROC_REF(step_squeak))
 		else if(isstructure(parent))
-			RegisterSignal(parent, COMSIG_ATOM_ATTACK_HAND, .proc/use_squeak)
+			RegisterSignal(parent, COMSIG_ATOM_ATTACK_HAND, PROC_REF(use_squeak))
 
 	if(istype(parent, /obj/item/organ/liver))
 		// Liver squeaking is depending on them functioning like a clown's liver
-		RegisterSignal(parent, SIGNAL_REMOVETRAIT(TRAIT_COMEDY_METABOLISM), .proc/on_comedy_metabolism_removal)
+		RegisterSignal(parent, SIGNAL_REMOVETRAIT(TRAIT_COMEDY_METABOLISM), PROC_REF(on_comedy_metabolism_removal))
 
 	override_squeak_sounds = custom_sounds
 	if(chance_override)
@@ -79,9 +79,14 @@
 		else
 			playsound(parent, pick_weight(override_squeak_sounds), volume, TRUE, sound_extra_range, sound_falloff_exponent, falloff_distance = sound_falloff_distance)
 
-/datum/component/squeak/proc/step_squeak()
+/datum/component/squeak/proc/step_squeak(obj/item/clothing/source)
 	SIGNAL_HANDLER
 
+	var/mob/living/carbon/human/owner = source.loc
+	if(CHECK_MOVE_LOOP_FLAGS(owner, MOVEMENT_LOOP_OUTSIDE_CONTROL))
+		return
+	if(owner.buckled || owner.throwing || (owner.movement_type & (VENTCRAWLING | FLYING)) || HAS_TRAIT(owner, TRAIT_IMMOBILIZED))
+		return
 	if(steps > step_delay)
 		play_squeak()
 		steps = 0
@@ -95,8 +100,14 @@
 		var/obj/item/I = arrived
 		if(I.item_flags & ABSTRACT)
 			return
-	if(arrived.movement_type & (FLYING|FLOATING) || !arrived.has_gravity())
+	if((arrived.movement_type & MOVETYPES_NOT_TOUCHING_GROUND) || !arrived.has_gravity())
 		return
+	if(ismob(arrived) && !arrived.density) // Prevents 10 overlapping mice from making an unholy sound while moving
+		return
+	if(isliving(arrived))
+		var/mob/living/living_arrived = arrived
+		if(living_arrived.mob_size < MOB_SIZE_HUMAN)
+			return
 	var/atom/current_parent = parent
 	if(isturf(current_parent?.loc))
 		play_squeak()
@@ -104,15 +115,15 @@
 /datum/component/squeak/proc/use_squeak()
 	SIGNAL_HANDLER
 
-	if(last_use + use_delay < world.time)
-		last_use = world.time
+	if(COOLDOWN_FINISHED(src, spam_cooldown))
+		COOLDOWN_START(src, spam_cooldown, use_delay)
 		play_squeak()
 
 /datum/component/squeak/proc/on_equip(datum/source, mob/equipper, slot)
 	SIGNAL_HANDLER
 	holder = equipper
-	RegisterSignal(holder, COMSIG_MOVABLE_DISPOSING, .proc/disposing_react, override=TRUE)
-	RegisterSignal(holder, COMSIG_PARENT_PREQDELETED, .proc/holder_deleted, override=TRUE)
+	RegisterSignal(holder, COMSIG_MOVABLE_DISPOSING, PROC_REF(disposing_react), override=TRUE)
+	RegisterSignal(holder, COMSIG_QDELETING, PROC_REF(holder_deleted), override=TRUE)
 	//override for the preqdeleted is necessary because putting parent in hands sends the signal that this proc is registered towards,
 	//so putting an object in hands and then equipping the item on a clothing slot (without dropping it first)
 	//will always runtime without override = TRUE
@@ -120,21 +131,21 @@
 /datum/component/squeak/proc/on_drop(datum/source, mob/user)
 	SIGNAL_HANDLER
 	UnregisterSignal(user, COMSIG_MOVABLE_DISPOSING)
-	UnregisterSignal(user, COMSIG_PARENT_PREQDELETED)
+	UnregisterSignal(user, COMSIG_QDELETING)
 	holder = null
 
-///just gets rid of the reference to holder in the case that theyre qdeleted
+///just gets rid of the reference to holder in the case that they're qdeleted
 /datum/component/squeak/proc/holder_deleted(datum/source, datum/possible_holder)
 	SIGNAL_HANDLER
 	if(possible_holder == holder)
 		holder = null
 
 // Disposal pipes related shits
-/datum/component/squeak/proc/disposing_react(datum/source, obj/structure/disposalholder/holder, obj/machinery/disposal/source)
+/datum/component/squeak/proc/disposing_react(datum/source, obj/structure/disposalholder/disposal_holder, obj/machinery/disposal/disposal_source)
 	SIGNAL_HANDLER
 
-	//We don't need to worry about unregistering this signal as it will happen for us automaticaly when the holder is qdeleted
-	RegisterSignal(holder, COMSIG_ATOM_DIR_CHANGE, .proc/holder_dir_change)
+	//We don't need to worry about unregistering this signal as it will happen for us automatically when the holder is qdeleted
+	RegisterSignal(disposal_holder, COMSIG_ATOM_DIR_CHANGE, PROC_REF(holder_dir_change))
 
 /datum/component/squeak/proc/holder_dir_change(datum/source, old_dir, new_dir)
 	SIGNAL_HANDLER

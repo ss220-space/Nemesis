@@ -24,6 +24,19 @@
 		/obj/item/circuitboard/computer/arcade/orion_trail,
 	)
 
+/obj/effect/spawner/random/techstorage/custom_shuttle
+	name = "custom shuttle circuit board spawner"
+	loot = list(
+		/obj/item/circuitboard/computer/shuttle/docker,
+		/obj/item/circuitboard/computer/shuttle/flight_control,
+		/obj/item/circuitboard/machine/engine/propulsion,
+		/obj/item/circuitboard/machine/engine/propulsion,
+		/obj/item/circuitboard/machine/engine/propulsion,
+		/obj/item/circuitboard/machine/engine/propulsion,
+		/obj/item/shuttle_blueprints,
+		/obj/item/stack/rods/shuttle/fifty,
+	)
+
 /obj/effect/spawner/random/techstorage/service_all
 	name = "service circuit board spawner"
 	loot = list(
@@ -32,12 +45,14 @@
 		/obj/item/circuitboard/machine/autolathe,
 		/obj/item/circuitboard/computer/mining,
 		/obj/item/circuitboard/machine/ore_redemption,
-		/obj/item/circuitboard/machine/mining_equipment_vendor,
+		/obj/item/circuitboard/computer/order_console/mining,
 		/obj/item/circuitboard/machine/microwave,
+		/obj/item/circuitboard/machine/microwave/engineering,
 		/obj/item/circuitboard/machine/deep_fryer,
 		/obj/item/circuitboard/machine/griddle,
 		/obj/item/circuitboard/machine/reagentgrinder,
 		/obj/item/circuitboard/machine/oven,
+		/obj/item/circuitboard/machine/stove,
 		/obj/item/circuitboard/machine/processor,
 		/obj/item/circuitboard/machine/gibber,
 		/obj/item/circuitboard/machine/chem_dispenser/drinks,
@@ -57,6 +72,7 @@
 		/obj/item/circuitboard/computer/rdconsole,
 		/obj/item/circuitboard/computer/scan_consolenew,
 		/obj/item/circuitboard/machine/dnascanner,
+		/obj/item/circuitboard/machine/dna_infuser,
 	)
 
 /obj/effect/spawner/random/techstorage/security_all
@@ -71,7 +87,7 @@
 	name = "engineering circuit board spawner"
 	loot = list(
 		/obj/item/circuitboard/computer/atmos_alert,
-		/obj/item/circuitboard/computer/stationalert,
+		/obj/item/circuitboard/computer/station_alert,
 		/obj/item/circuitboard/computer/powermonitor,
 	)
 
@@ -110,8 +126,10 @@
 /obj/effect/spawner/random/techstorage/command_all
 	name = "secure command circuit board spawner"
 	loot = list(
-		/obj/item/circuitboard/computer/crew,
+		/obj/item/circuitboard/computer/accounting,
+		/obj/item/circuitboard/computer/bankmachine,
 		/obj/item/circuitboard/computer/communications,
+		/obj/item/circuitboard/computer/crew,
 	)
 
 /obj/effect/spawner/random/techstorage/rnd_secure_all
@@ -121,4 +139,3 @@
 		/obj/item/circuitboard/computer/apc_control,
 		/obj/item/circuitboard/computer/robotics,
 	)
-

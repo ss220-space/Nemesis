@@ -1,18 +1,20 @@
-#define TANK_PLATING_SHEETS 20
+#define TANK_PLATING_SHEETS 12
 
 /obj/machinery/atmospherics/components/tank
-	icon = 'icons/obj/atmospherics/stationary_canisters.dmi'
-	icon_state = "smooth"
-
 	name = "pressure tank"
 	desc = "A large vessel containing pressurized gas."
+
+	icon = 'icons/map_icons/objects.dmi'
+	icon_state = "/obj/machinery/atmospherics/components/tank"
+	post_init_icon_state = "canister-0"
+	base_icon_state = "canister"
 
 	max_integrity = 800
 	integrity_failure = 0.2
 	density = TRUE
 	layer = ABOVE_WINDOW_LAYER
 
-	custom_materials = list(/datum/material/iron = TANK_PLATING_SHEETS * MINERAL_MATERIAL_AMOUNT) // plasteel is not a material to prevent two bugs: one where the default pressure is 1.5 times higher as plasteel's material modifier is added, and a second one where the tank names could be "plasteel plasteel" tanks
+	custom_materials = list(/datum/material/iron = TANK_PLATING_SHEETS * SHEET_MATERIAL_AMOUNT) // plasteel is not a material to prevent two bugs: one where the default pressure is 1.5 times higher as plasteel's material modifier is added, and a second one where the tank names could be "plasteel plasteel" tanks
 	material_flags = MATERIAL_EFFECTS | MATERIAL_GREYSCALE | MATERIAL_ADD_PREFIX | MATERIAL_AFFECT_STATISTICS
 
 	pipe_flags = PIPING_ONE_PER_TURF
@@ -20,23 +22,28 @@
 	initialize_directions = NONE
 	custom_reconcilation = TRUE
 
-	smoothing_flags = SMOOTH_CORNERS | SMOOTH_OBJ
-	smoothing_groups = list(SMOOTH_GROUP_GAS_TANK)
-	canSmoothWith = list(SMOOTH_GROUP_GAS_TANK)
-	appearance_flags = KEEP_TOGETHER
+	smoothing_flags = SMOOTH_BITMASK | SMOOTH_OBJ
+	smoothing_groups = SMOOTH_GROUP_GAS_TANK
+	canSmoothWith = SMOOTH_GROUP_GAS_TANK
+	appearance_flags = KEEP_TOGETHER|LONG_GLIDE
 
 	greyscale_config = /datum/greyscale_config/stationary_canister
 	greyscale_colors = "#ffffff"
+	var/overlay_greyscale_config = /datum/greyscale_config/stationary_canister_overlays
 
 	///The image showing the gases inside of the tank
 	var/image/window
 
+	/// The open node directions of the tank, assuming that the tank is facing NORTH.
+	var/open_ports = NONE
 	/// The volume of the gas mixture
 	var/volume = 2500 //in liters
 	/// The max pressure of the gas mixture before damaging the tank
-	var/max_pressure = 20000
+	var/max_pressure = 46000
 	/// The typepath of the gas this tank should be filled with.
 	var/gas_type = null
+	/// Up to how much percent of the max pressure do we fill the tank on init
+	var/starting_pressure_percent = 0.5
 
 	///Reference to the gas mix inside the tank
 	var/datum/gas_mixture/air_contents
@@ -67,7 +74,7 @@
 	if(!knob_overlays)
 		knob_overlays = list()
 		for(var/dir in GLOB.cardinals)
-			knob_overlays["[dir]"] = image('icons/obj/atmospherics/stationary_canisters.dmi', icon_state = "knob", dir = dir, layer = FLOAT_LAYER)
+			knob_overlays["[dir]"] = image('icons/obj/pipes_n_cables/stationary_canisters_misc.dmi', icon_state = "knob", dir = dir, layer = FLOAT_LAYER)
 
 	if(!crack_states)
 		crack_states = list()
@@ -79,32 +86,32 @@
 
 	AddComponent(/datum/component/gas_leaker, leak_rate = 0.05)
 	AddElement(/datum/element/volatile_gas_storage)
-	AddElement(/datum/element/crackable, 'icons/obj/atmospherics/stationary_canisters.dmi', crack_states)
+	AddElement(/datum/element/crackable, 'icons/obj/pipes_n_cables/stationary_canisters_misc.dmi', crack_states)
 
-	RegisterSignal(src, COMSIG_MERGER_ADDING, .proc/merger_adding)
-	RegisterSignal(src, COMSIG_MERGER_REMOVING, .proc/merger_removing)
-	RegisterSignal(src, COMSIG_ATOM_SMOOTHED_ICON, .proc/smoothed)
+	RegisterSignal(src, COMSIG_MERGER_ADDING, PROC_REF(merger_adding))
+	RegisterSignal(src, COMSIG_MERGER_REMOVING, PROC_REF(merger_removing))
+	RegisterSignal(src, COMSIG_ATOM_SMOOTHED_ICON, PROC_REF(smoothed))
 
 	air_contents = new
 	air_contents.temperature = T20C
 	air_contents.volume = volume
-	refresh_pressure_limit()
 
-	if(gas_type)
-		fill_to_pressure(gas_type)
+	if(gas_type && starting_pressure_percent > 0)
+		fill_to_pressure(gas_type, starting_pressure_percent)
 
 	QUEUE_SMOOTH(src)
 	QUEUE_SMOOTH_NEIGHBORS(src)
 
 	// Mapped in tanks should automatically connect to adjacent pipenets in the direction set in dir
 	if(mapload)
-		initialize_directions = dir
+		set_portdir_relative(dir, TRUE)
+		set_init_directions()
 
 	return INITIALIZE_HINT_LATELOAD
 
 // We late initialize here so all stationary tanks have time to set up their
 // initial gas mixes and signal registrations.
-/obj/machinery/atmospherics/components/tank/LateInitialize()
+/obj/machinery/atmospherics/components/tank/post_machine_initialize()
 	. = ..()
 	GetMergeGroup(merger_id, merger_typecache)
 
@@ -121,7 +128,7 @@
 		. += span_notice("The pipe port can be moved or closed with a [wrench_hint].")
 	. += span_notice("A holographic sticker on it says that its maximum safe pressure is: [siunit_pressure(max_pressure, 0)].")
 
-/obj/machinery/atmospherics/components/tank/set_custom_materials(list/materials, multiplier)
+/obj/machinery/atmospherics/components/tank/finalize_material_effects(list/materials)
 	. = ..()
 	refresh_pressure_limit()
 
@@ -136,8 +143,8 @@
 	var/pressure_limit = max_pressure * safety_margin
 
 	var/moles_to_add = (pressure_limit * air_contents.volume) / (R_IDEAL_GAS_EQUATION * air_contents.temperature)
-	air_contents.assert_gas(gastype)
-	air_contents.gases[gastype][MOLES] += moles_to_add
+
+	air_contents.adjust_gas(gastype, moles_to_add)
 	air_contents.archive()
 
 /obj/machinery/atmospherics/components/tank/process_atmos()
@@ -152,28 +159,60 @@
 	refresh_window()
 
 ///////////////////////////////////////////////////////////////////
-// Pipenet stuff
+// Port stuff
 
-/obj/machinery/atmospherics/components/tank/return_analyzable_air()
-	return air_contents
+/**
+ * Enables/Disables a port direction in var/open_ports. \
+ * Use this, then call set_init_directions() instead of setting initialize_directions directly \
+ * This system exists because tanks not having all initialize_directions set correctly breaks shuttle rotations
+ */
+/obj/machinery/atmospherics/components/tank/proc/set_portdir_relative(relative_port_dir, enable)
+	ASSERT(!isnull(enable), "Did not receive argument enable")
 
-/obj/machinery/atmospherics/components/tank/return_airs_for_reconcilation(datum/pipeline/requester)
-	. = ..()
-	if(!air_contents)
-		return
-	. += air_contents
-
-/obj/machinery/atmospherics/components/tank/return_pipenets_for_reconcilation(datum/pipeline/requester)
-	. = ..()
-	var/datum/merger/merge_group = GetMergeGroup(merger_id, merger_typecache)
-	for(var/obj/machinery/atmospherics/components/tank/tank as anything in merge_group.members)
-		. += tank.parents
-
-/obj/machinery/atmospherics/components/tank/proc/toggle_side_port(new_dir)
-	if(initialize_directions & new_dir)
-		initialize_directions &= ~new_dir
+	// Rotate the given dir so that it's relative to north
+	var/port_dir
+	if(dir == NORTH) // We're already facing north, no rotation needed
+		port_dir = relative_port_dir
 	else
-		initialize_directions |= new_dir
+		var/offnorth_angle = dir2angle(dir)
+		port_dir = turn(relative_port_dir, offnorth_angle)
+
+	if(enable)
+		open_ports |= port_dir
+	else
+		open_ports &= ~port_dir
+
+/**
+ * Toggles a port direction in var/open_ports \
+ * Use this, then call set_init_directions() instead of setting initialize_directions directly \
+ * This system exists because tanks not having all initialize_directions set correctly breaks shuttle rotations
+ */
+/obj/machinery/atmospherics/components/tank/proc/toggle_portdir_relative(relative_port_dir)
+	var/toggle = ((initialize_directions & relative_port_dir) ? FALSE : TRUE)
+	set_portdir_relative(relative_port_dir, toggle)
+
+/obj/machinery/atmospherics/components/tank/set_init_directions()
+	if(!open_ports)
+		initialize_directions = NONE
+		return
+
+	//We're rotating open_ports relative to dir, and
+	//setting initialize_directions to that rotated dir
+	var/relative_port_dirs = NONE
+	var/dir_angle = dir2angle(dir)
+	for(var/cardinal in GLOB.cardinals)
+		var/current_dir = cardinal & open_ports
+		if(!current_dir)
+			continue
+
+		var/rotated_dir = turn(current_dir, -dir_angle)
+		relative_port_dirs |= rotated_dir
+
+	initialize_directions = relative_port_dirs
+
+/obj/machinery/atmospherics/components/tank/proc/toggle_side_port(port_dir)
+	toggle_portdir_relative(port_dir)
+	set_init_directions()
 
 	for(var/i in 1 to length(nodes))
 		var/obj/machinery/atmospherics/components/node = nodes[i]
@@ -197,13 +236,31 @@
 	update_parents()
 
 ///////////////////////////////////////////////////////////////////
+// Pipenet stuff
+
+/obj/machinery/atmospherics/components/tank/return_analyzable_air()
+	return air_contents
+
+/obj/machinery/atmospherics/components/tank/return_airs_for_reconcilation(datum/pipeline/requester)
+	. = ..()
+	if(!air_contents)
+		return
+	. += air_contents
+
+/obj/machinery/atmospherics/components/tank/return_pipenets_for_reconcilation(datum/pipeline/requester)
+	. = ..()
+	var/datum/merger/merge_group = GetMergeGroup(merger_id, merger_typecache)
+	for(var/obj/machinery/atmospherics/components/tank/tank as anything in merge_group.members)
+		. += tank.parents
+
+///////////////////////////////////////////////////////////////////
 // Merger handling
 
 /obj/machinery/atmospherics/components/tank/proc/merger_adding(obj/machinery/atmospherics/components/tank/us, datum/merger/new_merger)
 	SIGNAL_HANDLER
 	if(new_merger.id != merger_id)
 		return
-	RegisterSignal(new_merger, COMSIG_MERGER_REFRESH_COMPLETE, .proc/merger_refresh_complete)
+	RegisterSignal(new_merger, COMSIG_MERGER_REFRESH_COMPLETE, PROC_REF(merger_refresh_complete))
 
 /obj/machinery/atmospherics/components/tank/proc/merger_removing(obj/machinery/atmospherics/components/tank/us, datum/merger/old_merger)
 	SIGNAL_HANDLER
@@ -221,7 +278,7 @@
 		var/datum/gas_mixture/gas_share = air_contents.remove_ratio(1 / shares--)
 		air_contents.volume -= leaver.volume
 		leaver.air_contents = gas_share
-		leaver.update_appearance()
+		leaver.update_appearance(UPDATE_ICON)
 
 	for(var/obj/machinery/atmospherics/components/tank/joiner as anything in joining_members)
 		if(joiner == src)
@@ -231,7 +288,7 @@
 			air_contents.merge(joiner_share)
 		joiner.air_contents = air_contents
 		air_contents.volume += joiner.volume
-		joiner.update_appearance()
+		joiner.update_appearance(UPDATE_ICON)
 
 	for(var/dir in GLOB.cardinals)
 		if(dir & initialize_directions & merger.members[src])
@@ -266,16 +323,21 @@
 	if(!air_contents)
 		window = null
 		return
+	var/icon/greyscaled_icon = SSgreyscale.GetColoredIconByType(overlay_greyscale_config, greyscale_colors)
 
-	window = image(icon, icon_state = "window-bg", layer = FLOAT_LAYER)
+	window = image(greyscaled_icon, icon_state = "window-bg", layer = FLOAT_LAYER)
+
+	var/static/alpha_filter
+	if(!alpha_filter) // Gotta do this separate since the icon may not be correct at world init
+		alpha_filter = filter(type="alpha", icon = icon('icons/obj/pipes_n_cables/stationary_canisters_misc.dmi', "window-bg"))
 
 	var/list/new_underlays = list()
-	for(var/obj/effect/overlay/gas/gas as anything in air_contents.return_visuals())
+	for(var/obj/effect/overlay/gas/gas as anything in air_contents.return_visuals(get_turf(src)))
 		var/image/new_underlay = image(gas.icon, icon_state = gas.icon_state, layer = FLOAT_LAYER)
-		new_underlay.filters = alpha_mask_filter(icon = icon(icon, icon_state = "window-bg"))
+		new_underlay.filters = alpha_filter
 		new_underlays += new_underlay
 
-	var/image/foreground = image(icon, icon_state = "window-fg", layer = FLOAT_LAYER)
+	var/image/foreground = image(greyscaled_icon, icon_state = "window-fg", layer = FLOAT_LAYER)
 	foreground.underlays = new_underlays
 	window.overlays = list(foreground)
 
@@ -304,7 +366,7 @@
 	. = TRUE
 	if(atom_integrity >= max_integrity)
 		return
-	if(!tool.tool_start_check(user, amount = 0))
+	if(!tool.tool_start_check(user, amount = 0, heat_required = HIGH_TEMPERATURE_REQUIRED))
 		return
 	to_chat(user, span_notice("You begin to repair the cracks in the gas tank..."))
 	var/repair_amount = max_integrity / 10
@@ -338,7 +400,7 @@
 	deconstruct(disassembled=TRUE)
 	to_chat(user, span_notice("You finish cutting open the sealed gas tank, revealing the innards."))
 
-/obj/machinery/atmospherics/components/tank/deconstruct(disassembled)
+/obj/machinery/atmospherics/components/tank/on_deconstruction(disassembled)
 	var/turf/location = drop_location()
 	. = ..()
 	location.assume_air(air_contents)
@@ -355,88 +417,122 @@
 			break
 		else
 			frame.material_end_product = material
-	frame.update_appearance()
+	frame.update_appearance(UPDATE_ICON)
 
 ///////////////////////////////////////////////////////////////////
 // Gas tank variants
 
 /obj/machinery/atmospherics/components/tank/air
 	name = "pressure tank (Air)"
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
+
+/obj/machinery/atmospherics/components/tank/air/layer1
+	piping_layer = 1
+
+/obj/machinery/atmospherics/components/tank/air/layer2
+	piping_layer = 2
+
+/obj/machinery/atmospherics/components/tank/air/layer4
+	piping_layer = 4
+
+/obj/machinery/atmospherics/components/tank/air/layer5
+	piping_layer = 5
 
 /obj/machinery/atmospherics/components/tank/air/Initialize(mapload)
 	. = ..()
-	fill_to_pressure(/datum/gas/oxygen, safety_margin = (O2STANDARD * 0.5))
-	fill_to_pressure(/datum/gas/nitrogen, safety_margin = (N2STANDARD * 0.5))
+	if(starting_pressure_percent > 0)
+		fill_to_pressure(/datum/gas/oxygen, safety_margin = (O2STANDARD * starting_pressure_percent))
+		fill_to_pressure(/datum/gas/nitrogen, safety_margin = (N2STANDARD * starting_pressure_percent))
 
 /obj/machinery/atmospherics/components/tank/carbon_dioxide
 	gas_type = /datum/gas/carbon_dioxide
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/plasma
 	gas_type = /datum/gas/plasma
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/nitrogen
 	gas_type = /datum/gas/nitrogen
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/oxygen
 	gas_type = /datum/gas/oxygen
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/nitrous
 	gas_type = /datum/gas/nitrous_oxide
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/bz
 	gas_type = /datum/gas/bz
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/freon
 	gas_type = /datum/gas/freon
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/halon
 	gas_type = /datum/gas/halon
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/healium
 	gas_type = /datum/gas/healium
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/hydrogen
 	gas_type = /datum/gas/hydrogen
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/hypernoblium
 	gas_type = /datum/gas/hypernoblium
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/miasma
 	gas_type = /datum/gas/miasma
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/nitrium
 	gas_type = /datum/gas/nitrium
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/pluoxium
 	gas_type = /datum/gas/pluoxium
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/proto_nitrate
 	gas_type = /datum/gas/proto_nitrate
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/tritium
 	gas_type = /datum/gas/tritium
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/water_vapor
 	gas_type = /datum/gas/water_vapor
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/zauker
 	gas_type = /datum/gas/zauker
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/helium
 	gas_type = /datum/gas/helium
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 /obj/machinery/atmospherics/components/tank/antinoblium
 	gas_type = /datum/gas/antinoblium
+	flags_1 = parent_type::flags_1 | NO_NEW_GAGS_PREVIEW_1
 
 ///////////////////////////////////////////////////////////////////
 // Tank Frame Structure
 
 /obj/structure/tank_frame
-	icon = 'icons/obj/atmospherics/stationary_canisters.dmi'
+	icon = 'icons/obj/pipes_n_cables/stationary_canisters_misc.dmi'
 	icon_state = "frame"
 	anchored = FALSE
 	density = TRUE
-	custom_materials = list(/datum/material/alloy/plasteel = 4 * MINERAL_MATERIAL_AMOUNT)
+	custom_materials = list(/datum/material/alloy/plasteel = 4 * SHEET_MATERIAL_AMOUNT)
 	var/construction_state = TANK_FRAME
 	var/datum/material/material_end_product
 
@@ -459,11 +555,10 @@
 			var/welder_hint = EXAMINE_HINT("welder")
 			. += span_notice("The plating has been firmly attached and would need a [crowbar_hint] to detach, but still needs to be sealed by a [welder_hint].")
 
-/obj/structure/tank_frame/deconstruct(disassembled)
+/obj/structure/tank_frame/atom_deconstruct(disassembled)
 	if(disassembled)
 		for(var/datum/material/mat as anything in custom_materials)
-			new mat.sheet_type(drop_location(), custom_materials[mat] / MINERAL_MATERIAL_AMOUNT)
-	return ..()
+			new mat.sheet_type(drop_location(), custom_materials[mat] / SHEET_MATERIAL_AMOUNT)
 
 /obj/structure/tank_frame/update_icon(updates)
 	. = ..()
@@ -473,14 +568,15 @@
 		if(TANK_PLATING_UNSECURED)
 			icon_state = "plated_frame"
 
-/obj/structure/tank_frame/attackby(obj/item/item, mob/living/user, params)
-	if(construction_state == TANK_FRAME && istype(item, /obj/item/stack) && add_plating(user, item))
+/obj/structure/tank_frame/attackby(obj/item/item, mob/living/user, list/modifiers, list/attack_modifiers)
+	if(construction_state == TANK_FRAME && isstack(item) && add_plating(user, item))
 		return
 	return ..()
 
 /obj/structure/tank_frame/wrench_act(mob/living/user, obj/item/tool)
 	. = ..()
-	return default_unfasten_wrench(user, tool, 0.5 SECONDS)
+	default_unfasten_wrench(user, tool, time = 0.5 SECONDS)
+	return ITEM_INTERACT_SUCCESS
 
 /obj/structure/tank_frame/screwdriver_act_secondary(mob/living/user, obj/item/tool)
 	. = ..()
@@ -497,8 +593,8 @@
 	. = FALSE
 	if(!stack.material_type)
 		balloon_alert(user, "invalid material!")
-	var/datum/material/stack_mat = GET_MATERIAL_REF(stack.material_type)
-	if(!(MAT_CATEGORY_RIGID in stack_mat.categories))
+	var/datum/material/stack_mat = SSmaterials.get_material(stack.material_type)
+	if(!(stack_mat.mat_flags & MATERIAL_CLASS_RIGID))
 		to_chat(user, span_notice("This material doesn't seem rigid enough to hold the shape of a tank..."))
 		return
 
@@ -526,7 +622,7 @@
 
 	material_end_product = stack_mat
 	construction_state = TANK_PLATING_UNSECURED
-	update_appearance()
+	update_appearance(UPDATE_ICON)
 	to_chat(user, span_notice("You finish attaching [stack] to [src]."))
 
 /obj/structure/tank_frame/crowbar_act_secondary(mob/living/user, obj/item/tool)
@@ -540,7 +636,7 @@
 	construction_state = TANK_FRAME
 	new material_end_product.sheet_type(drop_location(), TANK_PLATING_SHEETS)
 	material_end_product = null
-	update_appearance()
+	update_appearance(UPDATE_ICON)
 
 /obj/structure/tank_frame/welder_act(mob/living/user, obj/item/tool)
 	. = ..()
@@ -550,7 +646,7 @@
 	if(!anchored)
 		to_chat(user, span_notice("You need to <b>wrench</b> [src] to the floor before finishing."))
 		return
-	if(!tool.tool_start_check(user, amount = 0))
+	if(!tool.tool_start_check(user, amount = 0, heat_required = HIGH_TEMPERATURE_REQUIRED))
 		return
 	to_chat(user, span_notice("You begin sealing the outer plating with the welder..."))
 	if(!tool.use_tool(src, user, 2 SECONDS, volume = 60))
@@ -560,9 +656,9 @@
 	if(!isturf(build_location))
 		return
 	var/obj/machinery/atmospherics/components/tank/new_tank = new(build_location)
-	var/list/new_custom_materials = list((material_end_product) = TANK_PLATING_SHEETS * MINERAL_MATERIAL_AMOUNT)
+	var/list/new_custom_materials = list((material_end_product) = TANK_PLATING_SHEETS * SHEET_MATERIAL_AMOUNT)
 	new_tank.set_custom_materials(new_custom_materials)
-	new_tank.on_construction(new_tank.pipe_color, new_tank.piping_layer)
+	new_tank.on_construction(user, new_tank.pipe_color, new_tank.piping_layer)
 	to_chat(user, span_notice("[new_tank] has been sealed and is ready to accept gases."))
 	qdel(src)
 

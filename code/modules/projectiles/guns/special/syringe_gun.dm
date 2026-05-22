@@ -1,7 +1,7 @@
 /obj/item/gun/syringe
 	name = "medical syringe gun"
 	desc = "A spring loaded gun designed to fit syringes, used to incapacitate unruly patients from a distance."
-	icon = 'icons/obj/guns/syringegun.dmi'
+	icon = 'icons/obj/weapons/guns/syringegun.dmi'
 	icon_state = "medicalsyringegun"
 	lefthand_file = 'icons/mob/inhands/weapons/64x_guns_left.dmi'
 	righthand_file = 'icons/mob/inhands/weapons/64x_guns_right.dmi'
@@ -16,28 +16,43 @@
 	force = 6
 	base_pixel_x = -4
 	pixel_x = -4
-	custom_materials = list(/datum/material/iron=2000)
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT)
 	clumsy_check = FALSE
 	fire_sound = 'sound/items/syringeproj.ogg'
-	var/load_sound = 'sound/weapons/gun/shotgun/insert_shell.ogg'
+	can_muzzle_flash = FALSE
+	gun_flags = NOT_A_REAL_GUN
+	var/load_sound = 'sound/items/weapons/gun/shotgun/insert_shell.ogg'
 	var/list/syringes = list()
-	var/max_syringes = 1 ///The number of syringes it can store.
-	var/has_syringe_overlay = TRUE ///If it has an overlay for inserted syringes. If true, the overlay is determined by the number of syringes inserted into it.
+	/// The number of syringes it can store.
+	var/max_syringes = 1
+	/// If it has an overlay for inserted syringes. If true, the overlay is determined by the number of syringes inserted into it.
+	var/has_syringe_overlay = TRUE
+	/// In low power mode syringes will instead embed and slowly inject their reagents
+	var/low_power = FALSE
 
 /obj/item/gun/syringe/Initialize(mapload)
 	. = ..()
 	chambered = new /obj/item/ammo_casing/syringegun(src)
 	recharge_newshot()
 
-/obj/item/gun/syringe/handle_atom_del(atom/A)
+/obj/item/gun/syringe/apply_fantasy_bonuses(bonus)
 	. = ..()
-	if(A in syringes)
-		syringes.Remove(A)
+	max_syringes = modify_fantasy_variable("max_syringes", max_syringes, bonus, minimum = 1)
+
+/obj/item/gun/syringe/remove_fantasy_bonuses(bonus)
+	max_syringes = reset_fantasy_variable("max_syringes", max_syringes)
+	return ..()
+
+/obj/item/gun/syringe/Exited(atom/movable/gone, direction)
+	. = ..()
+	if(gone in syringes)
+		syringes -= gone
 
 /obj/item/gun/syringe/recharge_newshot()
 	if(!syringes.len)
 		return
 	chambered.newshot()
+	return ..()
 
 /obj/item/gun/syringe/can_shoot()
 	return syringes.len
@@ -49,42 +64,65 @@
 
 /obj/item/gun/syringe/examine(mob/user)
 	. = ..()
-	. += "Can hold [max_syringes] syringe\s. Has [syringes.len] syringe\s remaining."
+	. += span_notice("Can hold [max_syringes] syringe\s. Has [syringes.len] syringe\s remaining.")
+	if (low_power)
+		. += span_notice("Its pressure regulator is set to low power mode, making sure that syringes shot will embed and slowly bleed their reagents into their target.")
+	else
+		. += span_notice("Its pressure regulator is cranked to the max, instantly injecting the reagents at the cost of breaking the syringes fired.")
+	. += span_notice("Right-click [src] in-hand to switch it to [low_power ? "full" : "low"] power.")
 
-/obj/item/gun/syringe/attack_self(mob/living/user)
-	if(!syringes.len)
-		to_chat(user, span_warning("[src] is empty!"))
+/obj/item/gun/syringe/attack_self(mob/living/user, list/modifiers)
+	if (!syringes.len)
+		balloon_alert(user, "it's empty!")
 		return FALSE
 
-	var/obj/item/reagent_containers/syringe/S = syringes[syringes.len]
+	var/obj/item/reagent_containers/syringe/syringe = syringes[syringes.len]
 
-	if(!S)
+	if (!syringe)
 		return FALSE
-	user.put_in_hands(S)
+	user.put_in_hands(syringe)
 
-	syringes.Remove(S)
-	to_chat(user, span_notice("You unload [S] from \the [src]."))
+	syringes.Remove(syringe)
+	balloon_alert(user, "[syringe.name] unloaded")
 	update_appearance()
-
 	return TRUE
 
-/obj/item/gun/syringe/attackby(obj/item/A, mob/user, params, show_msg = TRUE)
-	if(istype(A, /obj/item/reagent_containers/syringe/bluespace))
-		to_chat(user, span_notice("[A] is too big to load into [src]."))
-		return TRUE
-	if(istype(A, /obj/item/reagent_containers/syringe))
-		if(syringes.len < max_syringes)
-			if(!user.transferItemToLoc(A, src))
-				return FALSE
-			to_chat(user, span_notice("You load [A] into \the [src]."))
-			syringes += A
-			recharge_newshot()
-			update_appearance()
-			playsound(loc, load_sound, 40)
-			return TRUE
-		else
-			to_chat(user, span_warning("[src] cannot hold more syringes!"))
-	return FALSE
+/obj/item/gun/syringe/attack_self_secondary(mob/user, modifiers)
+	. = ..()
+	if (.)
+		return
+
+	low_power = !low_power
+	if (low_power)
+		balloon_alert(user, "enabled low power mode")
+		to_chat(user, span_notice("You carefully lower the pressure regulator setting, ensuring that fired syringes embed in your target."))
+	else
+		balloon_alert(user, "enabled high power mode")
+		to_chat(user, span_notice("You crank the pressure regulator to the max, making sure that fired syringes inject their contents instantly."))
+	playsound(user, 'sound/machines/click.ogg', 75, TRUE, SHORT_RANGE_SOUND_EXTRARANGE)
+	return SECONDARY_ATTACK_CANCEL_ATTACK_CHAIN
+
+/obj/item/gun/syringe/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	if(istype(tool, /obj/item/reagent_containers/syringe/bluespace))
+		balloon_alert(user, "[tool.name] is too big!")
+		return ITEM_INTERACT_BLOCKING
+
+	if(!istype(tool, /obj/item/reagent_containers/syringe))
+		return NONE
+
+	if(syringes.len >= max_syringes)
+		balloon_alert(user, "it's full!")
+		return ITEM_INTERACT_BLOCKING
+
+	if(!user.transferItemToLoc(tool, src))
+		return ITEM_INTERACT_BLOCKING
+
+	balloon_alert(user, "[tool.name] loaded")
+	syringes += tool
+	recharge_newshot()
+	update_appearance()
+	playsound(src, load_sound, 40)
+	return ITEM_INTERACT_SUCCESS
 
 /obj/item/gun/syringe/update_overlays()
 	. = ..()
@@ -125,16 +163,9 @@
 	base_pixel_x = 0
 	pixel_x = 0
 	force = 2 //Also very weak because it's smaller
-	suppressed = TRUE //Softer fire sound
+	suppressed = SUPPRESSED_QUIET //Softer fire sound
 	can_unsuppress = FALSE //Permanently silenced
 	syringes = list(new /obj/item/reagent_containers/syringe())
-
-///syndicate prototype for smuggling missions
-/obj/item/gun/syringe/syndicate/prototype
-	name = "prototype dart pistol"
-	desc = "Cybersun Industries prototype dart pistols. Delivering the syringes at the same \
-	speed in a smaller weapon proved to be a surprisingly complicated task."
-	syringes = list()
 
 /obj/item/gun/syringe/dna
 	name = "modified compact syringe gun"
@@ -156,29 +187,29 @@
 	. = ..()
 	chambered = new /obj/item/ammo_casing/dnainjector(src)
 
-/obj/item/gun/syringe/dna/attackby(obj/item/A, mob/user, params, show_msg = TRUE)
-	if(istype(A, /obj/item/dnainjector))
-		var/obj/item/dnainjector/D = A
+/obj/item/gun/syringe/dna/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	if(istype(tool, /obj/item/dnainjector))
+		var/obj/item/dnainjector/D = tool
 		if(D.used)
-			to_chat(user, span_warning("This injector is used up!"))
-			return
+			balloon_alert(user, "[D.name] is used up!")
+			return ITEM_INTERACT_BLOCKING
 		if(syringes.len < max_syringes)
 			if(!user.transferItemToLoc(D, src))
-				return FALSE
-			to_chat(user, span_notice("You load \the [D] into \the [src]."))
+				return ITEM_INTERACT_BLOCKING
+			balloon_alert(user, "[D.name] loaded")
 			syringes += D
 			recharge_newshot()
 			update_appearance()
 			playsound(loc, load_sound, 40)
-			return TRUE
-		else
-			to_chat(user, span_warning("[src] cannot hold more syringes!"))
-	return FALSE
+			return ITEM_INTERACT_SUCCESS
+		balloon_alert(user, "it's already full!")
+		return ITEM_INTERACT_BLOCKING
+	return NONE
 
 /obj/item/gun/syringe/blowgun
 	name = "blowgun"
 	desc = "Fire syringes at a short distance."
-	icon = 'icons/obj/guns/ballistic.dmi'
+	icon = 'icons/obj/weapons/guns/ballistic.dmi'
 	icon_state = "blowgun"
 	lefthand_file = 'icons/mob/inhands/weapons/guns_lefthand.dmi'
 	righthand_file = 'icons/mob/inhands/weapons/guns_righthand.dmi'
@@ -193,10 +224,14 @@
 	base_pixel_x = 0
 	pixel_x = 0
 	force = 4
+	trigger_guard = TRIGGER_GUARD_ALLOW_ALL
+	custom_materials = list(/datum/material/bamboo = SHEET_MATERIAL_AMOUNT * 10)
+	about_to_shoot_inside_mail_text = "The air in the envelope is rushing out!"
 
 /obj/item/gun/syringe/blowgun/process_fire(atom/target, mob/living/user, message = TRUE, params = null, zone_override = "", bonus_spread = 0)
-	visible_message(span_danger("[user] starts aiming with a blowgun!"))
-	if(do_after(user, 25, target = src))
-		user.adjustStaminaLoss(20)
-		user.adjustOxyLoss(20)
-		return ..()
+	. = ..()
+	if(!.)
+		return
+	visible_message(span_danger("[user] shoots the blowgun!"))
+	user.adjust_stamina_loss(20, updating_stamina = FALSE)
+	user.adjust_oxy_loss(20)

@@ -2,11 +2,14 @@
 	icon_state = "energy"
 	name = "energy gun"
 	desc = "A basic energy-based gun."
-	icon = 'icons/obj/guns/energy.dmi'
+	icon = 'icons/obj/weapons/guns/energy.dmi'
+	pickup_sound = 'sound/items/handling/gun/gun_pick_up.ogg'
+	drop_sound = 'sound/items/handling/gun/gun_drop.ogg'
+	sound_vary = TRUE
 
 	/// What type of power cell this uses
-	var/obj/item/stock_parts/cell/cell
-	var/cell_type = /obj/item/stock_parts/cell
+	var/obj/item/stock_parts/power_store/cell
+	var/cell_type = /obj/item/stock_parts/power_store/cell
 	///if the weapon has custom icons for individual ammo types it can switch between. ie disabler beams, taser, laser/lethals, ect.
 	var/modifystate = FALSE
 	var/list/ammo_type = list(/obj/item/ammo_casing/energy)
@@ -26,23 +29,67 @@
 	var/single_shot_type_overlay = TRUE
 	///Should we give an overlay to empty guns?
 	var/display_empty = TRUE
-	var/selfcharge = 0
-	var/charge_timer = 0
-	var/charge_delay = 8
+	///If we have an additional overlay based on our shot type while active
+	var/shot_type_fluff_overlay = FALSE
+
 	///whether the gun's cell drains the cyborg user's cell to recharge
 	var/use_cyborg_cell = FALSE
 	///set to true so the gun is given an empty cell
 	var/dead_cell = FALSE
 
+	// Self charging vars
+
+	/// Whether or not our gun charges its own cell on a timer.
+	var/selfcharge = 0
+	/// The amount of time between instances of cell self recharge
+	var/charge_timer = 0
+	/// The amount of seconds_per_tick during process() before the gun charges itself
+	var/charge_delay = 8
+	/// The amount restored by the gun to the cell per self charge tick
+	var/self_charge_amount = STANDARD_ENERGY_GUN_SELF_CHARGE_RATE
+	/// sound played when fire mode select is done
+	var/fire_mode_switch_sound = SFX_FIRE_MODE_SWITCH
+
+	// EMP related vars
+
+	/// A divide to the amount of charge lost when the weapon is EMP'd. Higher means more resistant.
+	var/emp_resistance = 1
+
+/obj/item/gun/energy/fire_sounds()
+	// What frequency the energy gun's sound will make
+	var/pitch_to_use = 1
+
+	var/obj/item/ammo_casing/energy/shot = ammo_type[select]
+	// What percentage of the full battery a shot will expend
+	var/shot_cost_percent = round(clamp(shot.e_cost / cell.maxcharge, 0, 1) * 100)
+	// Ignore this on oversized/infinite cells or ammo without cost
+	if(shot_cost_percent > 0 && shot_cost_percent < 100)
+		// The total amount of shots the fully charged energy gun can fire before running out
+		var/max_shots = round(100/shot_cost_percent) - 1
+		// How many shots left before the energy gun's current battery runs out of energy
+		var/shots_left = round((round(clamp(cell.charge / cell.maxcharge, 0, 1) * 100))/shot_cost_percent) - 1
+		pitch_to_use = LERP(1, 0.3, (1 - (shots_left/max_shots)) ** 2)
+
+	var/sound/playing_sound = sound(suppressed ? suppressed_sound : fire_sound)
+	playing_sound.pitch = pitch_to_use
+
+	if(suppressed)
+		playsound(src, playing_sound, suppressed_volume, vary_fire_sound, ignore_walls = FALSE, extrarange = SILENCED_SOUND_EXTRARANGE, falloff_distance = 0)
+	else
+		playsound(src, playing_sound, fire_sound_volume, vary_fire_sound)
+
 /obj/item/gun/energy/emp_act(severity)
 	. = ..()
 	if(!(. & EMP_PROTECT_CONTENTS))
-		cell.use(round(cell.charge / severity))
+		cell.use(round(cell.charge / emp_resistance / severity))
 		chambered = null //we empty the chamber
 		recharge_newshot() //and try to charge a new shot
 		update_appearance()
 
-/obj/item/gun/energy/get_cell()
+/obj/item/gun/energy/get_cell(atom/movable/interface, mob/user)
+	if(istype(interface, /obj/item/inducer))
+		to_chat(user, span_alert("Error: unable to interface with [interface]."))
+		return null
 	return cell
 
 /obj/item/gun/energy/Initialize(mapload)
@@ -53,15 +100,19 @@
 		cell = new(src)
 	if(!dead_cell)
 		cell.give(cell.maxcharge)
+	if(cell && resistance_flags & INDESTRUCTIBLE)
+		cell.resistance_flags |= INDESTRUCTIBLE
+	cell.resistance_flags |= BOMB_PROOF
 	update_ammo_types()
 	recharge_newshot(TRUE)
 	if(selfcharge)
 		START_PROCESSING(SSobj, src)
 	update_appearance()
-	RegisterSignal(src, COMSIG_ITEM_RECHARGED, .proc/instant_recharge)
+	RegisterSignal(src, COMSIG_ITEM_RECHARGED, PROC_REF(instant_recharge))
+	AddElement(/datum/element/update_icon_updates_onmob)
 
 /obj/item/gun/energy/add_weapon_description()
-	AddElement(/datum/element/weapon_description, attached_proc = .proc/add_notes_energy)
+	AddElement(/datum/element/weapon_description, attached_proc = PROC_REF(add_notes_energy))
 
 /**
  *
@@ -76,25 +127,23 @@
 	if(!ammo_type.len)
 		return
 	var/obj/projectile/exam_proj
-	readout += "\nStandard models of this projectile weapon have [span_warning("[ammo_type.len] mode\s")]"
+	readout += "\nStandard models of this projectile weapon have [span_warning("[ammo_type.len] mode\s")]."
 	readout += "Our heroic interns have shown that one can theoretically stay standing after..."
+	if(projectile_damage_multiplier <= 0)
+		readout += "a theoretically infinite number of shots on [span_warning("every")] mode due to esoteric or nonexistent offensive potential."
+		return readout.Join("\n") // Sending over the singular string, rather than the whole list
 	for(var/obj/item/ammo_casing/energy/for_ammo as anything in ammo_type)
 		exam_proj = for_ammo.projectile_type
 		if(!ispath(exam_proj))
 			continue
-
 		if(initial(exam_proj.damage) > 0) // Don't divide by 0!!!!!
-			readout += "[span_warning("[HITS_TO_CRIT(initial(exam_proj.damage) * for_ammo.pellets)] shot\s")] on [span_warning("[for_ammo.select_name]")] mode before collapsing from [initial(exam_proj.damage_type) == STAMINA ? "immense pain" : "their wounds"]."
+			readout += "[span_warning("[HITS_TO_CRIT((initial(exam_proj.damage) * projectile_damage_multiplier) * for_ammo.pellets)] shot\s")] on [span_warning("[for_ammo.select_name]")] mode before collapsing from [initial(exam_proj.damage_type) == STAMINA ? "immense pain" : "their wounds"]."
 			if(initial(exam_proj.stamina) > 0) // In case a projectile does damage AND stamina damage (Energy Crossbow)
-				readout += "[span_warning("[HITS_TO_CRIT(initial(exam_proj.stamina) * for_ammo.pellets)] shot\s")] on [span_warning("[for_ammo.select_name]")] mode before collapsing from immense pain."
+				readout += "[span_warning("[HITS_TO_CRIT((initial(exam_proj.stamina) * projectile_damage_multiplier) * for_ammo.pellets)] shot\s")] on [span_warning("[for_ammo.select_name]")] mode before collapsing from immense pain."
 		else
 			readout += "a theoretically infinite number of shots on [span_warning("[for_ammo.select_name]")] mode."
 
 	return readout.Join("\n") // Sending over the singular string, rather than the whole list
-
-/obj/item/gun/energy/ComponentInitialize()
-	. = ..()
-	AddElement(/datum/element/update_icon_updates_onmob)
 
 /obj/item/gun/energy/proc/update_ammo_types()
 	var/obj/item/ammo_casing/energy/shot
@@ -110,26 +159,37 @@
 	if (cell)
 		QDEL_NULL(cell)
 	STOP_PROCESSING(SSobj, src)
+
+	// Intentional cast.
+	// Sometimes ammo_type has paths, sometimes it has atom.
+	for (var/atom/item in ammo_type)
+		qdel(item)
+	ammo_type = null
+
 	return ..()
 
-/obj/item/gun/energy/handle_atom_del(atom/A)
-	if(A == cell)
+/obj/item/gun/energy/Exited(atom/movable/gone, direction)
+	. = ..()
+	if(gone == cell)
 		cell = null
 		update_appearance()
-	return ..()
 
-/obj/item/gun/energy/process(delta_time)
+/obj/item/gun/energy/process(seconds_per_tick)
 	if(selfcharge && cell && cell.percent() < 100)
-		charge_timer += delta_time
+		charge_timer += seconds_per_tick
 		if(charge_timer < charge_delay)
 			return
 		charge_timer = 0
-		cell.give(100)
+		cell.give(self_charge_amount * seconds_per_tick)
 		if(!chambered) //if empty chamber we try to charge a new shot
 			recharge_newshot(TRUE)
 		update_appearance()
 
 /obj/item/gun/energy/attack_self(mob/living/user as mob)
+	. = ..()
+	if(.)
+		return
+
 	if(ammo_type.len > 1 && can_select)
 		select_fire(user)
 
@@ -140,19 +200,23 @@
 /obj/item/gun/energy/recharge_newshot(no_cyborg_drain)
 	if (!ammo_type || !cell)
 		return
+
 	if(use_cyborg_cell && !no_cyborg_drain)
 		if(iscyborg(loc))
-			var/mob/living/silicon/robot/R = loc
-			if(R.cell)
+			var/mob/living/silicon/robot/robot = loc
+			if(robot.cell)
 				var/obj/item/ammo_casing/energy/shot = ammo_type[select] //Necessary to find cost of shot
-				if(R.cell.use(shot.e_cost)) //Take power from the borg...
+				if(robot.cell.use(shot.e_cost)) //Take power from the borg...
 					cell.give(shot.e_cost) //... to recharge the shot
+					return ..()
+
 	if(!chambered)
 		var/obj/item/ammo_casing/energy/AC = ammo_type[select]
 		if(cell.charge >= AC.e_cost) //if there's enough power in the cell cell...
 			chambered = AC //...prepare a new shot based on the current ammo type selected
 			if(!chambered.loaded_projectile)
 				chambered.newshot()
+				return ..()
 
 /obj/item/gun/energy/handle_chamber()
 	if(chambered && !chambered.loaded_projectile) //if loaded_projectile is null, i.e the shot has been fired...
@@ -166,7 +230,7 @@
 		process_chamber() // If the gun was drained and then recharged, load a new shot.
 	return ..()
 
-/obj/item/gun/energy/process_burst(mob/living/user, atom/target, message = TRUE, params = null, zone_override="", sprd = 0, randomized_gun_spread = 0, randomized_bonus_spread = 0, rand_spr = 0, iteration = 0)
+/obj/item/gun/energy/process_burst(mob/living/user, atom/target, message = TRUE, params = null, zone_override="", randomized_gun_spread = 0, randomized_bonus_spread = 0, rand_spr = 0, iteration = 0)
 	if(!chambered && can_shoot())
 		process_chamber() // Ditto.
 	return ..()
@@ -178,11 +242,15 @@
 	var/obj/item/ammo_casing/energy/shot = ammo_type[select]
 	fire_sound = shot.fire_sound
 	fire_delay = shot.delay
+	if (shot.muzzle_flash_color)
+		set_light_color(shot.muzzle_flash_color)
 	if (shot.select_name && user)
 		balloon_alert(user, "set to [shot.select_name]")
 	chambered = null
 	recharge_newshot(TRUE)
 	update_appearance()
+	if(fire_mode_switch_sound)
+		playsound(src, fire_mode_switch_sound, 50, TRUE)
 
 /obj/item/gun/energy/update_icon_state()
 	var/skip_inhand = initial(inhand_icon_state) //only build if we aren't using a preset inhand icon
@@ -211,23 +279,28 @@
 		return
 
 	var/overlay_icon_state = "[icon_state]_charge"
+	var/obj/item/ammo_casing/energy/shot = ammo_type[select]
+
 	if(modifystate)
-		var/obj/item/ammo_casing/energy/shot = ammo_type[select]
 		if(single_shot_type_overlay)
-			. += "[icon_state]_[shot.select_name]"
-		overlay_icon_state += "_[shot.select_name]"
+			. += "[icon_state]_[initial(shot.select_name)]"
+		overlay_icon_state += "_[initial(shot.select_name)]"
 
 	var/ratio = get_charge_ratio()
 	if(ratio == 0 && display_empty)
 		. += "[icon_state]_empty"
 		return
+
+	if(shot_type_fluff_overlay)
+		. += "[icon_state]_[initial(shot.select_name)]_extra"
+
 	if(shaded_charge)
 		. += "[icon_state]_charge[ratio]"
 		return
 	var/mutable_appearance/charge_overlay = mutable_appearance(icon, overlay_icon_state)
 	for(var/i = ratio, i >= 1, i--)
-		charge_overlay.pixel_x = ammo_x_offset * (i - 1)
-		charge_overlay.pixel_y = ammo_y_offset * (i - 1)
+		charge_overlay.pixel_w = ammo_x_offset * (i - 1)
+		charge_overlay.pixel_z = ammo_y_offset * (i - 1)
 		. += new /mutable_appearance(charge_overlay)
 
 
@@ -237,24 +310,23 @@
 	// Sets the ratio to 0 if the gun doesn't have enough charge to fire, or if its power cell is removed.
 
 /obj/item/gun/energy/suicide_act(mob/living/user)
-	if (istype(user) && can_shoot() && can_trigger_gun(user) && user.get_bodypart(BODY_ZONE_HEAD))
+	if(istype(user) && can_shoot() && can_trigger_gun(user) && user.get_bodypart(BODY_ZONE_HEAD))
 		user.visible_message(span_suicide("[user] is putting the barrel of [src] in [user.p_their()] mouth. It looks like [user.p_theyre()] trying to commit suicide!"))
-		sleep(25)
+		sleep(2.5 SECONDS)
 		if(user.is_holding(src))
 			user.visible_message(span_suicide("[user] melts [user.p_their()] face off with [src]!"))
 			playsound(loc, fire_sound, 50, TRUE, -1)
 			var/obj/item/ammo_casing/energy/shot = ammo_type[select]
 			cell.use(shot.e_cost)
 			update_appearance()
-			return(FIRELOSS)
+			return FIRELOSS
 		else
 			user.visible_message(span_suicide("[user] panics and starts choking to death!"))
-			return(OXYLOSS)
+			return OXYLOSS
 	else
 		user.visible_message(span_suicide("[user] is pretending to melt [user.p_their()] face off with [src]! It looks like [user.p_theyre()] trying to commit suicide!</b>"))
 		playsound(src, dry_fire_sound, 30, TRUE)
-		return (OXYLOSS)
-
+		return OXYLOSS
 
 /obj/item/gun/energy/vv_edit_var(var_name, var_value)
 	switch(var_name)
@@ -275,7 +347,7 @@
 		var/obj/projectile/energy/loaded_projectile = E.loaded_projectile
 		if(!loaded_projectile)
 			. = ""
-		else if(loaded_projectile.nodamage || !loaded_projectile.damage || loaded_projectile.damage_type == STAMINA)
+		else if(loaded_projectile.damage <= 0 || loaded_projectile.damage_type == STAMINA)
 			user.visible_message(span_danger("[user] tries to light [A.loc == user ? "[user.p_their()] [A.name]" : A] with [src], but it doesn't do anything. Dumbass."))
 			playsound(user, E.fire_sound, 50, TRUE)
 			playsound(user, loaded_projectile.hitsound, 50, TRUE)
@@ -292,7 +364,7 @@
 			playsound(user, E.fire_sound, 50, TRUE)
 			playsound(user, loaded_projectile.hitsound, 50, TRUE)
 			cell.use(E.e_cost)
-			. = span_danger("[user] casually lights [A.loc == user ? "[user.p_their()] [A.name]" : A] with [src]. Damn.")
+			. = span_rose("[user] casually lights [A.loc == user ? "[user.p_their()] [A.name]" : A] with [src]. Damn.")
 
 /obj/item/gun/energy/proc/instant_recharge()
 	SIGNAL_HANDLER

@@ -1,9 +1,3 @@
-// Flags for [/obj/item/grenade/var/dud_flags]
-/// The grenade cannot detonate at all. It is innately nonfunctional.
-#define GRENADE_DUD (1<<0)
-/// The grenade has been used and as such cannot detonate.
-#define GRENADE_USED (1<<1)
-
 /**
  * Base class for all grenades.
  */
@@ -11,7 +5,7 @@
 	name = "grenade"
 	desc = "It has an adjustable timer."
 	w_class = WEIGHT_CLASS_SMALL
-	icon = 'icons/obj/grenade.dmi'
+	icon = 'icons/obj/weapons/grenade.dmi'
 	icon_state = "grenade"
 	inhand_icon_state = "flashbang"
 	worn_icon_state = "grenade"
@@ -19,17 +13,27 @@
 	righthand_file = 'icons/mob/inhands/equipment/security_righthand.dmi'
 	throw_speed = 3
 	throw_range = 7
-	flags_1 = CONDUCT_1 | PREVENT_CONTENTS_EXPLOSION_1 // We detonate upon being exploded.
+	flags_1 = PREVENT_CONTENTS_EXPLOSION_1 // We detonate upon being exploded.
+	obj_flags = CONDUCTS_ELECTRICITY
 	slot_flags = ITEM_SLOT_BELT
-	resistance_flags = FLAMMABLE
+	action_slots = ALL
 	max_integrity = 40
+	pickup_sound = 'sound/items/handling/grenade/grenade_pick_up.ogg'
+	drop_sound = 'sound/items/handling/grenade/grenade_drop.ogg'
+	sound_vary = TRUE
 	/// Bitfields which prevent the grenade from detonating if set. Includes ([GRENADE_DUD]|[GRENADE_USED])
 	var/dud_flags = NONE
 	///Is this grenade currently armed?
 	var/active = FALSE
+	/// Sound played when the grenade is armed
+	var/grenade_arm_sound = 'sound/items/weapons/armbomb.ogg'
+	/// If the sound of the grenade should be varied
+	var/grenade_sound_vary = TRUE
+	///Is it a cluster grenade? We don't wanna spam admin logs with these.
+	var/type_cluster = FALSE
 	///How long it takes for a grenade to explode after being armed
 	var/det_time = 5 SECONDS
-	///Will this state what it's det_time is when examined?
+	///Will this state what its det_time is when examined?
 	var/display_timer = TRUE
 	///Used in botch_check to determine how a user's clumsiness affects that user's ability to prime a grenade correctly.
 	var/clumsy_check = GRENADE_CLUMSY_FUMBLE
@@ -50,22 +54,50 @@
 	var/shrapnel_type
 	/// the higher this number, the more projectiles are created as shrapnel
 	var/shrapnel_radius
-	///Did we add the component responsible for spawning sharpnel to this?
+	///Did we add the component responsible for spawning shrapnel to this?
 	var/shrapnel_initialized
+	///Possible timers that can be assigned for detonation. Values are strings in SECONDS
+	var/list/possible_fuse_time = list("Instant", "3", "4", "5")
+
+/obj/item/grenade/Initialize(mapload)
+	. = ..()
+	ADD_TRAIT(src, TRAIT_ODD_CUSTOMIZABLE_FOOD_INGREDIENT, type)
+	RegisterSignal(src, COMSIG_ITEM_USED_AS_INGREDIENT, PROC_REF(on_used_as_ingredient))
 
 /obj/item/grenade/suicide_act(mob/living/carbon/user)
 	user.visible_message(span_suicide("[user] primes [src], then eats it! It looks like [user.p_theyre()] trying to commit suicide!"))
 	playsound(src, 'sound/items/eatfood.ogg', 50, TRUE)
 	arm_grenade(user, det_time)
 	user.transferItemToLoc(src, user, TRUE)//>eat a grenade set to 5 seconds >rush captain
-	sleep(det_time)//so you dont die instantly
+	sleep(det_time)//so you don't die instantly
 	return dud_flags ? SHAME : BRUTELOSS
 
-/obj/item/grenade/deconstruct(disassembled = TRUE)
+/obj/item/grenade/atom_deconstruct(disassembled = TRUE)
 	if(!disassembled)
 		detonate()
-	if(!QDELETED(src))
-		qdel(src)
+
+/obj/item/grenade/apply_fantasy_bonuses(bonus)
+	. = ..()
+	apply_grenade_fantasy_bonuses(bonus)
+
+/obj/item/grenade/remove_fantasy_bonuses(bonus)
+	remove_grenade_fantasy_bonuses(bonus)
+	return ..()
+
+/obj/item/grenade/proc/apply_grenade_fantasy_bonuses(quality)
+	if(ex_dev == 0 && ex_heavy == 0 && ex_light == 0 && ex_flame == 0)
+		return
+	var/devIncrease = round(quality / 10)
+	var/heavyIncrease = round(quality / 5)
+	var/lightIncrease = round(quality / 2)
+	ex_dev = modify_fantasy_variable("ex_dev", ex_dev, devIncrease, 0)
+	ex_heavy = modify_fantasy_variable("ex_heavy", ex_heavy, heavyIncrease, 0)
+	ex_light = modify_fantasy_variable("ex_light", ex_light, lightIncrease, 0)
+
+/obj/item/grenade/proc/remove_grenade_fantasy_bonuses(quality)
+	ex_dev = reset_fantasy_variable("ex_dev", ex_dev)
+	ex_heavy = reset_fantasy_variable("ex_heavy", ex_heavy)
+	ex_light = reset_fantasy_variable("ex_light", ex_light)
 
 /**
  * Checks for various ways to botch priming a grenade.
@@ -112,7 +144,8 @@
 		arm_grenade(user)
 
 /obj/item/grenade/proc/log_grenade(mob/user)
-	log_bomber(user, "has primed a", src, "for detonation", message_admins = !dud_flags)
+	if(!type_cluster)
+		log_bomber(user, "has primed a", src, "for detonation", message_admins = dud_flags == NONE)
 
 /**
  * arm_grenade (formerly preprime) refers to when a grenade with a standard time fuze is activated, making it go beepbeepbeep and then detonate a few seconds later.
@@ -127,13 +160,13 @@
 	if(shrapnel_type && shrapnel_radius)
 		shrapnel_initialized = TRUE
 		AddComponent(/datum/component/pellet_cloud, projectile_type = shrapnel_type, magnitude = shrapnel_radius)
-	playsound(src, 'sound/weapons/armbomb.ogg', volume, TRUE)
+	playsound(src, grenade_arm_sound, volume, grenade_sound_vary)
 	if(istype(user))
-		user.mind?.add_memory(MEMORY_BOMB_PRIMED, list(DETAIL_BOMB_TYPE = src), story_value = STORY_VALUE_OKAY)
+		user.add_mob_memory(/datum/memory/bomb_planted, antagonist = src)
 	active = TRUE
-	icon_state = initial(icon_state) + "_active"
+	icon_state = (base_icon_state || initial(icon_state)) + "_active"
 	SEND_SIGNAL(src, COMSIG_GRENADE_ARMED, det_time, delayoverride)
-	addtimer(CALLBACK(src, .proc/detonate), isnull(delayoverride)? det_time : delayoverride)
+	addtimer(CALLBACK(src, PROC_REF(detonate)), isnull(delayoverride)? det_time : delayoverride)
 
 /**
  * detonate (formerly prime) refers to when the grenade actually delivers its payload (whether or not a boom/bang/detonation is involved)
@@ -146,6 +179,13 @@
 		active = FALSE
 		update_appearance()
 		return FALSE
+
+	for(var/obj/effect/forcefield/cosmic_field/potential_field as anything in GLOB.active_cosmic_fields)
+		if(get_dist(potential_field, src) < 3)
+			new /obj/effect/temp_visual/revenant(get_turf(src))
+			active = FALSE
+			update_appearance()
+			return FALSE
 
 	dud_flags |= GRENADE_USED // Don't detonate if we have already detonated.
 	if(shrapnel_type && shrapnel_radius && !shrapnel_initialized) // add a second check for adding the component in case whatever triggered the grenade went straight to prime (badminnery for example)
@@ -163,12 +203,31 @@
 		var/mob/mob = loc
 		mob.dropItemToGround(src)
 
+///Signal sent by someone putting the grenade in as an ingredient. Registers signals onto what it was put into so it can explode.
+/obj/item/grenade/proc/on_used_as_ingredient(datum/source, atom/used_in)
+	SIGNAL_HANDLER
+
+	RegisterSignal(used_in, COMSIG_FOOD_EATEN, PROC_REF(ingredient_detonation))
+	RegisterSignal(used_in, COMSIG_TOOL_ATOM_ACTED_PRIMARY(TOOL_KNIFE), PROC_REF(ingredient_detonation))
+	RegisterSignal(used_in, COMSIG_TOOL_ATOM_ACTED_PRIMARY(TOOL_ROLLINGPIN), PROC_REF(ingredient_detonation))
+
+///Signal sent by someone eating food this is an ingredient in "used_in". Makes the grenade go kerblooey, destroying the food.
+/obj/item/grenade/proc/ingredient_detonation(atom/used_in, mob/living/target, mob/living/user, bitecount, bitesize)
+	SIGNAL_HANDLER
+
+	detonate()
+	//can't remove it as an ingredient so we need to get rid of the food. deleted ingredients not good
+	return DESTROY_FOOD
+
 /obj/item/grenade/screwdriver_act(mob/living/user, obj/item/tool)
 	if(active)
 		return FALSE
 	if(change_det_time())
 		tool.play_tool_sound(src)
-		to_chat(user, span_notice("You modify the time delay. It's set for [DisplayTimeText(det_time)]."))
+		if(det_time == 0)
+			to_chat(user, span_notice("You modify the time delay. It's set to be instantaneous."))
+		else
+			to_chat(user, span_notice("You modify the time delay. It's set for [DisplayTimeText(det_time)]."))
 		return TRUE
 
 /obj/item/grenade/multitool_act(mob/living/user, obj/item/tool)
@@ -178,43 +237,59 @@
 
 	. = TRUE
 
-	var/newtime = tgui_input_list(user, "Please enter a new detonation time", "Detonation Timer", list("Instant", 3, 4, 5))
+	var/newtime = tgui_input_list(user, "Please enter a new detonation time", "Detonation Timer", possible_fuse_time)
 	if (isnull(newtime))
 		return
-	if(!user.canUseTopic(src, BE_CLOSE))
+	if(!user.can_perform_action(src))
 		return
 	if(newtime == "Instant" && change_det_time(0))
 		to_chat(user, span_notice("You modify the time delay. It's set to be instantaneous."))
 		return
-	newtime = round(newtime)
+	newtime = round(text2num(newtime))
 	if(change_det_time(newtime))
 		to_chat(user, span_notice("You modify the time delay. It's set for [DisplayTimeText(det_time)]."))
 
-/obj/item/grenade/proc/change_det_time(time) //Time uses real time.
+/**
+ * Sets det_time to a number in SECONDS
+ *
+ * if time is passed as an argument, `det_time` will be `time SECONDS`
+ *
+ * Cycles the duration of the fuse of the grenade `det_time` based on the options provided in list/possible_fuse_time
+*/
+/obj/item/grenade/proc/change_det_time(time)
 	. = TRUE
+	//Multitool
 	if(!isnull(time))
-		det_time = round(clamp(time * 10, 0, 5 SECONDS))
+		det_time = round(clamp(time SECONDS, 0, 5 SECONDS)) //This is fine for now but consider making this a variable if you want >5s fuse
+		return
+
+	//Screwdriver
+	if(det_time == 0)
+		det_time = "Instant"
 	else
-		var/previous_time = det_time
-		switch(det_time)
-			if (0)
-				det_time = 3 SECONDS
-			if (3 SECONDS)
-				det_time = 5 SECONDS
-			if (5 SECONDS)
-				det_time = 0
-		if(det_time == previous_time)
-			det_time = 5 SECONDS
+		det_time = num2text(det_time * 0.1)
+
+	var/old_selection = possible_fuse_time.Find(det_time) //Position of det_time in the list
+	if(old_selection >= possible_fuse_time.len)
+		det_time = possible_fuse_time[1]
+	else
+		det_time = possible_fuse_time[old_selection+1]
+
+	if(det_time == "Instant")
+		det_time = 0 //String to num conversion because I hate coders
+		return
+	det_time = text2num(det_time) SECONDS
 
 /obj/item/grenade/attack_paw(mob/user, list/modifiers)
 	return attack_hand(user, modifiers)
 
-/obj/item/grenade/hit_reaction(mob/living/carbon/human/owner, atom/movable/hitby, attack_text = "the attack", final_block_chance = 0, damage = 0, attack_type = MELEE_ATTACK)
-	var/obj/projectile/hit_projectile = hitby
-	if(damage && attack_type == PROJECTILE_ATTACK && hit_projectile.damage_type != STAMINA && prob(15))
+/obj/item/grenade/hit_reaction(mob/living/carbon/human/owner, atom/movable/hitby, attack_text = "the attack", final_block_chance = 0, damage = 0, attack_type = MELEE_ATTACK, damage_type = BRUTE)
+	if(damage && attack_type == PROJECTILE_ATTACK && damage_type != STAMINA && prob(15))
 		owner.visible_message(span_danger("[attack_text] hits [owner]'s [src], setting it off! What a shot!"))
 		var/turf/source_turf = get_turf(src)
-		log_game("A projectile ([hitby]) detonated a grenade held by [key_name(owner)] at [COORD(source_turf)]")
+		var/logmsg = "held a grenade detonated by a projectile ([hitby]) at [COORD(source_turf)]"
+		owner.log_message(logmsg, LOG_GAME)
+		owner.log_message(logmsg, LOG_VICTIM, log_globally = FALSE)
 		message_admins("A projectile ([hitby]) detonated a grenade held by [key_name_admin(owner)] at [ADMIN_COORDJMP(source_turf)]")
 		detonate()
 
@@ -222,7 +297,8 @@
 			qdel(src)
 		return TRUE //It hit the grenade, not them
 
-/obj/item/grenade/afterattack(atom/target, mob/user)
-	. = ..()
+/obj/item/grenade/ranged_interact_with_atom(atom/interacting_with, mob/living/user, list/modifiers)
 	if(active)
-		user.throw_item(target)
+		user.throw_item(interacting_with)
+		return ITEM_INTERACT_SUCCESS
+	return NONE

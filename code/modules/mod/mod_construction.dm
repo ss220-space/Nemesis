@@ -46,44 +46,72 @@
 
 /obj/item/mod/construction/broken_core/screwdriver_act(mob/living/user, obj/item/tool)
 	. = ..()
+	balloon_alert(user, "repairing...")
 	if(!tool.use_tool(src, user, 5 SECONDS, volume = 30))
+		balloon_alert(user, "interrupted!")
 		return
 	new /obj/item/mod/core/standard(drop_location())
 	qdel(src)
 
-/obj/item/mod/construction/armor
+/obj/item/mod/construction/lavalandcore
+	name = "plasma flower"
+	icon_state = "plasma-flower"
+	desc = "A strange flower from the desolate wastes of lavaland. It pulses with a bright purple glow.  \
+		Its shape is remarkably similar to that of a MOD core."
+	light_system = OVERLAY_LIGHT
+	light_color = "#cc00cc"
+	light_range = 2.5
+	light_power = 1.5
+
+/obj/item/mod/construction/lavalandcore/examine(mob/user)
+	. = ..()
+	. += span_notice("You could probably attach some <b>wires</b> to it...")
+
+/obj/item/mod/construction/lavalandcore/attackby(obj/item/weapon, mob/user, list/modifiers, list/attack_modifiers)
+	if(!istype(weapon, /obj/item/stack/cable_coil))
+		return ..()
+	if(!weapon.tool_start_check(user, amount=2))
+		return
+	balloon_alert(user, "installing wires...")
+	if(!weapon.use_tool(src, user, 5 SECONDS, amount = 2, volume = 30))
+		balloon_alert(user, "interrupted!")
+		return
+	new /obj/item/mod/core/plasma/lavaland(drop_location())
+	qdel(src)
+
+/obj/item/mod/construction/plating
 	name = "MOD external plating"
 	desc = "External plating used to finish a MOD control unit."
 	icon_state = "standard-plating"
 	var/datum/mod_theme/theme = /datum/mod_theme
 
-/obj/item/mod/construction/armor/Initialize(mapload)
+/obj/item/mod/construction/plating/Initialize(mapload)
 	. = ..()
 	var/datum/mod_theme/used_theme = GLOB.mod_themes[theme]
 	name = "MOD [used_theme.name] external plating"
 	desc = "[desc] [used_theme.desc]"
 	icon_state = "[used_theme.default_skin]-plating"
 
-/obj/item/mod/construction/armor/engineering
+/obj/item/mod/construction/plating/civilian
+	theme = /datum/mod_theme/civilian
+
+/obj/item/mod/construction/plating/portable_suit
+	theme = /datum/mod_theme/portable_suit
+
+/obj/item/mod/construction/plating/engineering
 	theme = /datum/mod_theme/engineering
 
-/obj/item/mod/construction/armor/atmospheric
+/obj/item/mod/construction/plating/atmospheric
 	theme = /datum/mod_theme/atmospheric
 
-/obj/item/mod/construction/armor/medical
+/obj/item/mod/construction/plating/medical
 	theme = /datum/mod_theme/medical
 
-/obj/item/mod/construction/armor/security
+/obj/item/mod/construction/plating/security
 	theme = /datum/mod_theme/security
 
-/obj/item/mod/construction/armor/cosmohonk
+/obj/item/mod/construction/plating/cosmohonk
 	theme = /datum/mod_theme/cosmohonk
-
-/obj/item/mod/paint
-	name = "MOD paint kit"
-	desc = "This kit will repaint your MODsuit to something unique."
-	icon = 'icons/obj/clothing/modsuit/mod_construction.dmi'
-	icon_state = "paintkit"
 
 #define START_STEP "start"
 #define CORE_STEP "core"
@@ -127,17 +155,17 @@
 		if(WRENCHED_ASSEMBLY_STEP)
 			display_text = "The assembly seems <b>loose</b>..."
 		if(SCREWED_ASSEMBLY_STEP)
-			display_text = "All it's missing is <b>external armor</b>..."
+			display_text = "All it's missing is <b>external plating</b>..."
 	. += span_notice(display_text)
 
-/obj/item/mod/construction/shell/attackby(obj/item/part, mob/user, params)
+/obj/item/mod/construction/shell/attackby(obj/item/part, mob/user, list/modifiers, list/attack_modifiers)
 	. = ..()
 	switch(step)
 		if(START_STEP)
 			if(!istype(part, /obj/item/mod/core))
 				return
 			if(!user.transferItemToLoc(part, src))
-				balloon_alert(user, "core stuck to your hand!")
+				balloon_alert(user, "it's stuck!")
 				return
 			playsound(src, 'sound/machines/click.ogg', 30, TRUE)
 			balloon_alert(user, "core inserted")
@@ -156,7 +184,7 @@
 		if(SCREWED_CORE_STEP)
 			if(istype(part, /obj/item/mod/construction/helmet)) //Construct
 				if(!user.transferItemToLoc(part, src))
-					balloon_alert(user, "helmet stuck to your hand!")
+					balloon_alert(user, "it's stuck!")
 					return
 				playsound(src, 'sound/machines/click.ogg', 30, TRUE)
 				balloon_alert(user, "helmet added")
@@ -169,7 +197,7 @@
 		if(HELMET_STEP)
 			if(istype(part, /obj/item/mod/construction/chestplate)) //Construct
 				if(!user.transferItemToLoc(part, src))
-					balloon_alert(user, "chestplate stuck to your hand!")
+					balloon_alert(user, "it's stuck!")
 					return
 				playsound(src, 'sound/machines/click.ogg', 30, TRUE)
 				balloon_alert(user, "chestplate added")
@@ -184,7 +212,7 @@
 		if(CHESTPLATE_STEP)
 			if(istype(part, /obj/item/mod/construction/gauntlets)) //Construct
 				if(!user.transferItemToLoc(part, src))
-					balloon_alert(user, "gauntlets stuck to your hand!")
+					balloon_alert(user, "it's stuck!")
 					return
 				playsound(src, 'sound/machines/click.ogg', 30, TRUE)
 				balloon_alert(user, "gauntlets added")
@@ -199,10 +227,10 @@
 		if(GAUNTLETS_STEP)
 			if(istype(part, /obj/item/mod/construction/boots)) //Construct
 				if(!user.transferItemToLoc(part, src))
-					balloon_alert(user, "boots added")
+					balloon_alert(user, "it's stuck!")
 					return
 				playsound(src, 'sound/machines/click.ogg', 30, TRUE)
-				balloon_alert(user, "You fit [part] onto [src].")
+				balloon_alert(user, "boots added")
 				boots = part
 				step = BOOTS_STEP
 			else if(part.tool_behaviour == TOOL_CROWBAR) //Deconstruct
@@ -232,16 +260,17 @@
 					balloon_alert(user, "assembly unsecured")
 					step = BOOTS_STEP
 		if(SCREWED_ASSEMBLY_STEP)
-			if(istype(part, /obj/item/mod/construction/armor)) //Construct
-				var/obj/item/mod/construction/armor/external_armor = part
+			if(istype(part, /obj/item/mod/construction/plating)) //Construct
+				var/obj/item/mod/construction/plating/external_plating = part
 				if(!user.transferItemToLoc(part, src))
+					balloon_alert(user, "it's stuck!")
 					return
 				playsound(src, 'sound/machines/click.ogg', 30, TRUE)
-				balloon_alert(user, "suit finished")
-				var/obj/item/mod = new /obj/item/mod/control(drop_location(), external_armor.theme, null, core)
+				var/obj/item/mod = new /obj/item/mod/control(drop_location(), external_plating.theme, null, core)
 				core = null
 				qdel(src)
 				user.put_in_hands(mod)
+				mod.balloon_alert(user, "unit finished")
 			else if(part.tool_behaviour == TOOL_SCREWDRIVER) //Construct
 				if(part.use_tool(src, user, 0, volume=30))
 					balloon_alert(user, "assembly unscrewed")
@@ -260,18 +289,18 @@
 	QDEL_NULL(boots)
 	return ..()
 
-/obj/item/mod/construction/shell/handle_atom_del(atom/deleted_atom)
-	if(deleted_atom == core)
+/obj/item/mod/construction/shell/Exited(atom/movable/gone, direction)
+	. = ..()
+	if(gone == core)
 		core = null
-	if(deleted_atom == helmet)
+	if(gone == helmet)
 		helmet = null
-	if(deleted_atom == chestplate)
+	if(gone == chestplate)
 		chestplate = null
-	if(deleted_atom == gauntlets)
+	if(gone == gauntlets)
 		gauntlets = null
-	if(deleted_atom == boots)
+	if(gone == boots)
 		boots = null
-	return ..()
 
 #undef START_STEP
 #undef CORE_STEP

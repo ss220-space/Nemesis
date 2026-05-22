@@ -5,11 +5,10 @@
 	desc = "It grows new limbs using Synthflesh."
 	icon = 'icons/obj/machines/limbgrower.dmi'
 	icon_state = "limbgrower_idleoff"
+	base_icon_state = "limbgrower"
 	density = TRUE
-	use_power = IDLE_POWER_USE
-	idle_power_usage = 10
-	active_power_usage = 100
 	circuit = /obj/item/circuitboard/machine/limbgrower
+	interaction_flags_atom = parent_type::interaction_flags_atom | INTERACT_ATOM_REQUIRES_ANCHORED
 
 	/// The category of limbs we're browing in our UI.
 	var/selected_category = SPECIES_HUMAN
@@ -22,15 +21,48 @@
 	/// The design we're printing currently.
 	var/datum/design/being_built
 	/// Our internal techweb for limbgrower designs.
-	var/datum/techweb/stored_research
+	var/datum/techweb/autounlocking/stored_research
 	/// All the categories of organs we can print.
-	var/list/categories = list(SPECIES_HUMAN, SPECIES_LIZARD, SPECIES_MOTH, SPECIES_PLASMAMAN, SPECIES_ETHEREAL, "other")
+	var/list/categories = list(SPECIES_HUMAN, SPECIES_LIZARD, SPECIES_MOTH, SPECIES_PLASMAMAN, SPECIES_ETHEREAL, RND_CATEGORY_LIMBS_OTHER, RND_CATEGORY_LIMBS_DIGITIGRADE)
+	///Designs imported from technology disks that we can print.
+	var/list/imported_designs = list()
 
 /obj/machinery/limbgrower/Initialize(mapload)
 	create_reagents(100, OPENCONTAINER)
-	stored_research = new /datum/techweb/specialized/autounlocking/limbgrower
+	if(!GLOB.autounlock_techwebs[/datum/techweb/autounlocking/limbgrower])
+		GLOB.autounlock_techwebs[/datum/techweb/autounlocking/limbgrower] = new /datum/techweb/autounlocking/limbgrower
+	stored_research = GLOB.autounlock_techwebs[/datum/techweb/autounlocking/limbgrower]
 	. = ..()
 	AddComponent(/datum/component/plumbing/simple_demand)
+	AddElement(/datum/element/simple_rotation)
+	register_context()
+
+/obj/machinery/limbgrower/add_context(atom/source, list/context, obj/item/held_item, mob/user)
+	. = ..()
+	if(!held_item)
+		return NONE
+
+	switch(held_item.tool_behaviour)
+		if(TOOL_SCREWDRIVER)
+			context[SCREENTIP_CONTEXT_LMB] = "[panel_open ? "Close" : "Open"] panel"
+			. = CONTEXTUAL_SCREENTIP_SET
+		if(TOOL_WRENCH)
+			context[SCREENTIP_CONTEXT_LMB] = "[anchored ? "Unan" : "An"]chor"
+			. = CONTEXTUAL_SCREENTIP_SET
+
+	if(istype(held_item, /obj/item/disk/design_disk/limbs))
+		context[SCREENTIP_CONTEXT_LMB] = "Load limb designs"
+		. = CONTEXTUAL_SCREENTIP_SET
+
+/// Emagging a limbgrower allows you to build synthetic armblades.
+/obj/machinery/limbgrower/emag_act(mob/user, obj/item/card/emag/emag_card)
+	. = ..()
+	if(obj_flags & EMAGGED)
+		return FALSE
+	obj_flags |= EMAGGED
+	update_static_data(user)
+	balloon_alert(user, "illegal limb production enabled")
+	return TRUE
 
 /obj/machinery/limbgrower/ui_interact(mob/user, datum/tgui/ui)
 	. = ..()
@@ -66,7 +98,14 @@
 	var/species_categories = categories.Copy()
 	for(var/species in species_categories)
 		species_categories[species] = list()
-	for(var/design_id in stored_research.researched_designs)
+
+	var/list/available_nodes = stored_research.researched_designs.Copy()
+	if(imported_designs.len)
+		available_nodes |= imported_designs
+	if(obj_flags & EMAGGED)
+		available_nodes |= stored_research.hacked_designs
+
+	for(var/design_id in available_nodes)
 		var/datum/design/limb_design = SSresearch.techweb_design_by_id(design_id)
 		for(var/found_category in species_categories)
 			if(found_category in limb_design.category)
@@ -79,11 +118,10 @@
 		)
 		for(var/datum/design/found_design in species_categories[category])
 			var/list/all_reagents = list()
-			for(var/reagent_typepath in found_design.reagents_list)
-				var/datum/reagent/reagent_id = find_reagent_object_from_type(reagent_typepath)
+			for(var/datum/reagent/reagent_id as anything in found_design.reagents_list)
 				var/list/reagent_data = list(
-					name = reagent_id.name,
-					amount = (found_design.reagents_list[reagent_typepath] * production_coefficient),
+					name = reagent_id::name,
+					amount = (found_design.reagents_list[reagent_id] * production_coefficient),
 				)
 				all_reagents += list(reagent_data)
 
@@ -98,46 +136,67 @@
 
 	return data
 
-/obj/machinery/limbgrower/on_deconstruction()
-	for(var/obj/item/reagent_containers/glass/our_beaker in component_parts)
+/obj/machinery/limbgrower/on_deconstruction(disassembled)
+	for(var/obj/item/reagent_containers/cup/our_beaker in component_parts)
 		reagents.trans_to(our_beaker, our_beaker.reagents.maximum_volume)
-	..()
+	return ..()
 
-/obj/machinery/limbgrower/attackby(obj/item/user_item, mob/living/user, params)
-	if (busy)
-		to_chat(user, span_warning("The Limb Grower is busy. Please wait for completion of previous operation."))
-		return
+/obj/machinery/limbgrower/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	. = ..()
+	if(user.combat_mode)
+		return ITEM_INTERACT_SKIP_TO_ATTACK
 
-	if(istype(user_item, /obj/item/disk/design_disk/limbs))
-		user.visible_message(span_notice("[user] begins to load \the [user_item] in \the [src]..."),
-			span_notice("You begin to load designs from \the [user_item]..."),
+	if(check_busy(user))
+		return ITEM_INTERACT_BLOCKING
+
+	if(istype(tool, /obj/item/disk/design_disk/limbs))
+		user.visible_message(span_notice("[user] begins to load \the [tool] in \the [src]..."),
+			span_notice("You begin to load designs from \the [tool]..."),
 			span_hear("You hear the clatter of a floppy drive."))
 		busy = TRUE
-		var/obj/item/disk/design_disk/limbs/limb_design_disk = user_item
+		var/obj/item/disk/design_disk/limbs/limb_design_disk = tool
 		if(do_after(user, 2 SECONDS, target = src))
 			for(var/datum/design/found_design in limb_design_disk.blueprints)
-				stored_research.add_design(found_design)
+				imported_designs[found_design.id] = TRUE
 			update_static_data(user)
 		busy = FALSE
-		return
+		return ITEM_INTERACT_SUCCESS
 
-	if(default_deconstruction_screwdriver(user, "limbgrower_panelopen", "limbgrower_idleoff", user_item))
-		ui_close(user)
-		return
+/obj/machinery/limbgrower/screwdriver_act(mob/living/user, obj/item/tool)
+	if(check_busy(user))
+		return ITEM_INTERACT_BLOCKING
 
-	if(panel_open && default_deconstruction_crowbar(user_item))
-		return
+	return default_deconstruction_screwdriver(user, tool)
 
-	if(user.combat_mode) //so we can hit the machine
-		return ..()
+/obj/machinery/limbgrower/crowbar_act(mob/living/user, obj/item/tool)
+	if(check_busy(user))
+		return ITEM_INTERACT_BLOCKING
 
-/obj/machinery/limbgrower/ui_act(action, list/params)
+	return default_deconstruction_crowbar(user, tool)
+
+/obj/machinery/limbgrower/wrench_act(mob/living/user, obj/item/tool)
+	. = ..()
+	if(check_busy(user))
+		return ITEM_INTERACT_BLOCKING
+
+	if(default_unfasten_wrench(user, tool))
+		return ITEM_INTERACT_SUCCESS
+
+/obj/machinery/limbgrower/update_icon_state()
+	. = ..()
+	if(busy)
+		icon_state = "[base_icon_state]_idleon"
+	else if(panel_open)
+		icon_state = "[base_icon_state]_panelopen"
+	else
+		icon_state = "[base_icon_state]_idleoff"
+
+/obj/machinery/limbgrower/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	. = ..()
 	if(.)
 		return
 
-	if (busy)
-		to_chat(usr, span_warning("The limb grower is busy. Please wait for completion of previous operation."))
+	if (check_busy(usr))
 		return
 
 	switch(action)
@@ -147,11 +206,16 @@
 			. = TRUE
 
 		if("make_limb")
-			being_built = stored_research.isDesignResearchedID(params["design_id"])
-			if(!being_built)
-				CRASH("[src] was passed an invalid design id!")
-
-			/// All the reagents we're using to make our organ.
+			var/design_id = params["design_id"]
+			var/temp_category = params["active_tab"]
+			if(!stored_research.researched_designs[design_id] && !stored_research.hacked_designs[design_id] && !imported_designs[design_id])
+				return
+			if(!(obj_flags & EMAGGED) && stored_research.hacked_designs.Find(design_id))
+				return
+			if(!(temp_category in categories))
+				return
+			being_built = SSresearch.techweb_design_by_id(design_id)
+			// All the reagents we're using to make our organ.
 			var/list/consumed_reagents_list = being_built.reagents_list.Copy()
 			/// The amount of power we're going to use, based on how much reagent we use.
 			var/power = 0
@@ -159,21 +223,19 @@
 			for(var/reagent_id in consumed_reagents_list)
 				consumed_reagents_list[reagent_id] *= production_coefficient
 				if(!reagents.has_reagent(reagent_id, consumed_reagents_list[reagent_id]))
-					audible_message(span_notice("The [src] buzzes."))
-					playsound(src, 'sound/machines/buzz-sigh.ogg', 50, FALSE)
+					audible_message(span_notice("[src] buzzes."))
+					playsound(src, 'sound/machines/buzz/buzz-sigh.ogg', 50, FALSE)
 					return
 
-				power = max(2000, (power + consumed_reagents_list[reagent_id]))
+				power = max(active_power_usage, (power + consumed_reagents_list[reagent_id]))
 
 			busy = TRUE
-			use_power(power)
-			flick("limbgrower_fill",src)
-			icon_state = "limbgrower_idleon"
-			selected_category = params["active_tab"]
-			addtimer(CALLBACK(src, .proc/build_item, consumed_reagents_list), production_speed * production_coefficient)
-			. = TRUE
-
-	return
+			use_energy(power)
+			update_appearance()
+			flick("limbgrower_fill", src)
+			selected_category = temp_category
+			addtimer(CALLBACK(src, PROC_REF(build_item), consumed_reagents_list), production_speed * production_coefficient)
+			return TRUE
 
 /*
  * The process of beginning to build a limb or organ.
@@ -188,21 +250,21 @@
 	for(var/reagent_id in modified_consumed_reagents_list)
 		if(!reagents.has_reagent(reagent_id, modified_consumed_reagents_list[reagent_id]))
 			audible_message(span_notice("The [src] buzzes."))
-			playsound(src, 'sound/machines/buzz-sigh.ogg', 50, FALSE)
+			playsound(src, 'sound/machines/buzz/buzz-sigh.ogg', 50, FALSE)
 			break
 
 		reagents.remove_reagent(reagent_id, modified_consumed_reagents_list[reagent_id])
 
 	var/built_typepath = being_built.build_path
-	// If we have a bodypart, we need to initialize the limb on its own. Otherwise we can build it here.
 	if(ispath(built_typepath, /obj/item/bodypart))
-		build_limb(built_typepath)
+		build_limb(create_buildpath())
 	else
+		//Just build whatever it is
 		new built_typepath(loc)
 
 	busy = FALSE
+	update_appearance()
 	flick("limbgrower_unfill", src)
-	icon_state = "limbgrower_idleoff"
 
 /*
  * The process of putting together a limb.
@@ -214,41 +276,52 @@
  */
 /obj/machinery/limbgrower/proc/build_limb(buildpath)
 	/// The limb we're making with our buildpath, so we can edit it.
-	var/obj/item/bodypart/limb = new buildpath(loc)
-	/// Species with greyscale limbs.
-	var/list/greyscale_species = list(SPECIES_HUMAN, SPECIES_LIZARD, SPECIES_ETHEREAL)
-	if(selected_category in greyscale_species) //Species with greyscale parts should be included here
-		if(selected_category == SPECIES_HUMAN) //humans don't use the full colour spectrum, they use random_skin_tone
-			limb.skin_tone = random_skin_tone()
-		else
-			limb.species_color = "#[random_color()]"
-		limb.icon = 'icons/mob/human_parts_greyscale.dmi'
-		limb.should_draw_greyscale = TRUE
-	else
-		limb.icon = 'icons/mob/human_parts.dmi'
-
-	// Set this limb up using the species name and body zone
-	limb.icon_state = "[selected_category]_[limb.body_zone]"
-	limb.name = "\improper biosynthetic [selected_category] [parse_zone(limb.body_zone)]"
-	limb.desc = "A synthetically produced [selected_category] limb, grown in a tube. This one is for the [parse_zone(limb.body_zone)]."
-	limb.species_id = selected_category
+	//i need to create a body part manually using a set icon (otherwise it doesn't appear)
+	var/obj/item/bodypart/limb
+	limb = new buildpath(loc)
+	limb.name = "\improper synthetic [selected_category] [limb.plaintext_zone]"
+	limb.limb_id = selected_category
+	limb.species_color = "#62A262"
 	limb.update_icon_dropped()
-	limb.original_owner = WEAKREF(src)  //prevents updating the icon, so a lizard arm on a human stays a lizard arm etc.
+
+///Returns a valid limb typepath based on the selected option
+/obj/machinery/limbgrower/proc/create_buildpath()
+	var/part_type = being_built.id //their ids match bodypart typepaths
+	var/species = selected_category
+	var/path
+	if(species == SPECIES_HUMAN) //Humans use the parent type.
+		path = "/obj/item/bodypart/[part_type]"
+	else
+		path = "/obj/item/bodypart/[part_type]/[species]"
+	return text2path(path)
 
 /obj/machinery/limbgrower/RefreshParts()
+	. = ..()
 	reagents.maximum_volume = 0
-	for(var/obj/item/reagent_containers/glass/our_beaker in component_parts)
+	for(var/obj/item/reagent_containers/cup/our_beaker in component_parts)
 		reagents.maximum_volume += our_beaker.volume
 		our_beaker.reagents.trans_to(src, our_beaker.reagents.total_volume)
 	production_coefficient = 1.25
-	for(var/obj/item/stock_parts/manipulator/our_manipulator in component_parts)
-		production_coefficient -= our_manipulator.rating * 0.25
+	for(var/datum/stock_part/servo/our_servo in component_parts)
+		production_coefficient -= our_servo.tier * 0.25
 	production_coefficient = clamp(production_coefficient, 0, 1) // coefficient goes from 1 -> 0.75 -> 0.5 -> 0.25
 
 /obj/machinery/limbgrower/examine(mob/user)
 	. = ..()
 	if(in_range(user, src) || isobserver(user))
 		. += span_notice("The status display reads: Storing up to <b>[reagents.maximum_volume]u</b> of reagents.<br>Reagent consumption rate at <b>[production_coefficient * 100]%</b>.")
+
+/**
+ * Check if the limb grower is currently busy.
+ *
+ * user - user initiating the check.
+ *
+ * returns the value of src.busy.
+ */
+/obj/machinery/limbgrower/proc/check_busy(mob/user)
+	. = busy
+	if(.)
+		to_chat(user, span_warning("The limb grower is busy. Please wait for completion of previous operation."))
 
 /*
  * Checks our reagent list to see if a design can be built.
@@ -265,25 +338,11 @@
 
 /obj/machinery/limbgrower/fullupgrade //Inherently cheaper organ production. This is to NEVER be inherently emagged, no valids.
 	desc = "It grows new limbs using Synthflesh. This alien model seems more efficient."
-	obj_flags = CAN_BE_HIT
-	flags_1 = NODECONSTRUCT_1
 	circuit = /obj/item/circuitboard/machine/limbgrower/fullupgrade
 
 /obj/machinery/limbgrower/fullupgrade/Initialize(mapload)
 	. = ..()
 	for(var/id in SSresearch.techweb_designs)
 		var/datum/design/found_design = SSresearch.techweb_design_by_id(id)
-		if((found_design.build_type & LIMBGROWER) && !("emagged" in found_design.category))
-			stored_research.add_design(found_design)
-
-/// Emagging a limbgrower allows you to build synthetic armblades.
-/obj/machinery/limbgrower/emag_act(mob/user)
-	if(obj_flags & EMAGGED)
-		return
-	for(var/design_id in SSresearch.techweb_designs)
-		var/datum/design/found_design = SSresearch.techweb_design_by_id(design_id)
-		if((found_design.build_type & LIMBGROWER) && ("emagged" in found_design.category))
-			stored_research.add_design(found_design)
-	to_chat(user, span_warning("Safety overrides have been deactivated!"))
-	obj_flags |= EMAGGED
-	update_static_data(user)
+		if((found_design.build_type & LIMBGROWER) && !(RND_CATEGORY_HACKED in found_design.category))
+			imported_designs |= found_design.id

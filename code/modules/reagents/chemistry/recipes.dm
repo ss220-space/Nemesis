@@ -7,24 +7,23 @@
  */
 /datum/chemical_reaction
 	///Results of the chemical reactions
-	var/list/results = new/list()
+	var/list/results = list()
 	///Required chemicals that are USED in the reaction
-	var/list/required_reagents = new/list()
+	var/list/required_reagents = list()
 	///Required chemicals that must be present in the container but are not USED.
-	var/list/required_catalysts = new/list()
+	var/list/required_catalysts = list()
 
-	// Both of these variables are mostly going to be used with slime cores - but if you want to, you can use them for other things
-	/// the exact container path required for the reaction to happen
-	var/required_container
-	/// an integer required for the reaction to happen
-	var/required_other = 0
+	/// If required_container will check for the exact type, or will also accept subtypes
+	var/required_container_accepts_subtypes = FALSE
+	/// If required_container_accepts_subtypes is FALSE, the exact type of what container this reaction can take place in. Otherwise, what type including subtypes are acceptable.
+	var/atom/required_container
 
 	///Determines if a chemical reaction can occur inside a mob
 	var/mob_react = TRUE
 	///The message shown to nearby people upon mixing, if applicable
 	var/mix_message = "The solution begins to bubble."
 	///The sound played upon mixing, if applicable
-	var/mix_sound = 'sound/effects/bubbles.ogg'
+	var/mix_sound = 'sound/effects/bubbles/bubbles.ogg'
 
 	/// Set to TRUE if you want the recipe to only react when it's BELOW the required temp.
 	var/is_cold_recipe = FALSE
@@ -45,7 +44,7 @@
 	var/temp_exponent_factor = 2
 	/// How sharp the pH exponential curve is (to the power of value)
 	var/ph_exponent_factor = 2
-	/// How much the temperature will change (with no intervention) (i.e. for 30u made the temperature will increase by 100, same with 300u. The final temp will always be start + this value, with the exception con beakers with different specific heats)
+	/// How much the temperature changes per unit of chem used. without REACTION_HEAT_ARBITARY flag the rate of change depends on the holder heat capacity else results are more accurate
 	var/thermic_constant = 50
 	/// pH change per 1u reaction
 	var/H_ion_release = 0.01
@@ -53,27 +52,19 @@
 	var/rate_up_lim = 30
 	/// If purity is below 0.15, it calls OverlyImpure() too. Set to 0 to disable this.
 	var/purity_min = 0.15
-	/// bitflags for clear conversions; REACTION_CLEAR_IMPURE, REACTION_CLEAR_INVERSE, REACTION_CLEAR_RETAIN, REACTION_INSTANT
+	/// bitflags for clear conversions; see code/__DEFINES/reagents.dm
 	var/reaction_flags = NONE
 	///Tagging vars
 	///A bitflag var for tagging reagents for the reagent loopup functon
 	var/reaction_tags = NONE
 
-/datum/chemical_reaction/New()
-	. = ..()
-	SSticker.OnRoundstart(CALLBACK(src,.proc/update_info))
+///REACTION PROCS
 
 /**
- * Updates information during the roundstart
- *
- * This proc is mainly used by explosives but can be used anywhere else
- * You should generally use the special reactions in [/datum/chemical_reaction/randomized]
- * But for simple variable edits, like changing the temperature or adding/subtracting required reagents it is better to use this.
+ * Checks if this reaction can occur.
  */
-/datum/chemical_reaction/proc/update_info()
-	return
-
-///REACTION PROCS
+/datum/chemical_reaction/proc/pre_reaction_other_checks(datum/reagents/holder)
+	return TRUE
 
 /**
  * Shit that happens on reaction
@@ -111,11 +102,7 @@
 	return
 
 /**
- * Stuff that occurs at the end of a reaction. This will proc if the beaker is forced to stop and start again (say for sudden temperature changes).
- * Only procs at the END of reaction
- * If reaction_flags & REACTION_INSTANT then this isn't called
- * if reaction_flags REACTION_CLEAR_IMPURE then the impurity chem is handled here, producing the result in the beaker instead of in a mob
- * Likewise for REACTION_CLEAR_INVERSE the inverse chem is produced at the end of the reaction in the beaker
+ * Stuff that should happen at the end of the reaction. Presently only REACTION_CLEAR_INVERSE is respected here
  * You should be calling ..() if you're writing a child function of this proc otherwise purity methods won't work correctly
  *
  * Proc where the additional magic happens.
@@ -125,61 +112,27 @@
  * * react_volume - volume created across the whole reaction
  */
 /datum/chemical_reaction/proc/reaction_finish(datum/reagents/holder, datum/equilibrium/reaction, react_vol)
-	//failed_chem handler
-	var/cached_temp = holder.chem_temp
-	for(var/id in results)
-		var/datum/reagent/reagent = holder.has_reagent(id)
-		if(!reagent)
-			continue
-		//Split like this so it's easier for people to edit this function in a child
-		convert_into_failed(reagent, holder)
-		reaction_clear_check(reagent, holder)
-	holder.chem_temp = cached_temp
-
-/**
- * Converts a reagent into the type specified by the failed_chem var of the input reagent
- *
- * Arguments:
- * * reagent - the target reagent to convert
- */
-/datum/chemical_reaction/proc/convert_into_failed(datum/reagent/reagent, datum/reagents/holder)
-	if(reagent.purity < purity_min && reagent.failed_chem)
-		var/cached_volume = reagent.volume
-		holder.remove_reagent(reagent.type, cached_volume, FALSE)
-		holder.add_reagent(reagent.failed_chem, cached_volume, FALSE, added_purity = 1)
-		SSblackbox.record_feedback("tally", "chemical_reaction", 1, "[type] failed reactions")
-
-/**
- * REACTION_CLEAR handler
- * If the reaction has the REACTION_CLEAR flag, then it will split using purity methods in the beaker instead
- *
- * Arguments:
- * * reagent - the target reagent to convert
- */
-/datum/chemical_reaction/proc/reaction_clear_check(datum/reagent/reagent, datum/reagents/holder)
-	if(!reagent)//Failures can delete R
+	if(!(reaction_flags & REACTION_CLEAR_INVERSE))
 		return
-	if(reaction_flags & (REACTION_CLEAR_IMPURE | REACTION_CLEAR_INVERSE))
-		if(reagent.purity == 1)
-			return
 
-		var/cached_volume = reagent.volume
-		var/cached_purity = reagent.purity
-		if((reaction_flags & REACTION_CLEAR_INVERSE) && reagent.inverse_chem)
-			if(reagent.inverse_chem_val > reagent.purity)
-				holder.remove_reagent(reagent.type, cached_volume, FALSE)
-				holder.add_reagent(reagent.inverse_chem, cached_volume, FALSE, added_purity = 1-cached_purity)
-				return
+	var/list/inverse_data = list()
+	for(var/datum/reagent/reagent as anything in holder.reagent_list)
+		if(!results[reagent.type] || !reagent.inverse_chem || reagent.purity == 1 || reagent.purity > reagent.inverse_chem_val)
+			continue
 
-		if((reaction_flags & REACTION_CLEAR_IMPURE) && reagent.impure_chem)
-			var/impureVol = cached_volume * (1 - reagent.purity)
-			holder.remove_reagent(reagent.type, (impureVol), FALSE)
-			holder.add_reagent(reagent.impure_chem, impureVol, FALSE, added_purity = 1-cached_purity)
-			reagent.creation_purity = cached_purity
-			reagent.chemical_flags = reagent.chemical_flags | REAGENT_DONOTSPLIT
+		inverse_data += reagent.inverse_chem
+		inverse_data += reagent.volume
+		inverse_data += reagent.get_inverse_purity(reagent.purity)
+		reagent.volume = 0
+
+	holder.update_total()
+
+	var/cached_temp = holder.chem_temp
+	while(inverse_data.len)
+		holder.add_reagent(popleft(inverse_data), popleft(inverse_data), reagtemp = cached_temp, added_purity = popleft(inverse_data))
 
 /**
- * Occurs when a reation is overheated (i.e. past it's overheatTemp)
+ * Occurs when a reation is overheated (i.e. past its overheatTemp)
  * Will be called every tick in the reaction that it is overheated
  * If you want this to be a once only proc (i.e. the reaction is stopped after) set reaction.toDelete = TRUE
  * The above is useful if you're writing an explosion
@@ -191,11 +144,11 @@
  * * step_volume_added - how much product (across all products) was added for this single step
  */
 /datum/chemical_reaction/proc/overheated(datum/reagents/holder, datum/equilibrium/equilibrium, step_volume_added)
-	for(var/id in results)
-		var/datum/reagent/reagent = holder.get_reagent(id)
-		if(!reagent)
-			return
-		reagent.volume = round((reagent.volume*0.98), 0.01) //Slowly lower yield per tick
+	for(var/datum/reagent/reagent as anything in holder.reagent_list)
+		if(!results[reagent.type])
+			continue
+		reagent.volume *= 0.98 //Slowly lower yield per tick
+	holder.update_total()
 
 /**
  * Occurs when a reation is too impure (i.e. it's below purity_min)
@@ -212,7 +165,7 @@
 /datum/chemical_reaction/proc/overly_impure(datum/reagents/holder, datum/equilibrium/equilibrium, step_volume_added)
 	var/affected_list = results + required_reagents
 	for(var/_reagent in affected_list)
-		var/datum/reagent/reagent = holder.get_reagent(_reagent)
+		var/datum/reagent/reagent = holder.has_reagent(_reagent)
 		if(!reagent)
 			continue
 		reagent.purity = clamp((reagent.purity-0.01), 0, 1) //slowly reduce purity of reagents
@@ -229,12 +182,12 @@
  * * mob_faction - used in determining targets, mobs from the same faction won't harm eachother.
  * * random - creates random mobs. self explanatory.
  */
-/datum/chemical_reaction/proc/chemical_mob_spawn(datum/reagents/holder, amount_to_spawn, reaction_name, mob_class = HOSTILE_SPAWN, mob_faction = "chemicalsummon", random = TRUE)
+/datum/chemical_reaction/proc/chemical_mob_spawn(datum/reagents/holder, amount_to_spawn, reaction_name, mob_class = HOSTILE_SPAWN, mob_faction = FACTION_CHEMICAL_SUMMON, random = TRUE)
 	if(holder?.my_atom)
 		var/atom/A = holder.my_atom
 		var/turf/T = get_turf(A)
 		var/message = "Mobs have been spawned in [ADMIN_VERBOSEJMP(T)] by a [reaction_name] reaction."
-		message += " (<A HREF='?_src_=vars;Vars=[REF(A)]'>VV</A>)"
+		message += " (<A href='byond://?_src_=vars;Vars=[REF(A)]'>VV</A>)"
 
 		var/mob/M = get(A, /mob)
 		if(M)
@@ -256,7 +209,8 @@
 				spawned_mob = create_random_mob(get_turf(holder.my_atom), mob_class)
 			else
 				spawned_mob = new mob_class(get_turf(holder.my_atom))//Spawn our specific mob_class
-			spawned_mob.faction |= mob_faction
+			spawned_mob.add_faction(mob_faction)
+			ADD_TRAIT(spawned_mob, TRAIT_SPAWNED_MOB, INNATE_TRAIT)
 			if(prob(50))
 				for(var/j in 1 to rand(1, 3))
 					step(spawned_mob, pick(NORTH,SOUTH,EAST,WEST))
@@ -275,7 +229,7 @@
 	for(var/atom/movable/X in orange(range, T))
 		if(X.anchored)
 			continue
-		if(iseffect(X) || iscameramob(X) || isdead(X))
+		if(iseffect(X) || iseyemob(X) || isdead(X))
 			continue
 		var/distance = get_dist(X, T)
 		var/moving_power = max(range - distance, 1)
@@ -288,10 +242,10 @@
 		else
 			if(setting_type)
 				if(step_away(X, T) && moving_power > 1) //Can happen twice at most. So this is fine.
-					addtimer(CALLBACK(GLOBAL_PROC, .proc/_step_away, X, T), 2)
+					addtimer(CALLBACK(GLOBAL_PROC, GLOBAL_PROC_REF(_step_away), X, T), 0.2 SECONDS)
 			else
 				if(step_towards(X, T) && moving_power > 1)
-					addtimer(CALLBACK(GLOBAL_PROC, .proc/_step_towards, X, T), 2)
+					addtimer(CALLBACK(GLOBAL_PROC, GLOBAL_PROC_REF(_step_towards), X, T), 0.2 SECONDS)
 
 //////////////////Generic explosions/failures////////////////////
 // It is HIGHLY, HIGHLY recomended that you consume all/a good volume of the reagents/products in an explosion - because it will just keep going forever until the reaction stops
@@ -304,30 +258,66 @@
  *
  * arguments:
  * * holder - the reagents datum that it is being used on
- * * created_volume - the volume of reacting elements
+ * * volume - the volume of reacting elements
  * * modifier - a flat additive numeric to the size of the explosion - set this if you want a minimum range
  * * strengthdiv - the divisional factor of the explosion, a larger number means a smaller range - This is the part that modifies an explosion's range with volume (i.e. it divides it by this number)
+ * * clear_mob_reagents - should our mob be purged of their reagents?
+ * * clear_holder_reagents - should the reagent holder be fully purged? Heavily recommended to be TRUE, unless you have code handling that elsewhere down the line for whatever reason
+ * * flame_factor - multiplier to flame range of the explosion
+ * * flash_factor - multiplier to flash range of the explosion
  */
-/datum/chemical_reaction/proc/default_explode(datum/reagents/holder, created_volume, modifier = 0, strengthdiv = 10)
-	var/power = modifier + round(created_volume/strengthdiv, 1)
-	if(power > 0)
-		var/turf/T = get_turf(holder.my_atom)
+/proc/reagent_explode(datum/reagents/holder, volume, modifier = 0, strengthdiv = 10, clear_mob_reagents = FALSE, clear_holder_reagents = TRUE, flash_factor = null, flame_factor = null)
+	if (QDELETED(holder))
+		return
+
+	var/power = modifier + round(volume / strengthdiv, 1)
+	if (power > 0)
+		var/turf/our_turf = get_turf(holder.my_atom)
 		var/inside_msg
-		if(ismob(holder.my_atom))
-			var/mob/M = holder.my_atom
-			inside_msg = " inside [ADMIN_LOOKUPFLW(M)]"
+		if (ismob(holder.my_atom))
+			var/mob/owner = holder.my_atom
+			inside_msg = " inside [ADMIN_LOOKUPFLW(owner)]"
 		var/lastkey = holder.my_atom.fingerprintslast //This can runtime (null.fingerprintslast) - due to plumbing?
 		var/touch_msg = "N/A"
-		if(lastkey)
+		if (lastkey)
 			var/mob/toucher = get_mob_by_key(lastkey)
 			touch_msg = "[ADMIN_LOOKUPFLW(toucher)]"
-		if(!istype(holder.my_atom, /obj/machinery/plumbing)) //excludes standard plumbing equipment from spamming admins with this shit
-			message_admins("Reagent explosion reaction occurred at [ADMIN_VERBOSEJMP(T)][inside_msg]. Last Fingerprint: [touch_msg].")
-		log_game("Reagent explosion reaction occurred at [AREACOORD(T)]. Last Fingerprint: [lastkey ? lastkey : "N/A"]." )
-		var/datum/effect_system/reagents_explosion/e = new()
-		e.set_up(power , T, 0, 0)
-		e.start(holder.my_atom)
-	holder.clear_reagents()
+		if (!istype(holder.my_atom, /obj/machinery/plumbing)) //excludes standard plumbing equipment from spamming admins with this shit
+			message_admins("Reagent explosion reaction occurred at [ADMIN_VERBOSEJMP(our_turf)][inside_msg]. Last Fingerprint: [touch_msg].")
+		log_game("Reagent explosion reaction occurred at [AREACOORD(our_turf)]. Last Fingerprint: [lastkey ? lastkey : "N/A"]." )
+		var/datum/effect_system/reagents_explosion/explosion_system = new(our_turf, power, flash_fact = flash_factor, flame_fact = flame_factor)
+		explosion_system.start(holder.my_atom)
+
+	if (istype(holder.my_atom, /obj/item/organ/stomach))
+		var/obj/item/organ/stomach/indigestion = holder.my_atom
+		if(power < 1)
+			return
+		if (clear_mob_reagents)
+			indigestion.owner?.vomit(MOB_VOMIT_MESSAGE | MOB_VOMIT_FORCE, lost_nutrition = 150, distance = 5, purge_ratio = 1)
+		if (clear_holder_reagents)
+			holder.clear_reagents()
+		return
+
+	if (!ismob(holder.my_atom))
+		holder.clear_reagents()
+		return
+
+	// Not quite the same if the reaction is in their stomach; they'll throw up
+	// from any explosion, but it'll only make them puke up everything in their
+	// stomach
+	if (!clear_mob_reagents)
+		return
+
+	// Only clear reagents if they use a special explosive reaction to do it; it shouldn't apply
+	// to any explosion inside a person
+	if (clear_holder_reagents)
+		holder.clear_reagents()
+
+	if (iscarbon(holder.my_atom))
+		var/mob/living/carbon/victim = holder.my_atom
+		var/vomit_flags = MOB_VOMIT_MESSAGE | MOB_VOMIT_FORCE
+		// The vomiting here is for effect, not meant to help with purging
+		victim.vomit(vomit_flags, distance = 5)
 
 /*
  *Creates a flash effect only - less expensive than explode()
@@ -353,13 +343,12 @@
 /datum/chemical_reaction/proc/explode_deafen(datum/reagents/holder, datum/equilibrium/equilibrium, power = 3, stun = 20, range = 2)
 	var/location = get_turf(holder.my_atom)
 	playsound(location, 'sound/effects/bang.ogg', 25, TRUE)
-	for(var/mob/living/carbon/carbon_mob in get_hearers_in_view(range, location))
-		carbon_mob.soundbang_act(1, stun, power)
+	for(var/mob/living/living in get_hearers_in_view(range, location))
+		living.soundbang_act(SOUNDBANG_NORMAL, stun, power)
 
 //Spews out the inverse of the chems in the beaker of the products/reactants only
 /datum/chemical_reaction/proc/explode_invert_smoke(datum/reagents/holder, datum/equilibrium/equilibrium, force_range = 0, clear_products = TRUE, clear_reactants = TRUE, accept_impure = TRUE)
 	var/datum/reagents/invert_reagents = new (2100, NO_REACT)//I think the biggest size we can get is 2100?
-	var/datum/effect_system/smoke_spread/chem/smoke = new()
 	var/sum_volume = 0
 	invert_reagents.my_atom = holder.my_atom //Give the gas a fingerprint
 	for(var/datum/reagent/reagent as anything in holder.reagent_list) //make gas for reagents, has to be done this way, otherwise it never stops Exploding
@@ -369,18 +358,13 @@
 			invert_reagents.add_reagent(reagent.inverse_chem, reagent.volume, no_react = TRUE)
 			holder.remove_reagent(reagent.type, reagent.volume)
 			continue
-		else if (reagent.impure_chem && accept_impure)
-			invert_reagents.add_reagent(reagent.impure_chem, reagent.volume, no_react = TRUE)
-			holder.remove_reagent(reagent.type, reagent.volume)
-			continue
 		invert_reagents.add_reagent(reagent.type, reagent.volume, added_purity = reagent.purity, no_react = TRUE)
 		sum_volume += reagent.volume
 		holder.remove_reagent(reagent.type, reagent.volume)
 	if(!force_range)
 		force_range = (sum_volume/6) + 3
 	if(invert_reagents.reagent_list)
-		smoke.set_up(invert_reagents, force_range, holder.my_atom)
-		smoke.start()
+		do_chem_smoke(force_range, holder.my_atom, holder.my_atom, carry = invert_reagents, log = TRUE)
 	holder.my_atom.audible_message("The [holder.my_atom] suddenly explodes, launching the aerosolized reagents into the air!")
 	if(clear_reactants)
 		clear_reactants(holder)
@@ -390,7 +374,6 @@
 //Spews out the corrisponding reactions reagents  (products/required) of the beaker in a smokecloud. Doesn't spew catalysts
 /datum/chemical_reaction/proc/explode_smoke(datum/reagents/holder, datum/equilibrium/equilibrium, force_range = 0, clear_products = TRUE, clear_reactants = TRUE)
 	var/datum/reagents/reagents = new/datum/reagents(2100, NO_REACT)//Lets be safe first
-	var/datum/effect_system/smoke_spread/chem/smoke = new()
 	reagents.my_atom = holder.my_atom //fingerprint
 	var/sum_volume = 0
 	for (var/datum/reagent/reagent as anything in holder.reagent_list)
@@ -400,8 +383,7 @@
 	if(!force_range)
 		force_range = (sum_volume/6) + 3
 	if(reagents.reagent_list)
-		smoke.set_up(reagents, force_range, holder.my_atom)
-		smoke.start()
+		do_chem_smoke(force_range, holder = holder.my_atom, location = holder.my_atom, carry = reagents, log = TRUE)
 	holder.my_atom.audible_message("The [holder.my_atom] suddenly explodes, launching the aerosolized reagents into the air!")
 	if(clear_reactants)
 		clear_reactants(holder)
@@ -413,17 +395,15 @@
 	var/turf/this_turf = get_turf(holder.my_atom)
 	if(sound_and_text)
 		holder.my_atom.audible_message("The [holder.my_atom] suddenly explodes, sending a shockwave rippling through the air!")
-		playsound(this_turf, 'sound/chemistry/shockwave_explosion.ogg', 80, TRUE)
+		playsound(this_turf, 'sound/effects/chemistry/shockwave_explosion.ogg', 80, TRUE)
 	//Modified goonvortex
-	for(var/atom/movable/movey as anything in orange(range, this_turf))
-		if(!istype(movey, /atom/movable))
-			continue
+	for(var/atom/movable/movey in orange(range, this_turf))
 		if(isliving(movey) && damage)
 			var/mob/living/live = movey
 			live.apply_damage(damage)//Since this can be called multiple times
 		if(movey.anchored)
 			continue
-		if(iseffect(movey) || iscameramob(movey) || isdead(movey))
+		if(iseffect(movey) || iseyemob(movey) || isdead(movey))
 			continue
 		if(implosion)
 			var/distance = get_dist(movey, this_turf)
@@ -504,7 +484,7 @@
 */
 /datum/chemical_reaction/proc/freeze_radius(datum/reagents/holder, datum/equilibrium/equilibrium, temp, radius = 2, freeze_duration = 50 SECONDS, snowball_chance = 0)
 	for(var/any_turf in circle_range_turfs(center = get_turf(holder.my_atom), radius = radius))
-		if(!istype(any_turf, /turf/open))
+		if(!isopenturf(any_turf))
 			continue
 		var/turf/open/open_turf = any_turf
 		open_turf.MakeSlippery(TURF_WET_PERMAFROST, freeze_duration, freeze_duration, freeze_duration)

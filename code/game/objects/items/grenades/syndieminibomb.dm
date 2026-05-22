@@ -1,7 +1,7 @@
 /obj/item/grenade/syndieminibomb
 	desc = "A syndicate manufactured explosive used to sow destruction and chaos."
 	name = "syndicate minibomb"
-	icon = 'icons/obj/grenade.dmi'
+	icon = 'icons/obj/weapons/grenade.dmi'
 	icon_state = "syndicate"
 	inhand_icon_state = "flashbang"
 	worn_icon_state = "minibomb"
@@ -53,7 +53,7 @@
 /obj/item/grenade/gluon
 	desc = "An advanced grenade that releases a harmful stream of gluons inducing radiation in those nearby. These gluon streams will also make victims feel exhausted, and induce shivering. This extreme coldness will also likely wet any nearby floors."
 	name = "gluon frag grenade"
-	icon = 'icons/obj/grenade.dmi'
+	icon = 'icons/obj/weapons/grenade.dmi'
 	icon_state = "bluefrag"
 	inhand_icon_state = "flashbang"
 	var/freeze_range = 4
@@ -73,6 +73,6 @@
 	for (var/turf/open/floor/floor in view(freeze_range, loc))
 		floor.MakeSlippery(TURF_WET_PERMAFROST, 6 MINUTES)
 		for(var/mob/living/carbon/victim in floor)
-			victim.adjustStaminaLoss(stamina_damage)
+			victim.adjust_stamina_loss(stamina_damage)
 			victim.adjust_bodytemperature(temp_adjust)
 	qdel(src)

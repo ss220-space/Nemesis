@@ -1,23 +1,40 @@
 /*
-The /tg/ codebase allows mixing of hardcoded and dynamically-loaded z-levels.
+The /tg/ codebase allows mixing of hardcoded and dynamically-loaded Z-levels.
 Z-levels can be reordered as desired and their properties are set by "traits".
-See map_config.dm for how a particular station's traits may be chosen.
+See code/datums/map_config.dm for how a particular station's traits may be chosen.
 The list DEFAULT_MAP_TRAITS at the bottom of this file should correspond to
 the maps that are hardcoded, as set in _maps/_basemap.dm. SSmapping is
-responsible for loading every non-hardcoded z-level.
+responsible for loading every non-hardcoded Z-level.
 
-As of 2018-02-04, the typical z-levels for a single-level station are:
+As of April 26th, 2022, the typical Z-levels for a single-level station are:
 1: CentCom
 2: Station
-3-4: Randomized space
+3-4: Randomized Space (Ruins)
 5: Mining
-6: City of Cogs
-7-11: Randomized space
-12: Empty space
-13: Transit space
+6-11: Randomized Space (Ruins)
+12: Transit/Reserved Space
 
-Multi-Z stations are supported and multi-Z mining and away missions would
-require only minor tweaks.
+However, if away missions are enabled:
+12: Away Mission
+13: Transit/Reserved Space
+
+Multi-Z stations are supported and Multi-Z mining and away missions would
+require only minor tweaks. They also handle their Z-Levels differently on their
+own case by case basis.
+
+This information will absolutely date quickly with how we handle Z-Levels, and will
+continue to handle them in the future. Currently, you can go into the Debug tab
+of your stat-panel (in game) and hit "Mapping verbs - Enable". You will then get a new tab
+called "Mapping", as well as access to the verb "Debug-Z-Levels". Although the information
+presented in this comment is factual for the time it was written for, it's ill-advised
+to trust the words presented within.
+
+We also provide this information to you so that you can have an at-a-glance look at how
+Z-Levels are arranged. It is extremely ill-advised to ever use the location of a Z-Level
+to assign traits to it or use it in coding. Use Z-Traits (ZTRAITs) for these.
+
+If you want to start toying around with Z-Levels, do not take these words for fact.
+Always compile, always use that verb, and always make sure that it works for what you want to do.
 */
 
 // helpers for modifying jobs, used in various job_changes.dm files
@@ -27,7 +44,7 @@ require only minor tweaks.
 #define SPACERUIN_MAP_EDGE_PAD 15
 
 /// Distance from edge to move to another z-level
-#define TRANSITIONEDGE 7
+#define TRANSITIONEDGE 8
 
 // Maploader bounds indices
 /// The maploader index for the maps minimum x
@@ -71,6 +88,8 @@ require only minor tweaks.
 #define ZTRAIT_SNOWSTORM "Weather_Snowstorm"
 #define ZTRAIT_ASHSTORM "Weather_Ashstorm"
 #define ZTRAIT_VOIDSTORM "Weather_Voidstorm"
+#define ZTRAIT_RAINSTORM "Weather_Rainstorm"
+#define ZTRAIT_SANDSTORM "Weather_Sandstorm"
 
 /// boolean - does this z prevent ghosts from observing it
 #define ZTRAIT_SECRET "Secret"
@@ -87,7 +106,7 @@ require only minor tweaks.
 // number - default gravity if there's no gravity generators or area overrides present
 #define ZTRAIT_GRAVITY "Gravity"
 
-// numeric offsets - e.g. {"Down": -1} means that chasms will fall to z - 1 rather than oblivion
+// Whether this z level is linked up/down. Bool.
 #define ZTRAIT_UP "Up"
 #define ZTRAIT_DOWN "Down"
 
@@ -99,9 +118,14 @@ require only minor tweaks.
 	#define SELFLOOPING "Self"
 	// CROSSLINKED - mixed in with the cross-linked space pool
 	#define CROSSLINKED "Cross"
+	// GRIDLINKED - connected in a consistent grid
+	#define GRIDLINKED "Grid"
 
 // string - type path of the z-level's baseturf (defaults to space)
 #define ZTRAIT_BASETURF "Baseturf"
+
+///boolean - does this z disable parallax?
+#define ZTRAIT_NOPARALLAX "No Parallax"
 
 // default trait definitions, used by SSmapping
 ///Z level traits for CentCom
@@ -110,9 +134,17 @@ require only minor tweaks.
 #define ZTRAITS_STATION list(ZTRAIT_LINKAGE = CROSSLINKED, ZTRAIT_STATION = TRUE)
 ///Z level traits for Deep Space
 #define ZTRAITS_SPACE list(ZTRAIT_LINKAGE = CROSSLINKED, ZTRAIT_SPACE_RUINS = TRUE)
+///Z level traits for
+#define ZTRAITS_WILDS list(\
+	ZTRAIT_LINKAGE = GRIDLINKED, \
+	ZTRAIT_ICE_RUINS = TRUE, \
+	ZTRAIT_SNOWSTORM = FALSE, \
+	ZTRAIT_BASETURF = /turf/open/misc/asteroid/snow/icemoon)
+
 ///Z level traits for Lavaland
 #define ZTRAITS_LAVALAND list(\
 	ZTRAIT_MINING = TRUE, \
+	ZTRAIT_NOPARALLAX = TRUE, \
 	ZTRAIT_ASHSTORM = TRUE, \
 	ZTRAIT_LAVA_RUINS = TRUE, \
 	ZTRAIT_BOMBCAP_MULTIPLIER = 2, \
@@ -140,7 +172,6 @@ require only minor tweaks.
 #define RESERVED_TURF_TYPE /turf/open/space/basic //What the turf is when not being used
 
 //Ruin Generation
-
 #define PLACEMENT_TRIES 100 //How many times we try to fit the ruin somewhere until giving up (really should just swap to some packing algo)
 
 #define PLACE_DEFAULT "random"
@@ -151,22 +182,23 @@ require only minor tweaks.
 #define PLACE_ISOLATED "isolated" //On isolated ruin z level
 
 ///Map generation defines
-#define PERLIN_LAYER_HEIGHT "perlin_height"
-#define PERLIN_LAYER_HUMIDITY "perlin_humidity"
-#define PERLIN_LAYER_HEAT "perlin_heat"
+#define DEFAULT_SPACE_RUIN_LEVELS 7
+#define DEFAULT_SPACE_EMPTY_LEVELS 1
 
 #define BIOME_LOW_HEAT "low_heat"
 #define BIOME_LOWMEDIUM_HEAT "lowmedium_heat"
+#define BIOME_MEDIUM_HEAT "medium_heat"
 #define BIOME_HIGHMEDIUM_HEAT "highmedium_heat"
 #define BIOME_HIGH_HEAT "high_heat"
 
 #define BIOME_LOW_HUMIDITY "low_humidity"
 #define BIOME_LOWMEDIUM_HUMIDITY "lowmedium_humidity"
+#define BIOME_MEDIUM_HUMIDITY "medium_humidity"
 #define BIOME_HIGHMEDIUM_HUMIDITY "highmedium_humidity"
 #define BIOME_HIGH_HUMIDITY "high_humidity"
 
 // Bluespace shelter deploy checks for survival capsules
-/// Shelter spot is allowed 
+/// Shelter spot is allowed
 #define SHELTER_DEPLOY_ALLOWED "allowed"
 /// Shelter spot has turfs that restrict deployment
 #define SHELTER_DEPLOY_BAD_TURFS "bad turfs"
@@ -174,5 +206,52 @@ require only minor tweaks.
 #define SHELTER_DEPLOY_BAD_AREA "bad area"
 /// Shelter spot has anchored objects that restrict deployment
 #define SHELTER_DEPLOY_ANCHORED_OBJECTS "anchored objects"
-/// Shelter spot is out of bounds from the maps x/y coordinates 
+/// Sheter spot has banned objects that restrict deployment
+#define SHELTER_DEPLOY_BANNED_OBJECTS "banned objects"
+/// Shelter spot is out of bounds from the maps x/y coordinates
 #define SHELTER_DEPLOY_OUTSIDE_MAP "outside map"
+
+//Flags for survival capsules to ignore some deploy checks
+///Ignore anchored, dense objects in the area
+#define CAPSULE_IGNORE_ANCHORED_OBJECTS (1<<0)
+///Ignore banned objects in the area
+#define CAPSULE_IGNORE_BANNED_OBJECTS (1<<1)
+
+/// A map key that corresponds to being one exclusively for Space.
+#define SPACE_KEY "space"
+
+//clusterCheckFlags defines
+//All based on clusterMin and clusterMax as guides
+
+//Individual defines
+#define CLUSTER_CHECK_NONE 0 //!No checks are done, cluster as much as possible
+#define CLUSTER_CHECK_DIFFERENT_TURFS (1<<1)  //!Don't let turfs of DIFFERENT types cluster
+#define CLUSTER_CHECK_DIFFERENT_ATOMS (1<<2)  //!Don't let atoms of DIFFERENT types cluster
+#define CLUSTER_CHECK_SAME_TURFS (1<<3)  //!Don't let turfs of the SAME type cluster
+#define CLUSTER_CHECK_SAME_ATOMS (1<<4) //!Don't let atoms of the SAME type cluster
+
+//Combined defines
+#define CLUSTER_CHECK_SAMES 24 //!Don't let any of the same type cluster
+#define CLUSTER_CHECK_DIFFERENTS 6  //!Don't let any of different types cluster
+#define CLUSTER_CHECK_ALL_TURFS 10 //!Don't let ANY turfs cluster same and different types
+#define CLUSTER_CHECK_ALL_ATOMS 20 //!Don't let ANY atoms cluster same and different types
+
+//All
+#define CLUSTER_CHECK_ALL 30 //!Don't let anything cluster, like, at all
+
+/// Checks the job changes in the map config for the passed change key.
+#define CHECK_MAP_JOB_CHANGE(job, change) SSmapping.current_map.job_changes?[job]?[change]
+
+///Identifiers for away mission spawnpoints
+#define AWAYSTART_BEACH "AWAYSTART_BEACH"
+#define AWAYSTART_MUSEUM "AWAYSTART_MUSEUM"
+#define AWAYSTART_RESEARCH "AWAYSTART_RESEARCH"
+#define AWAYSTART_MOONOUTPOST "AWAYSTART_MOONOUTPOST"
+#define AWAYSTART_SNOWCABIN "AWAYSTART_SNOWCABIN"
+#define AWAYSTART_UNDERGROUND "AWAYSTART_UNDERGROUND"
+#define AWAYSTART_HERETIC "AWAYSTART_HERETIC"
+
+// Minetypes for maps
+#define MINETYPE_NONE "none"
+#define MINETYPE_LAVALAND "lavaland"
+#define MINETYPE_ICE "ice"

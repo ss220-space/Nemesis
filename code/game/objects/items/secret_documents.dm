@@ -10,7 +10,7 @@
 /obj/item/documents
 	name = "secret documents"
 	desc = "\"Top Secret\" documents."
-	icon = 'icons/obj/bureaucracy.dmi'
+	icon = 'icons/obj/service/bureaucracy.dmi'
 	icon_state = "docs_generic"
 	inhand_icon_state = "paper"
 	throwforce = 0
@@ -66,7 +66,7 @@
 			var/obj/item/documents/photocopy/C = copy
 			copy_type = C.copy_type
 
-/obj/item/documents/photocopy/attackby(obj/item/O, mob/user, params)
+/obj/item/documents/photocopy/attackby(obj/item/O, mob/user, list/modifiers, list/attack_modifiers)
 	if(istype(O, /obj/item/toy/crayon/red) || istype(O, /obj/item/toy/crayon/blue))
 		if (forgedseal)
 			to_chat(user, span_warning("You have already forged a seal on [src]!"))

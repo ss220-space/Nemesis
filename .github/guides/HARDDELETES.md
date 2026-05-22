@@ -1,4 +1,15 @@
 # Hard Deletes
+
+> Garbage collection is pretty gothic when you think about it.
+>
+> An object in code is like a ghost, clinging to its former life, and especially to the people it knew. It can only pass on and truly die when it has dealt with its unfinished business. And only when its been forgotten by everyone who ever knew it. If even one other object remembers it, it has a connection to the living world that lets it keep hanging on
+>
+> There is a kind of sombre tone to fixing GC errors too, its almost shamanistic, making sure all these little objects clear up their final affairs in life before they die, to ensure they don't become ghosts
+>
+> -- <cite>Nanako</cite>
+
+### Table of contents
+
 1. [What is hard deletion](#What-is-hard-deletion)
 2. [Causes of hard deletes](#causes-of-hard-deletes)
 3. [Detecting hard deletes](#detecting-hard-deletes)
@@ -6,6 +17,7 @@
 5. [Help my code is erroring how fix](#help-my-code-is-erroring-how-fix)
 
 ## What is Hard Deletion
+
 Hard deletion is a very expensive operation that basically clears all references to some "thing" from memory. Objects that undergo this process are referred to as hard deletes, or simply harddels
 
 What follows is a discussion of the theory behind this, why we would ever do it, and the what we do to avoid doing it as often as possible
@@ -39,7 +51,7 @@ This of course means they can store that location in memory in another object's 
 
 /proc/someshit(mem_location)
     var/datum/some_obj = new()
-    some_obj.reference = mem_location 
+    some_obj.reference = mem_location
 ```
 
 But what happens when you get rid of the object we're passing around references to? If we just cleared it out from memory, everything that holds a reference to it would suddenly be pointing to nowhere, or worse, something totally different!
@@ -80,15 +92,16 @@ Now that you know the theory, let's go over what can actually cause hard deletes
 
 The BYOND reference has a list [Here](https://secure.byond.com/docs/ref/#/DM/garbage), but it's not a complete one
 
-* Stored in a var
-* An item in a list, or associated with a list item
-* Has a tag
-* Is on the map (always true for turfs)
-* Inside another atom's contents
-* Inside an atom's vis_contents
-* A temporary value in a still-running proc
-* Is a mob with a key
-* Is an image object attached to an atom
+- Stored in a var
+- An item in a list, or associated with a list item
+- Has a tag
+- Is on the map (always true for turfs)
+- Inside another atom's contents
+- Inside an atom's vis_contents
+- Has its overlays/underlays/vis_contents/vis_locs/contents list held by something 
+- A temporary value in a still-running proc
+- Is a mob with a key
+- Is an image object attached to an atom
 
 Let's briefly go over the more painful ones yeah?
 
@@ -122,13 +135,13 @@ If that fails, search the object's typepath, and look and see if anything is hol
 BYOND currently doesn't have the capability to give us information about where a hard delete is. Fortunately we can search for most all of then ourselves.
 The procs to perform this search are hidden behind compile time defines, since they'd be way too risky to expose to admin button pressing
 
-If you're having issues solving a harddel and want to perform this check yourself, go to `_compile_options.dm` and uncomment `TESTING`, `REFERENCE_TRACKING`, and `GC_FAILURE_HARD_LOOKUP`
+If you're having issues solving a harddel and want to perform this check yourself, go to `_compile_options.dm` and uncomment `REFERENCE_TRACKING_STANDARD`.
 
-You can read more about what each of these do in that file, but the long and short of it is if something would hard delete our code will search for the reference (This will look like your game crashing, just hold out) and print information about anything it finds to the runtime log, which you can find inside the round folder inside `/data/logs/year/month/day`
+You can read more about what each of these do in that file, but the long and short of it is if something would hard delete our code will search for the reference (This will look like your game crashing, just hold out) and print information about anything it finds to [log_dir]/harddels.log, which you can find inside the round folder inside `/data/logs/year/month/day`
 
-It'll tell you what object is holding the ref if it's in an object, or what pattern of list transversal was required to find the ref if it's hiding in a list of some sort
+It'll tell you what object is holding the ref if it's in an object, or what pattern of list transversal was required to find the ref if it's hiding in a list of some sort, alongside the references remaining.
 
-## Techniques For Fixing Hard Deletes 
+## Techniques For Fixing Hard Deletes
 
 Once you've found the issue, it becomes a matter of making sure the ref is cleared as a part of Destroy(). I'm gonna walk you through a few patterns and discuss how you might go about fixing them
 
@@ -230,7 +243,7 @@ So then, we want to temporarily remember to clear a reference when it's deleted
 
 This is where I might lose you, but we're gonna use signals
 
-`qdel()`, the proc that sets off this whole deletion business, sends a signal called `COMSIG_PARENT_QDELETING`
+`qdel()`, the proc that sets off this whole deletion business, sends a signal called `COMSIG_QDELETING`
 
 We can listen for that signal, and if we hear it clear whatever reference we may have
 
@@ -242,10 +255,10 @@ Here's an example
 
 /somemob/proc/set_target(new_target)
     if(target)
-        UnregisterSignal(target, COMSIG_PARENT_QDELETING) //We need to make sure any old signals are cleared
+        UnregisterSignal(target, COMSIG_QDELETING) //We need to make sure any old signals are cleared
     target = new_target
     if(target)
-        RegisterSignal(target, COMSIG_PARENT_QDELETING, .proc/clear_target) //Call clear_target if target is ever qdel()'d
+        RegisterSignal(target, COMSIG_QDELETING, PROC_REF(clear_target)) //Call clear_target if target is ever qdel()'d
 
 /somemob/proc/clear_target(datum/source)
     SIGNAL_HANDLER
@@ -263,3 +276,14 @@ First, do a quick check.
 Are you doing anything to the object in `Initialize()` that you don't undo in `Destroy()`? I don't mean like, setting its name, but are you adding it to any lists, stuff like that
 
 If this fails, you're just gonna have to read over this doc. You can skip the theory if you'd like, but it's all pretty important for having an understanding of this problem
+
+## Misc facts
+
+> i like rust and all, buuut it removes garbage collecctor, and i pretend garbage collector is a cute girl checking my code
+>
+> -- <cite>Armhulenn</cite>
+
+- The reference tracker, while powerful, is incredibly easy to break<br>
+  If it weren't for those unit tests we'd still be missing list["a"] = list(ref)
+- Everyone but me sucks, because everyone but me keeps adding new hard deletes
+- Garbage collection is a spook, best practice is to use a random reference in place of null, it scares the compiler demons

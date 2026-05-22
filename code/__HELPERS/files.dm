@@ -5,7 +5,7 @@
  */
 GLOBAL_VAR_INIT(fileaccess_timer, 0)
 
-/client/proc/browse_files(root_type=BROWSE_ROOT_ALL_LOGS, max_iterations=10, list/valid_extensions=list("txt","log","htm", "html"))
+/client/proc/browse_files(root_type=BROWSE_ROOT_ALL_LOGS, max_iterations=10, list/valid_extensions=list("txt","log","htm", "html", "gz", "json"))
 	// wow why was this ever a parameter
 	var/root = "data/logs/"
 	switch(root_type)
@@ -19,14 +19,23 @@ GLOBAL_VAR_INIT(fileaccess_timer, 0)
 		var/list/choices = flist(path)
 		if(path != root)
 			choices.Insert(1,"/")
+		choices = sort_list(choices) + "Download Folder"
 
-		var/choice = input(src,"Choose a file to access:","Download",null) as null|anything in sort_list(choices)
+		var/choice = input(src,"Choose a file to access:","Download",null) as null|anything in choices
 		switch(choice)
 			if(null)
 				return
 			if("/")
 				path = root
 				continue
+			if("Download Folder")
+				var/list/comp_flist = flist(path)
+				var/confirmation = input(src, "Are you SURE you want to download all the files in this folder? (This will open [length(comp_flist)] prompt[length(comp_flist) == 1 ? "" : "s"])", "Confirmation") in list("Yes", "No")
+				if(confirmation != "Yes")
+					continue
+				for(var/file in comp_flist)
+					src << ftp(path + file)
+				return
 		path += choice
 
 		if(copytext_char(path, -1) != "/") //didn't choose a directory, no need to iterate again
@@ -63,7 +72,12 @@ GLOBAL_VAR_INIT(fileaccess_timer, 0)
 #undef FTPDELAY
 #undef ADMIN_FTPDELAY_MODIFIER
 
-/proc/pathwalk(path)
+/**
+ * Takes a directory and returns every file within every sub directory.
+ * If extensions_filter is provided then only files that end in that extension are given back.
+ * If extensions_filter is a list, any file that matches at least one entry is given back.
+ */
+/proc/pathwalk(path, extensions_filter)
 	var/list/jobs = list(path)
 	var/list/filenames = list()
 
@@ -73,27 +87,34 @@ GLOBAL_VAR_INIT(fileaccess_timer, 0)
 		for(var/new_filename in new_filenames)
 			// if filename ends in / it is a directory, append to currdir
 			if(findtext(new_filename, "/", -1))
-				jobs += current_dir + new_filename
+				jobs += "[current_dir][new_filename]"
+				continue
+			// filename extension filtering
+			if(extensions_filter)
+				if(islist(extensions_filter))
+					for(var/allowed_extension in extensions_filter)
+						if(endswith(new_filename, allowed_extension))
+							filenames += "[current_dir][new_filename]"
+							break
+				else if(endswith(new_filename, extensions_filter))
+					filenames += "[current_dir][new_filename]"
 			else
-				filenames += current_dir + new_filename
+				filenames += "[current_dir][new_filename]"
 	return filenames
 
 /proc/pathflatten(path)
 	return replacetext(path, "/", "_")
 
-/// Returns the md5 of a file at a given path.
-/proc/md5filepath(path)
-	. = md5(file(path))
-
 /// Save file as an external file then md5 it.
 /// Used because md5ing files stored in the rsc sometimes gives incorrect md5 results.
+/// https://www.byond.com/forum/post/2611357
 /proc/md5asfile(file)
 	var/static/notch = 0
 	// its importaint this code can handle md5filepath sleeping instead of hard blocking, if it's converted to use rust_g.
 	var/filename = "tmp/md5asfile.[world.realtime].[world.timeofday].[world.time].[world.tick_usage].[notch]"
 	notch = WRAP(notch+1, 0, 2**15)
 	fcopy(file, filename)
-	. = md5filepath(filename)
+	. = rustg_hash_file(RUSTG_HASH_MD5, filename)
 	fdel(filename)
 
 /**
@@ -115,3 +136,46 @@ GLOBAL_VAR_INIT(fileaccess_timer, 0)
 		if(.)
 			. += delimiter // Add the delimiter before each successive node.
 		. += SANITIZE_FILENAME(node)
+
+/**
+ * Verifys wether a string or file ends with a given file type.
+ *
+ * this does not at all check the actual type of the file, a user could just rename it
+ *
+ * Arguments:
+ * * file - A string or file. No checks for if this file ACCTALLY exists
+ * * file_types - A list of strings to check against [e.g. list("ogg" = TRUE, "mp3" = TRUE)]
+ */
+/proc/is_file_type_in_list(file, file_types = list())
+	var/extstart = findlasttext("[file]", ".")
+	if(!extstart)
+		return FALSE
+	var/ext = copytext("[file]", extstart + 1)
+	if(file_types[ext])
+		return TRUE
+
+/**
+ * Verifys wether a string or file ends with a given file type
+ *
+ * this does not at all check the actual type of the file, a user could just rename it
+ *
+ * Arguments:
+ * * file - A string or file. No checks for if this file ACCTALLY exists
+ * * file_type - A string to check against [e.g. "ogg"]
+ */
+/proc/is_file_type(file, file_type)
+	var/extstart = findlasttext("[file]", ".")
+	if(!extstart)
+		return FALSE
+	var/ext = copytext("[file]", extstart + 1)
+	if(ext == file_type)
+		return TRUE
+
+/proc/strip_filepath_extension(file, file_types)
+	var/extstart = findlasttext("[file]", ".")
+	if(!extstart)
+		return "[file]"
+	var/ext = copytext("[file]", extstart + 1)
+	if(ext in file_types)
+		return copytext("[file]", 1, extstart)
+	return "[file]"

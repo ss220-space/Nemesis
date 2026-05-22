@@ -10,28 +10,28 @@
 /obj/effect/step_trigger/Initialize(mapload)
 	. = ..()
 	var/static/list/loc_connections = list(
-		COMSIG_ATOM_ENTERED = .proc/on_entered,
+		COMSIG_ATOM_ENTERED = PROC_REF(on_entered),
 	)
 	AddElement(/datum/element/connect_loc, loc_connections)
 
 /obj/effect/step_trigger/proc/Trigger(atom/movable/A)
 	return 0
 
-/obj/effect/step_trigger/proc/on_entered(datum/source, H as mob|obj)
+/obj/effect/step_trigger/proc/on_entered(datum/source, atom/movable/entering)
 	SIGNAL_HANDLER
-	if(!H)
+	if(!entering || entering == src || entering.invisibility >= INVISIBILITY_ABSTRACT || istype(entering, /atom/movable/mirage_holder)) //dont teleport ourselves, abstract objects, and mirage holders due to init shenanigans
 		return
-	if(isobserver(H) && !affect_ghosts)
+	if(isobserver(entering) && !affect_ghosts)
 		return
-	if(!ismob(H) && mobs_only)
+	if(!ismob(entering) && mobs_only)
 		return
-	INVOKE_ASYNC(src, .proc/Trigger, H)
+	INVOKE_ASYNC(src, PROC_REF(Trigger), entering)
 
 
 /obj/effect/step_trigger/singularity_act()
 	return
 
-/obj/effect/step_trigger/singularity_pull()
+/obj/effect/step_trigger/singularity_pull(atom/singularity, current_size)
 	return
 
 /* Sends a message to mob when triggered*/
@@ -67,13 +67,13 @@
 			return
 
 	if(immobilize)
-		ADD_TRAIT(AM, TRAIT_IMMOBILIZED, src)
+		ADD_TRAIT(AM, TRAIT_IMMOBILIZED, REF(src))
 
 	affecting[AM] = AM.dir
-	var/datum/move_loop/loop = SSmove_manager.move(AM, direction, speed, tiles ? tiles * speed : INFINITY)
-	RegisterSignal(loop, COMSIG_MOVELOOP_PREPROCESS_CHECK, .proc/pre_move)
-	RegisterSignal(loop, COMSIG_MOVELOOP_POSTPROCESS, .proc/post_move)
-	RegisterSignal(loop, COMSIG_PARENT_QDELETING, .proc/set_to_normal)
+	var/datum/move_loop/loop = GLOB.move_manager.move(AM, direction, speed, tiles ? tiles * speed : INFINITY)
+	RegisterSignal(loop, COMSIG_MOVELOOP_PREPROCESS_CHECK, PROC_REF(pre_move))
+	RegisterSignal(loop, COMSIG_MOVELOOP_POSTPROCESS, PROC_REF(post_move))
+	RegisterSignal(loop, COMSIG_QDELETING, PROC_REF(set_to_normal))
 
 /obj/effect/step_trigger/thrower/proc/pre_move(datum/move_loop/source)
 	SIGNAL_HANDLER
@@ -103,7 +103,7 @@
 	SIGNAL_HANDLER
 	var/atom/movable/being_moved = source.moving
 	affecting -= being_moved
-	REMOVE_TRAIT(being_moved, TRAIT_IMMOBILIZED, src)
+	REMOVE_TRAIT(being_moved, TRAIT_IMMOBILIZED, REF(src))
 
 
 /* Stops things thrown by a thrower, doesn't do anything */
@@ -138,6 +138,26 @@
 			if (T)
 				A.forceMove(T)
 
+/* Teleports atoms directly to an offset, no randomness, looping hallways! */
+
+/obj/effect/step_trigger/teleporter/offset
+	var/teleport_x_offset = 0
+	var/teleport_y_offset = 0
+
+/obj/effect/step_trigger/teleporter/offset/on_entered(datum/source, atom/movable/entered, atom/old_loc)
+	if(!old_loc?.Adjacent(loc)) // prevents looping, if we were teleported into this then the old loc is usually not adjacent
+		return
+	return ..()
+
+/obj/effect/step_trigger/teleporter/offset/Trigger(atom/movable/poor_soul)
+	var/turf/destination = locate(x + teleport_x_offset, y + teleport_y_offset, z)
+	if(!destination)
+		return
+	poor_soul.forceMove(destination)
+	var/mob/living/living_soul = poor_soul
+	if(istype(living_soul) && living_soul.client)
+		living_soul.client.move_delay = 0
+
 /* Fancy teleporter, creates sparks and smokes when used */
 
 /obj/effect/step_trigger/teleport_fancy
@@ -154,22 +174,16 @@
 	M.Move(dest)
 
 	if(entersparks)
-		var/datum/effect_system/spark_spread/s = new
-		s.set_up(4, 1, src)
-		s.start()
+		do_sparks(4, TRUE, src)
+
 	if(exitsparks)
-		var/datum/effect_system/spark_spread/s = new
-		s.set_up(4, 1, dest)
-		s.start()
+		do_sparks(4, TRUE, dest)
 
 	if(entersmoke)
-		var/datum/effect_system/smoke_spread/s = new
-		s.set_up(4, 1, src, 0)
-		s.start()
+		do_smoke(4, src, src)
+
 	if(exitsmoke)
-		var/datum/effect_system/smoke_spread/s = new
-		s.set_up(4, 1, dest, 0)
-		s.start()
+		do_smoke(4, dest, dest)
 
 	uses--
 	if(uses == 0)
@@ -182,7 +196,7 @@
 	var/volume = 100
 	var/freq_vary = 1 //Should the frequency of the sound vary?
 	var/extra_range = 0 // eg World.view = 7, extra_range = 1, 7+1 = 8, 8 turfs radius
-	var/happens_once = 0
+	var/happens_once = FALSE
 	var/triggerer_only = 0 //Whether the triggerer is the only person who hears this
 
 
@@ -197,6 +211,30 @@
 		B.playsound_local(T, sound, volume, freq_vary)
 	else
 		playsound(T, sound, volume, freq_vary, extra_range)
+
+	if(happens_once)
+		qdel(src)
+
+/obj/effect/step_trigger/sound_effect/lavaland_cult_altar
+	happens_once = TRUE
+	name = "a grave mistake";
+	sound = 'sound/effects/hallucinations/i_see_you1.ogg'
+	triggerer_only = 1
+
+/// Forces a given outfit onto any carbon which crosses it, for event maps
+/obj/effect/step_trigger/outfitter
+	mobs_only = TRUE
+	///outfit to equip
+	var/datum/outfit/outfit_to_equip
+	var/happens_once = FALSE
+
+/obj/effect/step_trigger/outfitter/Trigger(atom/movable/A)
+	if(!ishuman(A))
+		return
+
+	var/mob/living/carbon/human/fellow = A
+	fellow.delete_equipment()
+	fellow.equipOutfit(outfit_to_equip,FALSE)
 
 	if(happens_once)
 		qdel(src)

@@ -1,22 +1,26 @@
 /atom/proc/investigate_log(message, subject)
-	if(!message || !subject)
+	if(!message)
 		return
+	if(!subject)
+		CRASH("No subject provided for investigate_log")
 	var/F = file("[GLOB.log_directory]/[subject].html")
-	WRITE_FILE(F, "[time_stamp()] [REF(src)] ([x],[y],[z]) || [src] [message]<br>")
+	var/source = "[src]"
 
-/client/proc/investigate_show()
-	set name = "Investigate"
-	set category = "Admin.Game"
-	if(!holder)
-		return
+	if(isliving(src))
+		var/mob/living/source_mob = src
+		source += " ([source_mob.ckey ? source_mob.ckey : "*no key*"])"
 
-	var/list/investigates = list(
+	WRITE_FILE(F, "[server_timestamp(format = "YYYY-MM-DD hh:mm:ss")] [REF(src)] ([x],[y],[z]) || [source] [message]<br>")
+
+ADMIN_VERB(investigate_show, R_NONE, "Investigate", "Browse various detailed logs.", ADMIN_CATEGORY_GAME)
+	var/static/list/investigates = list(
 		INVESTIGATE_ACCESSCHANGES,
 		INVESTIGATE_ATMOS,
 		INVESTIGATE_BOTANY,
 		INVESTIGATE_CARGO,
 		INVESTIGATE_CRAFTING,
-		INVESTIGATE_EXONET,
+		INVESTIGATE_DEATHS,
+		INVESTIGATE_ENGINE,
 		INVESTIGATE_EXPERIMENTOR,
 		INVESTIGATE_GRAVITY,
 		INVESTIGATE_HALLUCINATIONS,
@@ -26,9 +30,6 @@
 		INVESTIGATE_RADIATION,
 		INVESTIGATE_RECORDS,
 		INVESTIGATE_RESEARCH,
-		INVESTIGATE_SINGULO,
-		INVESTIGATE_SUPERMATTER,
-		INVESTIGATE_TELESCI,
 		INVESTIGATE_WIRES,
 	)
 
@@ -44,7 +45,7 @@
 
 	var/list/combined = sort_list(logs_present) + sort_list(logs_missing)
 
-	var/selected = tgui_input_list(src, "Investigate what?", "Investigation", combined)
+	var/selected = tgui_input_list(user, "Investigate what?", "Investigation", combined)
 	if(isnull(selected))
 		return
 	if(!(selected in combined) || selected == "---")
@@ -58,6 +59,9 @@
 
 	var/F = file("[GLOB.log_directory]/[selected].html")
 	if(!fexists(F))
-		to_chat(src, span_danger("No [selected] logfile was found."), confidential = TRUE)
+		to_chat(user, span_danger("No [selected] logfile was found."), confidential = TRUE)
 		return
-	src << browse(F,"window=investigate[selected];size=800x300")
+
+	var/datum/browser/browser = new(user, "investigate[selected]", "Investigation of [selected]", 800, 300)
+	browser.set_content(file2text(F))
+	browser.open()

@@ -1,37 +1,32 @@
-/*
-//////////////////////////////////////
-
-Hallucigen
-
-	Very noticable.
-	Lowers resistance considerably.
-	Decreases stage speed.
-	Reduced transmittable.
-	Critical Level.
-
-Bonus
-	Makes the affected mob be hallucinated for short periods of time.
-
-//////////////////////////////////////
+/*Hallucigen
+ * Slightly increases stealth
+ * Lowers resistance tremendously
+ * Slightly decreases stage speed
+ * Slightly reduces transmissibility
+ * Critical level
+ * Bonus:Makes the affected mob be hallucinated for short periods of time.
 */
 
 /datum/symptom/hallucigen
 	name = "Hallucigen"
 	desc = "The virus stimulates the brain, causing occasional hallucinations."
+	illness = "Paranoyance"
 	stealth = 1
-	resistance = -4
-	stage_speed = 1
+	resistance = -2
+	stage_speed = 2
 	transmittable = -1
 	level = 5
 	severity = 2
 	base_message_chance = 25
 	symptom_delay_min = 25
 	symptom_delay_max = 90
-	var/fake_healthy = FALSE
+	symptom_cure = /datum/reagent/medicine/psicodine
+	cure_color = "yellow"
 	threshold_descs = list(
 		"Stage Speed 7" = "Increases the amount of hallucinations.",
 		"Stealth 4" = "The virus mimics positive symptoms.",
 	)
+	var/fake_healthy = FALSE
 
 /datum/symptom/hallucigen/Start(datum/disease/advance/A)
 	. = ..()
@@ -69,4 +64,4 @@ Bonus
 					to_chat(M, span_userdanger("[pick("Oh, your head...", "Your head pounds.", "They're everywhere! Run!", "Something in the shadows...")]"))
 				else
 					to_chat(M, span_notice("[pick(healthy_messages)]"))
-			M.hallucination += (45 * power)
+			M.adjust_hallucinations(90 SECONDS * power)

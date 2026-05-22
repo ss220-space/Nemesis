@@ -3,54 +3,88 @@
 
 #define MAX_REASON_LENGTH 600
 
-//checks client ban cache or DB ban table if ckey is banned from one or more roles
-//doesn't return any details, use only for if statements
-/proc/is_banned_from(player_ckey, list/roles)
-	if(!player_ckey)
-		return
+/**
+ * Checks client ban cache or, if it doesn't exist, queries the DB ban table to see if the player's
+ * ckey is banned from at least one of the provided roles.
+ *
+ * Returns TRUE if the player matches with one or more role bans.
+ * Returns FALSE if the player doesn't match with any role bans. Possible errors states also return FALSE.
+ *
+ * Args:
+ * * player_key - Either key or ckey of the player you want to check for role bans.
+ * * roles - Accepts either a single role string, or a list of role strings.
+ */
+/proc/is_banned_from(player_key, list/roles)
+	if(!player_key)
+		stack_trace("Called is_banned_from without specifying a ckey.")
+		return FALSE
+
+	// Convert to ckey. This allows is_banned_from to take either key or ckey interchangably,
+	// and is officially a feature of the proc.
+	var/player_ckey = ckey(player_key)
+
 	var/client/player_client = GLOB.directory[player_ckey]
+
+	// If there's a player client, we try to set up their ban cache (if it doesn't already exist) and test from that.
 	if(player_client)
-		var/list/ban_cache = player_client.ban_cache || build_ban_cache(player_client)
+		var/list/ban_cache = retrieve_ban_cache(player_client)
+
+		// If this isn't a list, the client disconnected while building it.
 		if(!islist(ban_cache))
-			return // Disconnected while building the list.
+			return FALSE
+
+		// If it is a list, check each role.
 		if(islist(roles))
 			for(var/role in roles)
 				if(role in ban_cache)
 					return TRUE //they're banned from at least one role, no need to keep checking
-		else if(roles in ban_cache)
-			return TRUE
+
+			return FALSE
+
+		// Otherwise, it's just a single role string. Return if it's in the ban cache.
+		return (roles in ban_cache)
+
+	// If there's no player client, we'll ask the database.
+	var/values = list(
+		"player_ckey" = player_ckey,
+		"must_apply_to_admins" = !!(GLOB.admin_datums[player_ckey] || GLOB.deadmins[player_ckey]),
+	)
+
+	var/sql_roles
+	if(islist(roles))
+		var/list/sql_roles_list = list()
+		for (var/i in 1 to roles.len)
+			values["role[i]"] = roles[i]
+			sql_roles_list += ":role[i]"
+		sql_roles = sql_roles_list.Join(", ")
 	else
-		var/values = list(
-			"player_ckey" = player_ckey,
-			"must_apply_to_admins" = !!(GLOB.admin_datums[player_ckey] || GLOB.deadmins[player_ckey]),
-		)
-		var/sql_roles
-		if(islist(roles))
-			var/list/sql_roles_list = list()
-			for (var/i in 1 to roles.len)
-				values["role[i]"] = roles[i]
-				sql_roles_list += ":role[i]"
-			sql_roles = sql_roles_list.Join(", ")
-		else
-			values["role"] = roles
-			sql_roles = ":role"
-		var/datum/db_query/query_check_ban = SSdbcore.NewQuery({"
-			SELECT 1
-			FROM [format_table_name("ban")]
-			WHERE
-				ckey = :player_ckey AND
-				role IN ([sql_roles]) AND
-				unbanned_datetime IS NULL AND
-				(expiration_time IS NULL OR expiration_time > NOW())
-				AND (NOT :must_apply_to_admins OR applies_to_admins = 1)
-		"}, values)
-		if(!query_check_ban.warn_execute())
-			qdel(query_check_ban)
-			return
-		if(query_check_ban.NextRow())
-			qdel(query_check_ban)
-			return TRUE
+		values["role"] = roles
+		sql_roles = ":role"
+
+	var/datum/db_query/query_check_ban = SSdbcore.NewQuery({"
+		SELECT 1
+		FROM [format_table_name("ban")]
+		WHERE
+			ckey = :player_ckey AND
+			role IN ([sql_roles]) AND
+			unbanned_datetime IS NULL AND
+			(expiration_time IS NULL OR expiration_time > NOW())
+			AND (NOT :must_apply_to_admins OR applies_to_admins = 1)
+	"}, values)
+
+	// If there's an SQL error, return FALSE.
+	if(!query_check_ban.warn_execute())
 		qdel(query_check_ban)
+		return FALSE
+
+	// If there are any rows, we got a match and they're role banned from at least one role.
+	if(query_check_ban.NextRow())
+		qdel(query_check_ban)
+		return TRUE
+
+	// Otherwise, they're not banned from any roles in the DB.
+	qdel(query_check_ban)
+	return FALSE
 
 //checks DB ban table if a ckey, ip and/or cid is banned from a specific role
 //returns an associative nested list of each matching row's ban id, bantime, ban round id, expiration time, ban duration, applies to admins, reason, key, ip, cid and banning admin's key in that order
@@ -85,12 +119,43 @@
 		. += list(list("id" = query_check_ban.item[1], "bantime" = query_check_ban.item[2], "round_id" = query_check_ban.item[3], "expiration_time" = query_check_ban.item[4], "duration" = query_check_ban.item[5], "applies_to_admins" = query_check_ban.item[6], "reason" = query_check_ban.item[7], "key" = query_check_ban.item[8], "ip" = query_check_ban.item[9], "computerid" = query_check_ban.item[10], "admin_key" = query_check_ban.item[11]))
 	qdel(query_check_ban)
 
+/// Gets the ban cache of the passed in client
+/// If the cache has not been generated, we start off a query
+/// If we still have a query going for this request, we just sleep until it's received back
+/proc/retrieve_ban_cache(client/player_client)
+	if(QDELETED(player_client))
+		return
+
+	if(player_client.ban_cache)
+		return player_client.ban_cache
+
+	var/config_delay = CONFIG_GET(number/blocking_query_timeout) SECONDS
+	// If we haven't got a query going right now, or we've timed out on the old query
+	if(player_client.ban_cache_start + config_delay < REALTIMEOFDAY)
+		return build_ban_cache(player_client)
+
+	// Ok so we've got a request going, lets start a wait cycle
+	// If we wait longer then config/db_ban_timeout we'll send another request
+	// We use timeofday here because we're talking human time
+	// We do NOT cache the start time because it can update, and we want it to be able to
+	while(player_client && player_client?.ban_cache_start + config_delay >= REALTIMEOFDAY && !player_client?.ban_cache)
+		// Wait a decisecond or two would ya?
+		// If this causes lag on client join, increase this delay. it doesn't need to be too fast since this should
+		// Realllly only happen near Login, and we're unlikely to make any new requests in that time
+		stoplag(2)
+
+	// If we have a ban cache, use it. if we've timed out, go ahead and start another query would you?
+	// This will update any other sleep loops, so we should only run one at a time
+	return player_client?.ban_cache || build_ban_cache(player_client)
 
 /proc/build_ban_cache(client/player_client)
 	if(!SSdbcore.Connect())
 		return
 	if(QDELETED(player_client))
 		return
+	var/current_time = REALTIMEOFDAY
+	player_client.ban_cache_start = current_time
+
 	var/ckey = player_client.ckey
 	var/list/ban_cache = list()
 	var/is_admin = FALSE
@@ -100,14 +165,19 @@
 		"SELECT role, applies_to_admins FROM [format_table_name("ban")] WHERE ckey = :ckey AND unbanned_datetime IS NULL AND (expiration_time IS NULL OR expiration_time > NOW())",
 		list("ckey" = ckey)
 	)
-	if(!query_build_ban_cache.warn_execute())
+	var/query_successful = query_build_ban_cache.warn_execute()
+	// After we sleep, we check if this was the most recent cache build, and if so we clear our start time
+	if(player_client?.ban_cache_start == current_time)
+		player_client.ban_cache_start = 0
+	if(!query_successful)
 		qdel(query_build_ban_cache)
 		return
+
 	while(query_build_ban_cache.NextRow())
 		if(is_admin && !text2num(query_build_ban_cache.item[2]))
 			continue
 		ban_cache[query_build_ban_cache.item[1]] = TRUE
-	qdel(query_build_ban_cache)
+	QDEL_NULL(query_build_ban_cache)
 	if(QDELETED(player_client)) // Disconnected while working with the DB.
 		return
 	player_client.ban_cache = ban_cache
@@ -124,10 +194,8 @@
 	var/datum/browser/panel = new(usr, "banpanel", "Banning Panel", 910, panel_height)
 	panel.add_stylesheet("admin_panelscss", 'html/admin/admin_panels.css')
 	panel.add_stylesheet("banpanelcss", 'html/admin/banpanel.css')
-	var/tgui_fancy = usr.client.prefs.read_preference(/datum/preference/toggle/tgui_fancy)
-	if(tgui_fancy) //some browsers (IE8) have trouble with unsupported css3 elements and DOM methods that break the panel's functionality, so we won't load those if a user is in no frills tgui mode since that's for similar compatability support
-		panel.add_stylesheet("admin_panelscss3", 'html/admin/admin_panels_css3.css')
-		panel.add_script("banpaneljs", 'html/admin/banpanel.js')
+	panel.add_stylesheet("admin_panelscss3", 'html/admin/admin_panels_css3.css')
+	panel.add_script("banpaneljs", 'html/admin/banpanel.js')
 	var/list/output = list("<form method='get' action='?src=[REF(src)]'>[HrefTokenFormField()]")
 	output += {"<input type='hidden' name='src' value='[REF(src)]'>
 	<label class='inputlabel checkbox'>Key:
@@ -254,9 +322,9 @@
 		for(var/datum/job_department/department as anything in SSjob.joinable_departments)
 			var/label_class = department.label_class
 			var/department_name = department.department_name
-			output += "<div class='column'><label class='rolegroup [label_class]'>[tgui_fancy ? "<input type='checkbox' name='[label_class]' class='hidden' onClick='header_click_all_checkboxes(this)'>" : ""] \
+			output += "<div class='column'><label class='rolegroup [label_class]'><input type='checkbox' name='[label_class]' class='hidden' onClick='header_click_all_checkboxes(this)'> \
 			[department_name]</label><div class='content'>"
-			for(var/datum/job/job_datum as anything in department.department_jobs)
+			for(var/datum/job/job_datum as anything in department.get_jobban_jobs())
 				if(break_counter > 0 && (break_counter % 3 == 0))
 					output += "<br>"
 				break_counter++
@@ -267,7 +335,8 @@
 					if(!department_index)
 						stack_trace("Failed to find a department index for [department.type] in the departments_list of [job_datum.type]")
 					output += {"<label class='inputlabel checkbox'>[job_name]
-						<input type='checkbox' id='[job_name]_[department_index]' name='[job_name]' class='[label_class]' value='1'[tgui_fancy ? " onClick='toggle_other_checkboxes(this, \"[length(job_datum.departments_list)]\", \"[department_index]\")'" : ""]>
+						<input type='checkbox' id='[job_name]_[department_index]' name='[job_name]' class='[label_class]' value='1'
+						onClick='toggle_other_checkboxes(this, \"[length(job_datum.departments_list)]\", \"[department_index]\")'">
 						<div class='inputbox[(job_name in banned_from) ? " banned" : ""]'></div></label>
 						"}
 				else
@@ -282,7 +351,7 @@
 			"Abstract" = list("Appearance", "Emote", "Deadchat", "OOC", "Urgent Adminhelp"),
 			)
 		for(var/department in other_job_lists)
-			output += "<div class='column'><label class='rolegroup [ckey(department)]'>[tgui_fancy ? "<input type='checkbox' name='[department]' class='hidden' onClick='header_click_all_checkboxes(this)'>" : ""][department]</label><div class='content'>"
+			output += "<div class='column'><label class='rolegroup [ckey(department)]'><input type='checkbox' name='[department]' class='hidden' onClick='header_click_all_checkboxes(this)'>[department]</label><div class='content'>"
 			break_counter = 0
 			for(var/job in other_job_lists[department])
 				if(break_counter > 0 && (break_counter % 3 == 0))
@@ -296,6 +365,7 @@
 		var/list/long_job_lists = list(
 			"Ghost and Other Roles" = list(
 				ROLE_PAI,
+				ROLE_BOT,
 				ROLE_BRAINWASHED,
 				ROLE_DEATHSQUAD,
 				ROLE_DRONE,
@@ -303,33 +373,40 @@
 				ROLE_MIND_TRANSFER,
 				ROLE_POSIBRAIN,
 				ROLE_SENTIENCE,
+				ROLE_RECOVERED_CREW,
 			),
 			"Antagonist Positions" = list(
 				ROLE_ABDUCTOR,
 				ROLE_ALIEN,
 				ROLE_BLOB,
+				ROLE_BLOOD_WORM,
 				ROLE_BROTHER,
 				ROLE_CHANGELING,
 				ROLE_CULTIST,
-				ROLE_FAMILIES,
+				ROLE_FUGITIVE,
+				ROLE_FUGITIVE_HUNTER,
+				ROLE_GLITCH,
 				ROLE_HERETIC,
 				ROLE_HIVE,
 				ROLE_MALF,
 				ROLE_NINJA,
 				ROLE_OPERATIVE,
 				ROLE_OVERTHROW,
+				ROLE_PARADOX_CLONE,
 				ROLE_REV,
 				ROLE_REVENANT,
 				ROLE_REV_HEAD,
-				ROLE_SENTIENT_DISEASE,
+				ROLE_SPACE_DRAGON,
 				ROLE_SPIDER,
+				ROLE_SPY,
 				ROLE_SYNDICATE,
 				ROLE_TRAITOR,
+				ROLE_VOIDWALKER,
 				ROLE_WIZARD,
 			),
 		)
 		for(var/department in long_job_lists)
-			output += "<div class='column'><label class='rolegroup long [ckey(department)]'>[tgui_fancy ? "<input type='checkbox' name='[department]' class='hidden' onClick='header_click_all_checkboxes(this)'>" : ""][department]</label><div class='content'>"
+			output += "<div class='column'><label class='rolegroup long [ckey(department)]'><input type='checkbox' name='[department]' class='hidden' onClick='header_click_all_checkboxes(this)'>[department]</label><div class='content'>"
 			break_counter = 0
 			for(var/job in long_job_lists[department])
 				if(break_counter > 0 && (break_counter % 10 == 0))
@@ -507,7 +584,7 @@
 	duration = text2num(duration)
 	if (!(interval in list("SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH", "YEAR")))
 		interval = "MINUTE"
-	var/time_message = "[duration] [lowertext(interval)]" //no DisplayTimeText because our duration is of variable interval type
+	var/time_message = "[duration] [LOWER_TEXT(interval)]" //no DisplayTimeText because our duration is of variable interval type
 	if(duration > 1) //pluralize the interval if necessary
 		time_message += "s"
 	var/is_server_ban = (roles_to_ban[1] == "Server")
@@ -618,7 +695,7 @@
 			var/pagecount = 1
 			var/list/pagelist = list()
 			while(bancount > 0)
-				pagelist += "<a href='?_src_=holder;[HrefToken()];unbanpagecount=[pagecount - 1];unbankey=[player_key];unbanadminkey=[admin_key];unbanip=[player_ip];unbancid=[player_cid]'>[pagecount == page ? "<b>\[[pagecount]\]</b>" : "\[[pagecount]\]"]</a>"
+				pagelist += "<a href='byond://?_src_=holder;[HrefToken()];unbanpagecount=[pagecount - 1];unbankey=[player_key];unbanadminkey=[admin_key];unbanip=[player_ip];unbancid=[player_cid]'>[pagecount == page ? "<b>\[[pagecount]\]</b>" : "\[[pagecount]\]"]</a>"
 				bancount -= bansperpage
 				pagecount++
 			output += pagelist.Join(" | ")
@@ -704,13 +781,13 @@
 
 			var/un_or_reban_href
 			if(unban_datetime)
-				un_or_reban_href = "<a href='?_src_=holder;[HrefToken()];rebanid=[ban_id];applies_to_admins=[applies_to_admins];rebankey=[banned_player_key];rebanadminkey=[banning_admin_key];rebanip=[banned_player_ip];rebancid=[banned_player_cid];rebanrole=[role];rebanpage=[page]'>Reban</a>"
+				un_or_reban_href = "<a href='byond://?_src_=holder;[HrefToken()];rebanid=[ban_id];applies_to_admins=[applies_to_admins];rebankey=[banned_player_key];rebanadminkey=[banning_admin_key];rebanip=[banned_player_ip];rebancid=[banned_player_cid];rebanrole=[role];rebanpage=[page]'>Reban</a>"
 			else
-				un_or_reban_href = "<a href='?_src_=holder;[HrefToken()];unbanid=[ban_id];unbankey=[banned_player_key];unbanadminkey=[banning_admin_key];unbanip=[banned_player_ip];unbancid=[banned_player_cid];unbanrole=[role];unbanpage=[page]'>Unban</a>"
-			output += "<a href='?_src_=holder;[HrefToken()];editbanid=[ban_id];editbankey=[banned_player_key];editbanip=[banned_player_ip];editbancid=[banned_player_cid];editbanrole=[role];editbanduration=[duration];editbanadmins=[applies_to_admins];editbanreason=[url_encode(reason)];editbanpage=[page];editbanadminkey=[banning_admin_key]'>Edit</a><br>[un_or_reban_href]"
+				un_or_reban_href = "<a href='byond://?_src_=holder;[HrefToken()];unbanid=[ban_id];unbankey=[banned_player_key];unbanadminkey=[banning_admin_key];unbanip=[banned_player_ip];unbancid=[banned_player_cid];unbanrole=[role];unbanpage=[page]'>Unban</a>"
+			output += "<a href='byond://?_src_=holder;[HrefToken()];editbanid=[ban_id];editbankey=[banned_player_key];editbanip=[banned_player_ip];editbancid=[banned_player_cid];editbanrole=[role];editbanduration=[duration];editbanadmins=[applies_to_admins];editbanreason=[url_encode(reason)];editbanpage=[page];editbanadminkey=[banning_admin_key]'>Edit</a><br>[un_or_reban_href]"
 
 			if(edits)
-				output += "<br><a href='?_src_=holder;[HrefToken()];unbanlog=[ban_id]'>Edit log</a>"
+				output += "<br><a href='byond://?_src_=holder;[HrefToken()];unbanlog=[ban_id]'>Edit log</a>"
 			output += "</div></div></div>"
 		qdel(query_unban_search_bans)
 		output += "</div>"
@@ -729,7 +806,7 @@
 		return
 	var/kn = key_name(usr)
 	var/kna = key_name_admin(usr)
-	var/change_message = "[usr.client.key] unbanned [target] from [role] on [SQLtime()] during round #[GLOB.round_id]<hr>"
+	var/change_message = "[usr.client.key] unbanned [target] from [role] on [ISOtime()] during round #[GLOB.round_id]<hr>"
 	var/datum/db_query/query_unban = SSdbcore.NewQuery({"
 		UPDATE [format_table_name("ban")] SET
 			unbanned_datetime = NOW(),
@@ -774,7 +851,7 @@
 
 	var/kn = key_name(usr)
 	var/kna = key_name_admin(usr)
-	var/change_message = "[usr.client.key] re-activated ban of [target] from [role] on [SQLtime()] during round #[GLOB.round_id]<hr>"
+	var/change_message = "[usr.client.key] re-activated ban of [target] from [role] on [ISOtime()] during round #[GLOB.round_id]<hr>"
 	var/datum/db_query/query_reban = SSdbcore.NewQuery({"
 		UPDATE [format_table_name("ban")] SET
 			unbanned_datetime = NULL,
@@ -972,7 +1049,7 @@
 	if(query_check_adminban_count.NextRow())
 		var/adminban_count = text2num(query_check_adminban_count.item[1])
 		var/max_adminbans = MAX_ADMINBANS_PER_ADMIN
-		if(check_rights(R_PERMISSIONS, show_msg = FALSE) && (rank.can_edit_rights & R_EVERYTHING) == R_EVERYTHING) //edit rights are a more effective way to check hierarchical rank since many non-headmins have R_PERMISSIONS now
+		if(check_rights(R_PERMISSIONS, show_msg = FALSE) && (can_edit_rights_flags() & R_EVERYTHING) == R_EVERYTHING) //edit rights are a more effective way to check hierarchical rank since many non-headmins have R_PERMISSIONS now
 			max_adminbans = MAX_ADMINBANS_PER_HEADMIN
 		if(adminban_count >= max_adminbans)
 			to_chat(usr, span_danger("You've already logged [max_adminbans] admin ban(s) or more. Do not abuse this function!"), confidential = TRUE)
@@ -1022,4 +1099,6 @@
 			if(kick_banned_players && (!is_admin || (is_admin && applies_to_admins)))
 				qdel(other_player_client)
 
+#undef MAX_ADMINBANS_PER_ADMIN
+#undef MAX_ADMINBANS_PER_HEADMIN
 #undef MAX_REASON_LENGTH

@@ -1,6 +1,6 @@
 /datum/bounty/item/assistant/strange_object
 	name = "Strange Object"
-	description = "Nanotrasen has taken an interest in strange objects. Find one in maint, and ship it off to CentCom right away."
+	description = "Nanotrasen has taken an interest in strange objects. Find one in maintenance, and ship it off to CentCom right away."
 	reward = CARGO_CRATE_VALUE * 2.4
 	wanted_types = list(/obj/item/relic = TRUE)
 
@@ -41,15 +41,40 @@
 	wanted_types = list(/obj/item/spear = TRUE)
 
 /datum/bounty/item/assistant/toolbox
-	name = "Toolboxes"
-	description = "There's an absence of robustness at Central Command. Hurry up and ship some toolboxes as a solution."
+	name = "Stocked Toolbox"
+	description = "There's an absence of robustness at Central Command. Ship them a fully packed toolbox as a solution, containing a screwdriver, wrench, welding tool, crowbar, analyzer, and wirecutters."
 	reward = CARGO_CRATE_VALUE * 4
-	required_count = 6
 	wanted_types = list(/obj/item/storage/toolbox = TRUE)
+	/// List of tools that we want to see sorted into a toolbox
+	var/static/list/static_packing_list = list(
+		/obj/item/screwdriver,
+		/obj/item/wrench,
+		/obj/item/weldingtool,
+		/obj/item/crowbar,
+		/obj/item/analyzer,
+		/obj/item/wirecutters,
+	)
+
+/datum/bounty/item/assistant/toolbox/applies_to(obj/shipped)
+	var/list/packing_list = static_packing_list.Copy()
+	for(var/obj/item_contents as anything in shipped.contents)
+		for(var/match_type in packing_list)
+			if(istype(item_contents, match_type))
+				packing_list -= match_type
+				break
+		if(!length(packing_list))
+			return ..()
+	return FALSE
+
+/datum/bounty/item/assistant/toolbox/ship(obj/shipped)
+	. = ..()
+	for(var/obj/object as anything in shipped.contents)
+		if(!is_type_in_list(object, static_packing_list))
+			object.forceMove(shipped.drop_location())
 
 /datum/bounty/item/assistant/statue
 	name = "Statue"
-	description = "Central Command would like to commision an artsy statue for the lobby. Ship one out, when possible."
+	description = "Central Command would like to commission an artsy statue for the lobby. Ship one out, when possible."
 	reward = CARGO_CRATE_VALUE * 4
 	wanted_types = list(/obj/structure/statue = TRUE)
 
@@ -83,7 +108,7 @@
 	name = "Donuts"
 	description = "CentCom's security forces are facing heavy losses against the Syndicate. Ship donuts to raise morale."
 	reward = CARGO_CRATE_VALUE * 6
-	required_count = 10
+	required_count = 6
 	wanted_types = list(/obj/item/food/donut = TRUE)
 
 /datum/bounty/item/assistant/donkpocket
@@ -93,28 +118,18 @@
 	required_count = 10
 	wanted_types = list(/obj/item/food/donkpocket = TRUE)
 
-/datum/bounty/item/assistant/briefcase
-	name = "Briefcase"
-	description = "Central Command will be holding a business convention this year. Ship a few briefcases in support."
-	reward = CARGO_CRATE_VALUE * 5
-	required_count = 5
-	wanted_types = list(
-		/obj/item/storage/briefcase = TRUE,
-		/obj/item/storage/secure/briefcase = TRUE,
-	)
-
-/datum/bounty/item/assistant/sunglasses
-	name = "Sunglasses"
-	description = "A famous blues duo is passing through the sector, but they've lost their shades and they can't perform. Ship new sunglasses to CentCom to rectify this."
-	reward = CARGO_CRATE_VALUE * 6
-	required_count = 2
-	wanted_types = list(/obj/item/clothing/glasses/sunglasses = TRUE)
-
 /datum/bounty/item/assistant/monkey_hide
 	name = "Monkey Hide"
 	description = "One of the scientists at CentCom is interested in testing products on monkey skin. Your mission is to acquire monkey's hide and ship it."
 	reward = CARGO_CRATE_VALUE * 3
-	wanted_types = list(/obj/item/stack/sheet/animalhide/monkey = TRUE)
+	wanted_types = list(/obj/item/stack/sheet/animalhide/carbon/monkey = TRUE)
+
+/datum/bounty/item/assistant/dead_mice
+	name = "Dead Mice"
+	description = "Station 14 ran out of freeze-dried mice. Ship some fresh ones so their janitor doesn't go on strike."
+	reward = CARGO_CRATE_VALUE * 10
+	required_count = 5
+	wanted_types = list(/obj/item/food/deadmouse = TRUE)
 
 /datum/bounty/item/assistant/comfy_chair
 	name = "Comfy Chairs"
@@ -139,18 +154,15 @@
 	wanted_types = list(/obj/item/food/grown/poppy = TRUE)
 	include_subtypes = FALSE
 
-/datum/bounty/item/assistant/shadyjims
-	name = "Shady Jim's"
-	description = "There's an irate officer at CentCom demanding that he receive a box of Shady Jim's cigarettes. Please ship one. He's starting to make threats."
-	reward = CARGO_CRATE_VALUE
-	wanted_types = list(/obj/item/storage/fancy/cigarettes/cigpack_shadyjims = TRUE)
-
 /datum/bounty/item/assistant/potted_plants
 	name = "Potted Plants"
 	description = "Central Command is looking to commission a new BirdBoat-class station. You've been ordered to supply the potted plants."
 	reward = CARGO_CRATE_VALUE * 4
-	required_count = 8
-	wanted_types = list(/obj/item/kirbyplants = TRUE)
+	required_count = 3
+	wanted_types = list(
+		/obj/item/kirbyplants = TRUE,
+		/obj/item/kirbyplants/synthetic = FALSE
+		)
 
 /datum/bounty/item/assistant/monkey_cubes
 	name = "Monkey Cubes"
@@ -168,23 +180,16 @@
 
 /datum/bounty/item/assistant/corgimeat
 	name = "Raw Corgi Meat"
-	description = "The Syndicate recently stole all of CentCom's Corgi meat. Ship out a replacement immediately."
+	description = "The Syndicate recently stole all of CentCom's corgi meat. Ship out a replacement immediately."
 	reward = CARGO_CRATE_VALUE * 6
 	wanted_types = list(/obj/item/food/meat/slab/corgi = TRUE)
 
-/datum/bounty/item/assistant/action_figures
-	name = "Action Figures"
-	description = "The vice president's son saw an ad for action figures on the telescreen and now he won't shut up about them. Ship some to ease his complaints."
+/datum/bounty/item/assistant/toys
+	name = "Arcade Toys"
+	description = "The vice president's son saw an ad for new toys on the telescreen and now he won't shut up about them. Ship some arcade toys over to ease his complaints."
 	reward = CARGO_CRATE_VALUE * 8
 	required_count = 5
-	wanted_types = list(/obj/item/toy/figure = TRUE)
-
-/datum/bounty/item/assistant/dead_mice
-	name = "Dead Mice"
-	description = "Station 14 ran out of freeze-dried mice. Ship some fresh ones so their janitor doesn't go on strike."
-	reward = CARGO_CRATE_VALUE * 10
-	required_count = 5
-	wanted_types = list(/obj/item/food/deadmouse = TRUE)
+	wanted_types = list(/obj/item/toy = TRUE)
 
 /datum/bounty/item/assistant/paper_bin
 	name = "Paper Bins"
@@ -193,18 +198,86 @@
 	required_count = 5
 	wanted_types = list(/obj/item/paper_bin = TRUE)
 
-
 /datum/bounty/item/assistant/crayons
 	name = "Crayons"
-	description = "Dr Jones' kid ate all our crayons again. Please send us yours."
+	description = "Dr. Jones's kid ate all of our crayons again. Please send us yours."
 	reward = CARGO_CRATE_VALUE * 4
-	required_count = 24
+	required_count = 8
 	wanted_types = list(/obj/item/toy/crayon = TRUE)
 
-/datum/bounty/item/assistant/pens
-	name = "Pens"
-	description = "We are hosting the intergalactic pen balancing competition. We need you to send us some standardized ball point pens."
+/datum/bounty/item/assistant/water_tank
+	name = "Water Tank"
+	description = "We need more water for our hydroponics bay. Find a water tank and ship it out to us."
+	reward = CARGO_CRATE_VALUE * 5
+	wanted_types = list(/obj/structure/reagent_dispensers/watertank = TRUE)
+
+/datum/bounty/item/assistant/pneumatic_cannon
+	name = "Pneumatic Cannon"
+	description = "We're figuring out how hard we can launch supermatter shards out of a pneumatic cannon. Send us one as soon as possible."
 	reward = CARGO_CRATE_VALUE * 4
-	required_count = 10
-	include_subtypes = FALSE
-	wanted_types = list(/obj/item/pen = TRUE)
+	wanted_types = list(/obj/item/pneumatic_cannon/ghetto = TRUE)
+
+/datum/bounty/item/assistant/improvised_shells
+	name = "Junk Shells"
+	description = "Our assistant militia has chewed through all our iron supplies. To stop them making bullets out of station property, we need junk shells, pronto."
+	reward = CARGO_CRATE_VALUE * 4
+	required_count = 5
+	wanted_types = list(/obj/item/ammo_casing/junk = TRUE)
+
+/datum/bounty/item/assistant/flamethrower
+	name = "Flamethrower"
+	description = "We have a moth infestation, send a flamethrower to help deal with the situation."
+	reward = CARGO_CRATE_VALUE * 4
+	wanted_types = list(/obj/item/flamethrower = TRUE)
+
+/datum/bounty/item/assistant/fish
+	name = "Fish"
+	description = "We need fish to populate our aquariums with. Fishes that are dead or bought from cargo will only be paid half as much."
+	reward = CARGO_CRATE_VALUE * 9.5
+	required_count = 4
+	wanted_types = list(/obj/item/fish = TRUE, /obj/item/storage/fish_case = TRUE)
+	///the penalty for shipping dead/bought fish, which can subtract up to half the reward in total.
+	var/shipping_penalty
+
+/datum/bounty/item/assistant/fish/New()
+	..()
+	shipping_penalty = reward * 0.5 / required_count
+
+/datum/bounty/item/assistant/fish/applies_to(obj/shipped)
+	. = ..()
+	if(!.)
+		return
+	var/obj/item/fish/fishie = shipped
+	if(istype(shipped, /obj/item/storage/fish_case))
+		fishie = locate() in shipped
+		if(!fishie || !is_type_in_typecache(fishie, wanted_types))
+			return FALSE
+	return can_ship_fish(fishie)
+
+/datum/bounty/item/assistant/fish/proc/can_ship_fish(obj/item/fish/fishie)
+	return TRUE
+
+/datum/bounty/item/assistant/fish/ship(obj/shipped)
+	. = ..()
+	if(!.)
+		return
+	var/obj/item/fish/fishie = shipped
+	if(istype(shipped, /obj/item/storage/fish_case))
+		fishie = locate() in shipped
+	if(fishie.status == FISH_DEAD || HAS_TRAIT(fishie, TRAIT_FISH_LOW_PRICE))
+		reward -= shipping_penalty
+
+///A subtype of the fish bounty that requires fish with a specific fluid type
+/datum/bounty/item/assistant/fish/fluid
+	reward = CARGO_CRATE_VALUE * 12
+	///The required fluid type of the fish for it to be shipped
+	var/fluid_type
+
+/datum/bounty/item/assistant/fish/fluid/New()
+	..()
+	fluid_type = pick(AQUARIUM_FLUID_FRESHWATER, AQUARIUM_FLUID_SALTWATER, AQUARIUM_FLUID_SULPHWATEVER)
+	name = "[fluid_type] Fish"
+	description = "We need [LOWER_TEXT(fluid_type)] fish to populate our aquariums with. Fishes that are dead or bought from cargo will only be paid half as much."
+
+/datum/bounty/item/assistant/fish/fluid/can_ship_fish(obj/item/fish/fishie)
+	return (fluid_type in GLOB.fish_compatible_fluid_types[fishie.required_fluid_type])

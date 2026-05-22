@@ -6,13 +6,15 @@
 	key = STRIPPABLE_ITEM_BACK
 	item_slot = ITEM_SLOT_BACK
 
-/datum/strippable_item/mob_item_slot/back/get_alternate_action(atom/source, mob/user)
-	return get_strippable_alternate_action_internals(get_item(source), source)
+/datum/strippable_item/mob_item_slot/back/get_alternate_actions(atom/source, mob/user, obj/item/item)
+	. = ..()
+	. += get_strippable_alternate_action_internals(item, source)
 
-/datum/strippable_item/mob_item_slot/back/alternate_action(atom/source, mob/user)
+/datum/strippable_item/mob_item_slot/back/perform_alternate_action(atom/source, mob/user, action_key, obj/item/item)
 	if(!..())
 		return
-	strippable_alternate_action_internals(get_item(source), source, user)
+	if(action_key in get_strippable_alternate_action_internals(item, source))
+		strippable_alternate_action_internals(item, source, user)
 
 /datum/strippable_item/mob_item_slot/mask
 	key = STRIPPABLE_ITEM_MASK
@@ -55,7 +57,7 @@
 /// A strippable item for a hand
 /datum/strippable_item/hand
 	// Putting dangerous clothing in our hand is fine.
-	warn_dangerous_clothing = FALSE
+	show_visible_message = FALSE
 
 	/// Which hand?
 	var/hand_index
@@ -93,7 +95,7 @@
 
 	var/mob/mob_source = source
 
-	if (!do_mob(user, source, equipping.equip_delay_other))
+	if (!do_after(user, equipping.equip_delay_other, source))
 		return FALSE
 
 	if (!mob_source.can_put_in_hand(equipping, hand_index))
@@ -130,8 +132,8 @@
 
 /datum/strippable_item/hand/left
 	key = STRIPPABLE_ITEM_LHAND
-	hand_index = 1
+	hand_index = LEFT_HANDS
 
 /datum/strippable_item/hand/right
 	key = STRIPPABLE_ITEM_RHAND
-	hand_index = 2
+	hand_index = RIGHT_HANDS

@@ -10,7 +10,7 @@ GLOBAL_PROTECT(href_token)
 #define RESULT_2FA_ID 2
 
 /datum/admins
-	var/datum/admin_rank/rank
+	var/list/datum/admin_rank/ranks
 
 	var/target
 	var/name = "nobody's admin datum (no rank)" //Makes for better runtimes
@@ -21,17 +21,26 @@ GLOBAL_PROTECT(href_token)
 
 	var/spamcooldown = 0
 
-	var/admincaster_screen = 0 //TODO: remove all these 5 variables, they are completly unacceptable
-	var/datum/newscaster/feed_message/admincaster_feed_message = new /datum/newscaster/feed_message
-	var/datum/newscaster/wanted_message/admincaster_wanted_message = new /datum/newscaster/wanted_message
-	var/datum/newscaster/feed_channel/admincaster_feed_channel = new /datum/newscaster/feed_channel
+	///Randomly generated signature used for security records authorization name. Not code security critical
 	var/admin_signature
 
+	/// Code security critcal token used for authorizing href topic calls
 	var/href_token
+
+	/// Link from the database pointing to the admin's feedback forum
+	var/cached_feedback_link
 
 	var/deadmined
 
-	var/datum/filter_editor/filteriffic
+	var/datum/filter_editor/filterrific
+	var/datum/particle_editor/particle_test
+	var/datum/colorblind_tester/color_test
+	var/datum/plane_master_debug/plane_debug
+	var/datum/appearance_debugger/appearance_debug
+	var/obj/machinery/computer/libraryconsole/admin_only_do_not_map_in_you_fucker/library_manager
+	var/datum/pathfind_debug/path_debug
+	var/datum/spawn_menu/spawn_menu
+	var/datum/spawnpanel/spawn_panel
 
 	/// Whether or not the user tried to connect, but was blocked by 2FA
 	var/blocked_by_2fa = FALSE
@@ -42,11 +51,11 @@ GLOBAL_PROTECT(href_token)
 	/// A lazylist of tagged datums, for quick reference with the View Tags verb
 	var/list/tagged_datums
 
-/datum/admins/New(datum/admin_rank/R, ckey, force_active = FALSE, protected)
+	var/given_profiling = FALSE
+
+/datum/admins/New(list/datum/admin_rank/ranks, ckey, force_active = FALSE, protected)
 	if(IsAdminAdvancedProcCall())
-		var/msg = " has tried to elevate permissions!"
-		message_admins("[key_name_admin(usr)][msg]")
-		log_admin("[key_name(usr)][msg]")
+		alert_to_permissions_elevation_attempt(usr)
 		if (!target) //only del if this is a true creation (and not just a New() proc call), other wise trialmins/coders could abuse this to deadmin other admins
 			QDEL_IN(src, 0)
 			CRASH("Admin proc call creation of admin datum")
@@ -54,54 +63,56 @@ GLOBAL_PROTECT(href_token)
 	if(!ckey)
 		QDEL_IN(src, 0)
 		CRASH("Admin datum created without a ckey")
-	if(!istype(R))
+	if(!istype(ranks))
 		QDEL_IN(src, 0)
-		CRASH("Admin datum created without a rank")
+		CRASH("Admin datum created with invalid ranks: [ranks] ([json_encode(ranks)])")
 	target = ckey
-	name = "[ckey]'s admin datum ([R])"
-	rank = R
+	name = "[ckey]'s admin datum ([join_admin_ranks(ranks)])"
+	src.ranks = ranks
 	admin_signature = "Nanotrasen Officer #[rand(0,9)][rand(0,9)][rand(0,9)]"
 	href_token = GenerateToken()
-	if(!CONFIG_GET(flag/forbid_admin_profiling))
-		if(R.rights & R_DEBUG) //grant profile access, assuming admin profile access is enabled
-			world.SetConfig("APP/admin", ckey, "role=admin")
 	//only admins with +ADMIN start admined
 	if(protected)
 		GLOB.protected_admins[target] = src
-	if (force_active || (R.rights & R_AUTOADMIN))
+	if (force_active || (rank_flags() & R_AUTOADMIN))
 		activate()
 	else
 		deactivate()
 
 /datum/admins/Destroy()
 	if(IsAdminAdvancedProcCall())
-		var/msg = " has tried to elevate permissions!"
-		message_admins("[key_name_admin(usr)][msg]")
-		log_admin("[key_name(usr)][msg]")
+		alert_to_permissions_elevation_attempt(usr)
 		return QDEL_HINT_LETMELIVE
-	. = ..()
+	QDEL_NULL(path_debug)
+	return ..()
+
+/datum/admins/can_vv_get(var_name)
+	if(var_name == NAMEOF(src, href_token))
+		return FALSE
+	return ..()
 
 /datum/admins/proc/activate()
 	if(IsAdminAdvancedProcCall())
-		var/msg = " has tried to elevate permissions!"
-		message_admins("[key_name_admin(usr)][msg]")
-		log_admin("[key_name(usr)][msg]")
+		alert_to_permissions_elevation_attempt(usr)
 		return
 	GLOB.deadmins -= target
 	GLOB.admin_datums[target] = src
 	deadmined = FALSE
+	plane_debug = new(src)
+	appearance_debug = new(src)
 	if (GLOB.directory[target])
 		associate(GLOB.directory[target]) //find the client for a ckey if they are connected and associate them with us
 
 
 /datum/admins/proc/deactivate()
 	if(IsAdminAdvancedProcCall())
-		var/msg = " has tried to elevate permissions!"
-		message_admins("[key_name_admin(usr)][msg]")
-		log_admin("[key_name(usr)][msg]")
+		alert_to_permissions_elevation_attempt(usr)
 		return
 	GLOB.deadmins[target] = src
 	GLOB.admin_datums -= target
+	QDEL_NULL(plane_debug)
+	QDEL_NULL(appearance_debug)
+	QDEL_NULL(path_debug)
 	deadmined = TRUE
 
 	var/client/client = owner || GLOB.directory[target]
@@ -110,12 +121,12 @@ GLOBAL_PROTECT(href_token)
 		disassociate()
 		add_verb(client, /client/proc/readmin)
 		client.disable_combo_hud()
+		client.update_special_keybinds()
+		client.set_stat_panel()
 
 /datum/admins/proc/associate(client/client)
 	if(IsAdminAdvancedProcCall())
-		var/msg = " has tried to elevate permissions!"
-		message_admins("[key_name_admin(usr)][msg]")
-		log_admin("[key_name(usr)][msg]")
+		alert_to_permissions_elevation_attempt(usr)
 		return
 
 	if(!istype(client))
@@ -135,7 +146,8 @@ GLOBAL_PROTECT(href_token)
 
 		return
 	else if (blocked_by_2fa)
-		sync_lastadminrank(client.ckey, client.key)
+		//previously blocked by 2fa but has now verified, sync the lastadminrank column on the player table.
+		sync_lastadminrank(client.ckey, client.key, src)
 
 	blocked_by_2fa = FALSE
 
@@ -149,36 +161,68 @@ GLOBAL_PROTECT(href_token)
 	owner.add_admin_verbs()
 	remove_verb(owner, /client/proc/readmin)
 	owner.init_verbs() //re-initialize the verb list
+	owner.update_special_keybinds()
 	GLOB.admins |= client
+	client.set_stat_panel()
+
+	try_give_profiling()
 
 /datum/admins/proc/disassociate()
 	if(IsAdminAdvancedProcCall())
-		var/msg = " has tried to elevate permissions!"
-		message_admins("[key_name_admin(usr)][msg]")
-		log_admin("[key_name(usr)][msg]")
+		alert_to_permissions_elevation_attempt(usr)
 		return
 	if(owner)
 		GLOB.admins -= owner
 		owner.remove_admin_verbs()
-		owner.init_verbs()
 		owner.holder = null
 		owner = null
 
+/// Returns the feedback forum thread for the admin holder's owner, as according to DB.
+/datum/admins/proc/feedback_link()
+	// This intentionally does not follow the 10-second maximum TTL rule,
+	// as this can be reloaded through the Reload-Admins verb.
+	if (cached_feedback_link == NO_FEEDBACK_LINK)
+		return null
+
+	if (!isnull(cached_feedback_link))
+		return cached_feedback_link
+
+	if (!SSdbcore.IsConnected())
+		return null
+
+	var/datum/db_query/feedback_query = SSdbcore.NewQuery("SELECT feedback FROM [format_table_name("admin")] WHERE ckey = '[owner.ckey]'")
+
+	if(!feedback_query.Execute())
+		log_sql("Error retrieving feedback link for [src]")
+		qdel(feedback_query)
+		return null
+
+	if(!feedback_query.NextRow())
+		qdel(feedback_query)
+		return null // no feedback link exists
+
+	cached_feedback_link = feedback_query.item[1] || NO_FEEDBACK_LINK
+	qdel(feedback_query)
+
+	if (cached_feedback_link == NO_FEEDBACK_LINK) // Because we don't want to send fake clickable links.
+		return null
+
+	return cached_feedback_link
+
 /datum/admins/proc/check_for_rights(rights_required)
-	if(rights_required && !(rights_required & rank.rights))
+	if(rights_required && !(rights_required & rank_flags()))
 		return FALSE
 	return TRUE
-
 
 /datum/admins/proc/check_if_greater_rights_than_holder(datum/admins/other)
 	if(!other)
 		return TRUE //they have no rights
-	if(rank.rights == R_EVERYTHING)
+	if(rank_flags() == R_EVERYTHING)
 		return TRUE //we have all the rights
 	if(src == other)
 		return TRUE //you always have more rights than yourself
-	if(rank.rights != other.rank.rights)
-		if( (rank.rights & other.rank.rights) == other.rank.rights )
+	if(rank_flags() != other.rank_flags())
+		if( (rank_flags() & other.rank_flags()) == other.rank_flags() )
 			return TRUE //we have all the rights they have and more
 	return FALSE
 
@@ -204,7 +248,7 @@ GLOBAL_PROTECT(href_token)
 		return VALID_2FA_CONNECTION
 
 	if (!SSdbcore.Connect())
-		if (verify_backup_data(client))
+		if (verify_admin_from_local_cache(client) || (client.ckey in GLOB.protected_admins))
 			return VALID_2FA_CONNECTION
 		else
 			return list(FALSE, null)
@@ -221,7 +265,8 @@ GLOBAL_PROTECT(href_token)
 	))
 
 	if (!query.Execute())
-		qdel(query)
+		if (verify_admin_from_local_cache(client) || (client.ckey in GLOB.protected_admins))
+			return VALID_2FA_CONNECTION
 		return list(FALSE, null)
 
 	var/is_valid = FALSE
@@ -291,25 +336,30 @@ GLOBAL_PROTECT(href_token)
 
 #undef ERROR_2FA_REQUEST_PERMISSIONS
 
-/datum/admins/proc/verify_backup_data(client/client)
-	var/backup_file = file2text("data/admins_backup.json")
+/// Returns true if the admin's cid/ip is verified in the local cache
+/datum/admins/proc/verify_admin_from_local_cache(client/client)
+	var/backup_filename = "data/admin_connections/[ckey(client?.ckey)].json"
+	if (!fexists(backup_filename))
+		return FALSE
+	var/backup_file = file2text(backup_filename)
 	if (isnull(backup_file))
-		log_world("Unable to locate admins backup file.")
+		log_world("Unable to load admin connection's last_connections.json backup file.")
 		return FALSE
 
-	var/list/backup_file_json = json_decode(backup_file)
-	var/connections = backup_file_json["connections"]
+	var/list/connections = json_decode(backup_file)
 
-	// This can happen for older admins_backup.json files
 	if (isnull(connections))
 		return FALSE
 
-	var/most_recent_valid_connection = connections[client?.ckey]
-	if (isnull(most_recent_valid_connection))
-		return FALSE
+	for (var/list/connection as anything in connections)
+		if (!islist(connection) || length(connection) < 2)
+			stack_trace("Invalid connection in admin connections backup file for `[client]`.")
+			continue
+		if (connection["cid"] == client?.computer_id && connection["ip"] == client?.address)
+			return TRUE
 
-	return most_recent_valid_connection["cid"] == client?.computer_id \
-		&& most_recent_valid_connection["ip"] == client?.address
+	return FALSE
+
 
 /datum/admins/proc/alert_2fa_necessary(client/client)
 	var/msg = " is trying to join, but needs to verify their ckey."
@@ -329,6 +379,81 @@ GLOBAL_PROTECT(href_token)
 			html = span_admin("[span_prefix("ADMIN 2FA:")] You have the ability to verify [key_name_admin(client)] by using the Permissions Panel."),
 			confidential = TRUE,
 		)
+
+/datum/admins/proc/backup_connections()
+	set waitfor = FALSE
+	if (!length(CONFIG_GET(string/admin_2fa_url)))
+		return
+	var/ckey = ckey(target)
+	if (!ckey)
+		CRASH("can't backup an admin datum assigned to a blank ckey")
+
+	if (!SSdbcore.Connect())
+		return
+
+	var/datum/db_query/query = SSdbcore.NewQuery({"
+		SELECT cid, INET_NTOA(ip) as ip FROM [format_table_name("admin_connections")]
+		WHERE
+			ckey = :ckey AND verification_time IS NOT NULL
+	"}, list(
+		"ckey" = ckey,
+	))
+
+	if (!query.Execute())
+		qdel(query)
+		return
+	var/list/admin_connections = list()
+	while (query.NextRow())
+		admin_connections += LIST_VALUE_WRAP_LISTS(list(
+			"cid" = query.item[1],
+			"ip" = query.item[2],
+		))
+
+	qdel(query)
+
+	if (length(admin_connections) < 1)
+		return
+
+
+	var/backup_file = "data/admin_connections/[ckey].json"
+	if (fexists(backup_file))
+		fdel(backup_file)
+	WRITE_FILE(file(backup_file), json_encode(admin_connections, JSON_PRETTY_PRINT))
+
+/// Get the rank name of the admin
+/datum/admins/proc/rank_names()
+	return join_admin_ranks(ranks)
+
+/// Get the rank flags of the admin
+/datum/admins/proc/rank_flags()
+	var/combined_flags = NONE
+
+	for (var/datum/admin_rank/rank as anything in ranks)
+		combined_flags |= rank.rights
+
+	return combined_flags
+
+/// Get the permissions this admin is allowed to edit on other ranks
+/datum/admins/proc/can_edit_rights_flags()
+	var/combined_flags = NONE
+
+	for (var/datum/admin_rank/rank as anything in ranks)
+		combined_flags |= rank.can_edit_rights
+
+	return combined_flags
+
+/datum/admins/proc/try_give_profiling()
+	if (CONFIG_GET(flag/forbid_admin_profiling))
+		return
+
+	if (given_profiling)
+		return
+
+	if (!(rank_flags() & R_DEBUG))
+		return
+
+	given_profiling = TRUE
+	world.SetConfig("APP/admin", owner.ckey, "role=admin")
 
 /datum/admins/vv_edit_var(var_name, var_value)
 	return FALSE //nice try trialmin

@@ -19,8 +19,8 @@
 	 * By default in byond if you define a proc on datums, that proc will exist on nearly every single type
 	 * from icons to images to atoms to mobs to objs to turfs to areas, it won't however, appear on client
 	 *
-	 * instead by default they act like their own independent type so while you can do istype(icon, /datum)
-	 * and have it return true, you can't do istype(client, /datum), it will always return false.
+	 * instead by default they act like their own independent type so while you can do isdatum(icon)
+	 * and have it return true, you can't do isdatum(client), it will always return false.
 	 *
 	 * This makes writing oo code hard, when you have to consider this extra special case
 	 *
@@ -45,11 +45,11 @@
 	var/datum/click_intercept = null
 	///Time when the click was intercepted
 	var/click_intercept_time = 0
-	///Used for admin AI interaction
-	var/AI_Interact = FALSE
 
 	///Used to cache this client's bans to save on DB queries
 	var/ban_cache = null
+	///If we are currently building this client's ban cache, this var stores the timeofday we started at
+	var/ban_cache_start = 0
 	///Contains the last message sent by this client - used to protect against copy-paste spamming.
 	var/last_message = ""
 	///contins a number of how many times a message identical to last_message was sent.
@@ -70,14 +70,10 @@
 		/////////
 	///Player preferences datum for the client
 	var/datum/preferences/prefs = null
-	///last turn of the controlled mob, I think this is only used by mechs?
-	var/last_turn = 0
 	///Move delay of controlled mob, any keypresses inside this period will persist until the next proper move
 	var/move_delay = 0
 	///The visual delay to use for the current client.Move(), mostly used for making a client based move look like it came from some other slower source
 	var/visual_delay = 0
-	///Current area of the controlled mob
-	var/area = null
 
 		///////////////
 		//SOUND STUFF//
@@ -133,8 +129,6 @@
 	///world.timeofday they connected
 	var/connection_timeofday
 
-	///If the client is currently in player preferences
-	var/inprefs = FALSE
 	///Used for limiting the rate of topic sends by the client to avoid abuse
 	var/list/topiclimiter
 	///Used for limiting the rate of clicks sends by the client to avoid abuse
@@ -144,7 +138,7 @@
 	var/list/credits
 
 	///these persist between logins/logouts during the same round.
-	var/datum/player_details/player_details
+	var/datum/persistent_client/persistent_client
 
 	///Should only be a key-value list of north/south/east/west = atom/movable/screen.
 	var/list/char_render_holders
@@ -162,18 +156,21 @@
 
 	///Autoclick list of two elements, first being the clicked thing, second being the parameters.
 	var/list/atom/selected_target[2]
-	///Autoclick variable referencing the associated item.
-	var/obj/item/active_mousedown_item = null
 	///Used in MouseDrag to preserve the original mouse click parameters
 	var/mouseParams = ""
-	///Used in MouseDrag to preserve the last mouse-entered location.
-	var/mouseLocation = null
-	///Used in MouseDrag to preserve the last mouse-entered object.
-	var/mouseObject = null
+	///Used in MouseDrag to preserve the last mouse-entered location. Weakref
+	var/datum/weakref/mouse_location_ref = null
+	///Used in MouseDrag to preserve the last mouse-entered object. Weakref
+	var/datum/weakref/mouse_object_ref
 	//Middle-mouse-button click dragtime control for aimbot exploit detection.
 	var/middragtime = 0
-	//Middle-mouse-button clicked object control for aimbot exploit detection.
-	var/atom/middragatom
+	//Middle-mouse-button clicked object control for aimbot exploit detection. Weakref
+	var/datum/weakref/middle_drag_atom_ref
+	//When we started the currently active drag
+	var/drag_start = 0
+	//The params we were passed at the start of the drag, in list form
+	var/list/drag_details
+
 
 	/// Messages currently seen by this client
 	var/list/seen_messages
@@ -184,30 +181,22 @@
 	/// our current tab
 	var/stat_tab
 
-	/// whether our browser is ready or not yet
-	var/statbrowser_ready = FALSE
-
 	/// list of all tabs
 	var/list/panel_tabs = list()
-	/// list of tabs containing spells and abilities
-	var/list/spell_tabs = list()
 	///A lazy list of atoms we've examined in the last RECENT_EXAMINE_MAX_WINDOW (default 2) seconds, so that we will call [/atom/proc/examine_more] instead of [/atom/proc/examine] on them when examining
 	var/list/recent_examines
 
-	var/list/parallax_layers
-	var/list/parallax_layers_cached
+	var/atom/movable/screen/parallax_home/parallax_rock
 	///this is the last recorded client eye by SSparallax/fire()
 	var/atom/movable/movingmob
 	var/turf/previous_turf
 	///world.time of when we can state animate()ing parallax again
 	var/dont_animate_parallax
-	///world.time of last parallax update
-	var/last_parallax_shift
-	///ds between parallax updates
-	var/parallax_throttle = 0
+	/// Direction our current area wants to move parallax
 	var/parallax_movedir = 0
-	var/parallax_layers_max = 4
-	var/parallax_animate_timer
+	/// Timers for the area directional animation, one for each layer
+	var/list/parallax_animate_timers
+
 	///Are we locking our movement input?
 	var/movement_locked = FALSE
 
@@ -227,13 +216,13 @@
 	var/last_asset_job = 0
 	var/last_completed_asset_job = 0
 
-	/// rate limiting for the crew manifest
-	var/crew_manifest_delay
-
 	/// A buffer of currently held keys.
 	var/list/keys_held = list()
 	/// A buffer for combinations such of modifiers + keys (ex: CtrlD, AltE, ShiftT). Format: `"key"` -> `"combo"` (ex: `"D"` -> `"CtrlD"`)
 	var/list/key_combos_held = list()
+	/// The direction we WANT to move, based off our keybinds
+	/// Will be udpated to be the actual direction later on
+	var/intended_direction = NONE
 	/*
 	** These next two vars are to apply movement for keypresses and releases made while move delayed.
 	** Because discarding that input makes the game less responsive.
@@ -251,3 +240,23 @@
 
 	/// Whether or not this client has the combo HUD enabled
 	var/combo_hud_enabled = FALSE
+
+	/// If this client has been fully initialized or not
+	var/fully_created = FALSE
+
+	/// Does this client have typing indicators enabled?
+	var/typing_indicators = FALSE
+
+	/// Loot panel for the client
+	var/datum/lootpanel/loot_panel
+
+	///Which ambient sound this client is currently being provided.
+	var/current_ambient_sound
+
+	/// The DPI scale of the client. 1 is equivalent to 100% window scaling, 2 will be 200% window scaling
+	var/window_scaling
+
+	var/datum/tgui_window/stat_panel
+
+	/// OOC colour of the clients messages.
+	var/ooc_colour = null

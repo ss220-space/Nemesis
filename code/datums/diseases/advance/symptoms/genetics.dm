@@ -1,23 +1,16 @@
-/*
-//////////////////////////////////////
-
-DNA Saboteur
-
-	Very noticable.
-	Lowers resistance tremendously.
-	No changes to stage speed.
-	Decreases transmittablity tremendously.
-	Fatal Level.
-
-Bonus
-	Cleans the DNA of a person and then randomly gives them a trait.
-
-//////////////////////////////////////
+/*DNA Saboteur
+ * Lowers stealth
+ * Lowers resistance greatly
+ * No change to stage speed
+ * Decreases transmissibility greatly
+ * Fatal level
+ * Bonus: Cleans the DNA of a person and then randomly gives them a trait.
 */
 
 /datum/symptom/genetic_mutation
 	name = "Dormant DNA Activator"
 	desc = "The virus bonds with the DNA of the host, activating random dormant mutations within their DNA. When the virus is cured, the host's genetic alterations are undone."
+	illness = "Lycanthropy"
 	stealth = -2
 	resistance = -3
 	stage_speed = 0
@@ -27,6 +20,8 @@ Bonus
 	base_message_chance = 50
 	symptom_delay_min = 30
 	symptom_delay_max = 60
+	symptom_cure = /datum/reagent/acetaldehyde
+	cure_color = "orange"
 	var/excludemuts = NONE
 	var/no_reset = FALSE
 	var/mutadone_proof = NONE
@@ -51,17 +46,22 @@ Bonus
 	if(A.totalResistance() >= 14) //one does not simply escape Nurgle's grasp
 		no_reset = TRUE
 
-/datum/symptom/genetic_mutation/Activate(datum/disease/advance/A)
+/datum/symptom/genetic_mutation/Activate(datum/disease/advance/disease)
 	. = ..()
 	if(!.)
 		return
-	var/mob/living/carbon/C = A.affected_mob
-	if(!C.has_dna())
+	var/mob/living/carbon/carbon = disease.affected_mob
+	if(!carbon.has_dna())
 		return
-	switch(A.stage)
+	switch(disease.stage)
 		if(4, 5)
-			to_chat(C, span_warning("[pick("Your skin feels itchy.", "You feel light headed.")]"))
-			C.easy_random_mutate((NEGATIVE | MINOR_NEGATIVE | POSITIVE) - excludemuts, TRUE, TRUE, TRUE, mutadone_proof)
+			to_chat(carbon, span_warning("[pick("Your skin feels itchy.", "You feel light headed.")]"))
+			var/datum/mutation/mutation = carbon.get_random_mutation_path((NEGATIVE|MINOR_NEGATIVE|POSITIVE) & ~excludemuts)
+			if(!mutation)
+				return
+			carbon.dna.add_mutation(mutation, (mutation.quality & mutadone_proof) ? MUTATION_SOURCE_GENE_SYMPTOM : MUTATION_SOURCE_ACTIVATED)
+			var/datum/mutation/given_mutation = carbon.dna.get_mutation(mutation)
+			given_mutation?.scrambled = TRUE
 
 /datum/symptom/genetic_mutation/End(datum/disease/advance/A)
 	. = ..()
@@ -70,4 +70,4 @@ Bonus
 	if(!no_reset)
 		var/mob/living/carbon/M = A.affected_mob
 		if(M.has_dna())
-			M.dna.remove_all_mutations(list(MUT_NORMAL, MUT_EXTRA), FALSE)
+			M.dna.remove_all_mutations(list(MUTATION_SOURCE_GENE_SYMPTOM, MUTATION_SOURCE_ACTIVATED))

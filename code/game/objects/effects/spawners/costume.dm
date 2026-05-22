@@ -2,22 +2,21 @@
 	name = "costume spawner"
 	icon = 'icons/hud/screen_gen.dmi'
 	icon_state = "x2"
-	color = "#00FF00"
+	color = COLOR_VIBRANT_LIME
 
 	var/list/items
 
 /obj/effect/spawner/costume/Initialize(mapload)
-	..()
+	. = ..()
 	if(items?.len)
 		for(var/path in items)
 			new path(loc)
-	return INITIALIZE_HINT_QDEL
 
 /obj/effect/spawner/costume/chicken
 	name = "chicken costume spawner"
 	items = list(
-		/obj/item/clothing/suit/chickensuit,
-		/obj/item/clothing/head/chicken,
+		/obj/item/clothing/suit/costume/chickensuit,
+		/obj/item/clothing/head/costume/chicken,
 		/obj/item/food/egg,
 	)
 
@@ -31,7 +30,7 @@
 /obj/effect/spawner/costume/madscientist
 	name = "mad scientist costume spawner"
 	items = list(
-		/obj/item/clothing/under/rank/captain/suit,
+		/obj/item/clothing/under/costume/captain,
 		/obj/item/clothing/head/flatcap,
 		/obj/item/clothing/suit/toggle/labcoat/mad,
 	)
@@ -39,17 +38,17 @@
 /obj/effect/spawner/costume/elpresidente
 	name = "el presidente costume spawner"
 	items = list(
-		/obj/item/clothing/under/rank/captain/suit,
+		/obj/item/clothing/under/costume/captain,
 		/obj/item/clothing/head/flatcap,
-		/obj/item/clothing/mask/cigarette/cigar/havana,
+		/obj/item/cigarette/cigar/havana,
 		/obj/item/clothing/shoes/jackboots,
 	)
 
 /obj/effect/spawner/costume/nyangirl
 	name = "nyangirl costume spawner"
 	items = list(
-		/obj/item/clothing/under/costume/schoolgirl,
-		/obj/item/clothing/head/kitty,
+		/obj/item/clothing/under/costume/seifuku,
+		/obj/item/clothing/head/costume/kitty,
 		/obj/item/clothing/glasses/blindfold,
 	)
 
@@ -66,15 +65,16 @@
 	name = "butler costume spawner"
 	items = list(
 		/obj/item/clothing/accessory/waistcoat,
-		/obj/item/clothing/under/suit/black,
-		/obj/item/clothing/head/that,
+		/obj/item/clothing/under/costume/buttondown/slacks/service,
+		/obj/item/clothing/neck/tie/black,
+		/obj/item/clothing/head/hats/tophat,
 	)
 
 /obj/effect/spawner/costume/referee
 	name = "referee costume spawner"
 	items = list(
 		/obj/item/clothing/mask/whistle,
-		/obj/item/clothing/gloves/color/latex,
+		/obj/item/clothing/gloves/latex,
 		/obj/item/clothing/shoes/laceup,
 		/obj/item/clothing/head/soft/black,
 		/obj/item/clothing/under/costume/referee,
@@ -95,7 +95,7 @@
 		/obj/effect/spawner/random/clothing/bowler_or_that,
 		/obj/item/clothing/shoes/sneakers/black,
 		/obj/item/cane,
-		/obj/item/clothing/under/suit/sl,
+		/obj/item/clothing/under/costume/buttondown/slacks/service,
 		/obj/item/clothing/mask/fakemoustache,
 	)
 
@@ -103,7 +103,7 @@
 	name = "plague doctor costume spawner"
 	items = list(
 		/obj/item/clothing/suit/bio_suit/plaguedoctorsuit,
-		/obj/item/clothing/head/plaguedoctorhat,
+		/obj/item/clothing/head/bio_hood/plague,
 		/obj/item/clothing/mask/gas/plaguedoctor,
 	)
 
@@ -121,7 +121,7 @@
 		/obj/item/clothing/suit/toggle/owlwings/griffinwings,
 		/obj/item/clothing/shoes/griffin,
 		/obj/item/clothing/under/costume/griffin,
-		/obj/item/clothing/head/griffin,
+		/obj/item/clothing/head/costume/griffin,
 	)
 
 /obj/effect/spawner/costume/waiter
@@ -136,7 +136,7 @@
 	name = "pirate costume spawner"
 	items = list(
 		/obj/item/clothing/under/costume/pirate,
-		/obj/item/clothing/suit/pirate,
+		/obj/item/clothing/suit/costume/pirate,
 		/obj/effect/spawner/random/clothing/pirate_or_bandana,
 		/obj/item/clothing/glasses/eyepatch,
 	)
@@ -145,13 +145,13 @@
 	name = "commie costume spawner"
 	items = list(
 		/obj/item/clothing/under/costume/soviet,
-		/obj/item/clothing/head/ushanka,
+		/obj/item/clothing/head/costume/ushanka,
 	)
 
 /obj/effect/spawner/costume/imperium_monk
 	name = "imperium monk costume spawner"
 	items = list(
-		/obj/item/clothing/suit/imperium_monk,
+		/obj/item/clothing/suit/costume/imperium_monk,
 		/obj/effect/spawner/random/clothing/twentyfive_percent_cyborg_mask,
 	)
 
@@ -167,11 +167,19 @@
 		/obj/item/clothing/suit/wizrobe/marisa/fake,
 	)
 
+/obj/effect/spawner/costume/tape_wizard
+	name = "tape wizard costume spawner"
+	items = list(
+		/obj/item/clothing/head/wizard/tape/fake,
+		/obj/item/clothing/suit/wizrobe/tape/fake,
+		/obj/item/staff/tape,
+	)
+
 /obj/effect/spawner/costume/cutewitch
 	name = "cute witch costume spawner"
 	items = list(
 		/obj/item/clothing/under/dress/sundress,
-		/obj/item/clothing/head/witchwig,
+		/obj/item/clothing/head/costume/witchwig,
 		/obj/item/staff/broom,
 	)
 
@@ -202,7 +210,7 @@
 	name = "black mafia outfit spawner"
 	items = list(
 		/obj/item/clothing/head/fedora,
-		/obj/item/clothing/under/suit/blacktwopiece,
+		/obj/item/clothing/under/suit/black,
 		/obj/item/clothing/shoes/laceup,
 	)
 

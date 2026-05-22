@@ -24,7 +24,8 @@ GLOBAL_LIST_INIT(dye_registry, list(
 		DYE_REDCOAT = /obj/item/clothing/under/costume/redcoat,
 		DYE_PRISONER = /obj/item/clothing/under/rank/prisoner,
 		DYE_SYNDICATE = /obj/item/clothing/under/syndicate,
-		DYE_CENTCOM = /obj/item/clothing/under/rank/centcom/commander
+		DYE_CENTCOM = /obj/item/clothing/under/rank/centcom/commander,
+		DYE_COSMIC = /obj/item/clothing/under/rank/station_trait/human_ai,
 	),
 	DYE_REGISTRY_JUMPSKIRT = list(
 		DYE_RED = /obj/item/clothing/under/color/jumpskirt/red,
@@ -60,15 +61,25 @@ GLOBAL_LIST_INIT(dye_registry, list(
 		DYE_MIME = /obj/item/clothing/gloves/color/white,
 		DYE_CLOWN = /obj/item/clothing/gloves/color/rainbow,
 		DYE_QM = /obj/item/clothing/gloves/color/brown,
-		DYE_CAPTAIN = /obj/item/clothing/gloves/color/captain,
+		DYE_CAPTAIN = /obj/item/clothing/gloves/captain,
 		DYE_HOP = /obj/item/clothing/gloves/color/grey,
-		DYE_HOS = /obj/item/clothing/gloves/color/black,
-		DYE_CE = /obj/item/clothing/gloves/color/chief_engineer,
+		DYE_HOS = /obj/item/clothing/gloves/color/black/security,
+		DYE_CE = /obj/item/clothing/gloves/chief_engineer,
 		DYE_RD = /obj/item/clothing/gloves/color/grey,
-		DYE_CMO = /obj/item/clothing/gloves/color/latex/nitrile,
+		DYE_CMO = /obj/item/clothing/gloves/latex/nitrile,
 		DYE_REDCOAT = /obj/item/clothing/gloves/color/white,
 		DYE_SYNDICATE = /obj/item/clothing/gloves/combat,
 		DYE_CENTCOM = /obj/item/clothing/gloves/combat
+	),
+	DYE_REGISTRY_BANDANA = list(
+		DYE_RED = /obj/item/clothing/mask/bandana/red,
+		DYE_ORANGE = /obj/item/clothing/mask/bandana/orange,
+		DYE_YELLOW = /obj/item/clothing/mask/bandana/gold,
+		DYE_GREEN = /obj/item/clothing/mask/bandana/green,
+		DYE_BLUE = /obj/item/clothing/mask/bandana/blue,
+		DYE_PURPLE = /obj/item/clothing/mask/bandana/purple,
+		DYE_BLACK = /obj/item/clothing/mask/bandana/black,
+		DYE_WHITE = /obj/item/clothing/mask/bandana/white
 	),
 	DYE_REGISTRY_SNEAKERS = list(
 		DYE_RED = /obj/item/clothing/shoes/sneakers/red,
@@ -155,7 +166,11 @@ GLOBAL_LIST_INIT(dye_registry, list(
 	DYE_LAWYER_SPECIAL = list(
 		DYE_COSMIC = /obj/item/clothing/under/rank/civilian/lawyer/galaxy,
 		DYE_SYNDICATE = /obj/item/clothing/under/rank/civilian/lawyer/galaxy/red
-	)
+	),
+	DYE_LAWYER_SPECIAL_SKIRT = list(
+		DYE_COSMIC = /obj/item/clothing/under/rank/civilian/lawyer/galaxy/skirt,
+		DYE_SYNDICATE = /obj/item/clothing/under/rank/civilian/lawyer/galaxy/red/skirt
+	),
 ))
 
 /obj/machinery/washing_machine
@@ -165,28 +180,45 @@ GLOBAL_LIST_INIT(dye_registry, list(
 	icon_state = "wm_1_0"
 	density = TRUE
 	state_open = TRUE
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 5, /datum/material/glass = SHEET_MATERIAL_AMOUNT)
+	circuit = /obj/item/circuitboard/machine/washing_machine
 	var/busy = FALSE
 	var/bloody_mess = FALSE
 	var/obj/item/color_source
-	var/max_wash_capacity = 5
+	/// The max amount of items that can be washed per load
+	var/max_wash_capacity
+	/// The time it takes to wash a load of laundry
+	var/time_to_wash
+	/// The current number of items inserted
+	var/total_load = 0
 
 /obj/machinery/washing_machine/examine(mob/user)
 	. = ..()
 	if(!busy)
 		. += span_notice("<b>Right-click</b> with an empty hand to start a wash cycle.")
 
-/obj/machinery/washing_machine/process(delta_time)
+/obj/machinery/washing_machine/RefreshParts()
+	. = ..()
+	var/total_volume = 0
+	for(var/obj/item/reagent_containers/cup/beaker/beaker in component_parts)
+		total_volume += beaker.reagents.maximum_volume
+	max_wash_capacity = floor(total_volume/20)
+
+	for(var/datum/stock_part/servo/servo in component_parts)
+		time_to_wash = 20 SECONDS / servo.tier
+
+/obj/machinery/washing_machine/process(seconds_per_tick)
 	if(!busy)
 		animate(src, transform=matrix(), time=2)
 		return PROCESS_KILL
 	if(anchored)
-		if(DT_PROB(2.5, delta_time))
+		if(SPT_PROB(2.5, seconds_per_tick))
 			var/matrix/M = new
 			M.Translate(rand(-1, 1), rand(0, 1))
 			animate(src, transform=M, time=1)
 			animate(transform=matrix(), time=1)
 	else
-		if(DT_PROB(0.5, delta_time))
+		if(SPT_PROB(0.5, seconds_per_tick))
 			step(src, pick(GLOB.cardinals))
 		var/matrix/M = new
 		M.Translate(rand(-3, 3), rand(-1, 3))
@@ -197,13 +229,13 @@ GLOBAL_LIST_INIT(dye_registry, list(
 	if(!busy && bloody_mess && (clean_types & CLEAN_TYPE_BLOOD))
 		bloody_mess = FALSE
 		update_appearance()
-		. = TRUE
+		. |= COMPONENT_CLEANED
 
-/obj/machinery/washing_machine/proc/wash_cycle()
+/obj/machinery/washing_machine/proc/wash_cycle(mob/user)
 	for(var/X in contents)
 		var/atom/movable/AM = X
 		AM.wash(CLEAN_WASH)
-		AM.machine_wash(src)
+		AM.machine_wash(src, user)
 
 	//if we had the ability to brainwash, remove that now
 	REMOVE_TRAIT(src, TRAIT_BRAINWASHING, SKILLCHIP_TRAIT)
@@ -212,34 +244,41 @@ GLOBAL_LIST_INIT(dye_registry, list(
 		qdel(color_source)
 		color_source = null
 	update_appearance()
+	use_energy(active_power_usage)
 
 /obj/item/proc/dye_item(dye_color, dye_key_override)
-	var/dye_key_selector = dye_key_override ? dye_key_override : dying_key
-	if(undyeable)
-		return FALSE
-	if(!dye_key_selector)
+	var/dye_key_selector = dye_key_override || dying_key
+	if(undyeable || !dye_key_selector)
 		return FALSE
 	if(!GLOB.dye_registry[dye_key_selector])
-		log_runtime("Item just tried to be dyed with an invalid registry key: [dye_key_selector]")
+		log_runtime("Item [type] just tried to be dyed with an invalid registry key: [dye_key_selector]")
 		return FALSE
 	var/obj/item/target_type = GLOB.dye_registry[dye_key_selector][dye_color]
 	if(!target_type)
 		return FALSE
-	if(initial(target_type.greyscale_config) && initial(target_type.greyscale_colors))
-		set_greyscale(
-			colors=initial(target_type.greyscale_colors),
-			new_config=initial(target_type.greyscale_config),
-			new_worn_config=initial(target_type.greyscale_config_worn),
-			new_inhand_left=initial(target_type.greyscale_config_inhand_left),
-			new_inhand_right=initial(target_type.greyscale_config_inhand_right)
-		)
+
+	if(initial(target_type.greyscale_config) || initial(target_type.greyscale_colors))
+		var/list/new_greyscale_args = list()
+
+		if(initial(target_type.greyscale_config))
+			new_greyscale_args["new_config"] = initial(target_type.greyscale_config)
+		if(initial(target_type.greyscale_config_worn))
+			new_greyscale_args["new_worn_config"] = initial(target_type.greyscale_config_worn)
+		if(initial(target_type.greyscale_config_inhand_left))
+			new_greyscale_args["new_inhand_left"] = initial(target_type.greyscale_config_inhand_left)
+		if(initial(target_type.greyscale_config_inhand_right))
+			new_greyscale_args["new_inhand_right"] = initial(target_type.greyscale_config_inhand_right)
+
+		if(new_greyscale_args.len)
+			new_greyscale_args["colors"] = initial(target_type.greyscale_colors) || COLOR_WHITE
+			set_greyscale(arglist(new_greyscale_args))
 	else
 		icon = initial(target_type.icon)
 		lefthand_file = initial(target_type.lefthand_file)
 		righthand_file = initial(target_type.righthand_file)
 		worn_icon = initial(target_type.worn_icon)
 
-	icon_state = initial(target_type.icon_state)
+	icon_state = initial(target_type.post_init_icon_state) || initial(target_type.icon_state)
 	inhand_icon_state = initial(target_type.inhand_icon_state)
 	worn_icon_state = initial(target_type.worn_icon_state)
 	inhand_x_dimension = initial(target_type.inhand_x_dimension)
@@ -260,9 +299,16 @@ GLOBAL_LIST_INIT(dye_registry, list(
 	new /obj/item/food/meat/slab/corgi(loc)
 	qdel(src)
 
-/mob/living/simple_animal/pet/machine_wash(obj/machinery/washing_machine/washer)
+/mob/living/basic/pet/machine_wash(obj/machinery/washing_machine/washer)
 	washer.bloody_mess = TRUE
+	investigate_log("has been gibbed by a washing machine.", INVESTIGATE_DEATHS)
 	gib()
+
+/mob/living/carbon/human/machine_wash(obj/machinery/washing_machine/washer, mob/user)
+	adjust_wet_stacks(8)
+	adjust_disgust(40, DISGUST_LEVEL_VERYDISGUSTED)
+	adjust_oxy_loss(12)
+	log_combat(user, src, "machine washed (oxy)")
 
 /obj/item/machine_wash(obj/machinery/washing_machine/washer)
 	if(washer.color_source)
@@ -273,24 +319,16 @@ GLOBAL_LIST_INIT(dye_registry, list(
 	if(.)
 		var/obj/item/clothing/under/U = .
 		can_adjust = initial(U.can_adjust)
-		if(!can_adjust && adjusted) //we deadjust the uniform if it's now unadjustable
+		if(!can_adjust && adjusted == ALT_STYLE) //we deadjust the uniform if it's now unadjustable
 			toggle_jumpsuit_adjust()
 
-/obj/item/clothing/under/machine_wash(obj/machinery/washing_machine/washer)
-	freshly_laundered = TRUE
-	addtimer(VARSET_CALLBACK(src, freshly_laundered, FALSE), 5 MINUTES, TIMER_UNIQUE | TIMER_OVERRIDE)
-	..()
-
-/obj/item/clothing/head/mob_holder/machine_wash(obj/machinery/washing_machine/washer)
+/obj/item/mob_holder/machine_wash(obj/machinery/washing_machine/washer)
 	..()
 	held_mob.machine_wash(washer)
 
-/obj/item/clothing/shoes/sneakers/machine_wash(obj/machinery/washing_machine/washer)
-	if(chained)
-		chained = FALSE
-		slowdown = SHOES_SLOWDOWN
-		new /obj/item/restraints/handcuffs(loc)
-	..()
+/obj/item/clothing/shoes/sneakers/orange/machine_wash(obj/machinery/washing_machine/washer)
+	attached_cuffs?.forceMove(loc)
+	return ..()
 
 /obj/machinery/washing_machine/relaymove(mob/living/user, direction)
 	container_resist_act(user)
@@ -308,7 +346,7 @@ GLOBAL_LIST_INIT(dye_registry, list(
 		icon_state = "wm_[state_open]_blood"
 		return ..()
 
-	var/full = contents.len ? 1 : 0
+	var/full = total_load ? 1 : 0
 	icon_state = "wm_[state_open]_[full]"
 	return ..()
 
@@ -317,36 +355,39 @@ GLOBAL_LIST_INIT(dye_registry, list(
 	if(panel_open)
 		. += "wm_panel"
 
-/obj/machinery/washing_machine/attackby(obj/item/W, mob/living/user, params)
-	if(panel_open && !busy && default_unfasten_wrench(user, W))
-		return
+/obj/machinery/washing_machine/wrench_act(mob/living/user, obj/item/tool)
+	if(!panel_open || busy)
+		return NONE
+	default_unfasten_wrench(user, tool)
+	return ITEM_INTERACT_SUCCESS
 
-	if(default_deconstruction_screwdriver(user, null, null, W))
-		update_appearance()
-		return
+/obj/machinery/washing_machine/screwdriver_act(mob/living/user, obj/item/tool)
+	if(state_open)
+		return NONE
 
-	else if(!user.combat_mode)
-		if (!state_open)
-			to_chat(user, span_warning("Open the door first!"))
-			return TRUE
+	return default_deconstruction_screwdriver(user, tool)
 
-		if(bloody_mess)
-			to_chat(user, span_warning("[src] must be cleaned up first!"))
-			return TRUE
+/obj/machinery/washing_machine/item_interaction(mob/living/user, obj/item/item, list/modifiers)
+	if(user.combat_mode)
+		return NONE
+	if (!state_open)
+		to_chat(user, span_warning("Open the door first!"))
+		return ITEM_INTERACT_BLOCKING
+	if(bloody_mess)
+		to_chat(user, span_warning("[src] must be cleaned up first!"))
+		return ITEM_INTERACT_BLOCKING
+	if(total_load >= max_wash_capacity)
+		to_chat(user, span_warning("The washing machine is full!"))
+		return ITEM_INTERACT_BLOCKING
+	if(!user.transferItemToLoc(item, src))
+		to_chat(user, span_warning("\The [item] is stuck to your hand, you cannot put it in the washing machine!"))
+		return ITEM_INTERACT_BLOCKING
+	if(item.dye_color)
+		color_source = item
+	total_load++
+	update_appearance()
+	return ITEM_INTERACT_SUCCESS
 
-		if(contents.len >= max_wash_capacity)
-			to_chat(user, span_warning("The washing machine is full!"))
-			return TRUE
-
-		if(!user.transferItemToLoc(W, src))
-			to_chat(user, span_warning("\The [W] is stuck to your hand, you cannot put it in the washing machine!"))
-			return TRUE
-		if(W.dye_color)
-			color_source = W
-		update_appearance()
-
-	else
-		return ..()
 
 /obj/machinery/washing_machine/attack_hand(mob/living/user, list/modifiers)
 	. = ..()
@@ -357,12 +398,23 @@ GLOBAL_LIST_INIT(dye_registry, list(
 		return
 
 	if(user.pulling && isliving(user.pulling))
-		var/mob/living/L = user.pulling
-		if(L.buckled || L.has_buckled_mobs())
+		var/mob/living/victim = user.pulling
+		if(victim.buckled || victim.has_buckled_mobs())
 			return
 		if(state_open)
-			if(istype(L, /mob/living/simple_animal/pet))
-				L.forceMove(src)
+			if(istype(victim, /mob/living/basic/pet))
+				victim.forceMove(src)
+				update_appearance()
+			else if(ishuman(victim))
+				if(user.grab_state < GRAB_AGGRESSIVE)
+					balloon_alert(user, "grab harder!")
+					return
+
+				victim.visible_message(span_danger("[user] is trying to force [victim] into [src]!"))
+				log_game("[key_name_and_tag(user)] is forcing [key_name_and_tag(victim)] into a washing machine")
+				if(!do_after(user, 3 SECONDS, target = src, timed_action_flags = IGNORE_HELD_ITEM, extra_checks = CALLBACK(src, PROC_REF(check_aggro_grab), user)))
+					return
+				victim.forceMove(src)
 				update_appearance()
 		return
 
@@ -372,12 +424,15 @@ GLOBAL_LIST_INIT(dye_registry, list(
 		state_open = FALSE //close the door
 		update_appearance()
 
+/obj/machinery/washing_machine/proc/check_aggro_grab(mob/living/user)
+	return user.grab_state >= GRAB_AGGRESSIVE
+
 /obj/machinery/washing_machine/attack_hand_secondary(mob/user, modifiers)
 	. = ..()
 	if(. == SECONDARY_ATTACK_CANCEL_ATTACK_CHAIN)
 		return
 
-	if(!user.canUseTopic(src, !issilicon(user)))
+	if(!user.can_perform_action(src, ALLOW_SILICON_REACH))
 		return SECONDARY_ATTACK_CONTINUE_CHAIN
 	if(busy)
 		to_chat(user, span_warning("[src] is busy!"))
@@ -392,19 +447,18 @@ GLOBAL_LIST_INIT(dye_registry, list(
 	if(HAS_TRAIT(user, TRAIT_BRAINWASHING))
 		ADD_TRAIT(src, TRAIT_BRAINWASHING, SKILLCHIP_TRAIT)
 	update_appearance()
-	addtimer(CALLBACK(src, .proc/wash_cycle), 20 SECONDS)
+	addtimer(CALLBACK(src, PROC_REF(wash_cycle), user), time_to_wash)
 	START_PROCESSING(SSfastprocess, src)
 	return SECONDARY_ATTACK_CANCEL_ATTACK_CHAIN
 
 /obj/machinery/washing_machine/attack_ai_secondary(mob/user, modifiers)
 	return attack_hand_secondary(user, modifiers)
 
-/obj/machinery/washing_machine/deconstruct(disassembled = TRUE)
-	if (!(flags_1 & NODECONSTRUCT_1))
-		new /obj/item/stack/sheet/iron(drop_location(), 2)
-	qdel(src)
+/obj/machinery/washing_machine/on_deconstruction(disassembled)
+	new /obj/item/stack/sheet/iron(drop_location(), 2)
 
-/obj/machinery/washing_machine/open_machine(drop = 1)
-	..()
+/obj/machinery/washing_machine/open_machine(drop = TRUE, density_to_set = FALSE)
+	. = ..()
 	set_density(TRUE) //because machinery/open_machine() sets it to FALSE
 	color_source = null
+	total_load = 0

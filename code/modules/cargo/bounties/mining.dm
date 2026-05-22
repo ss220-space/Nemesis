@@ -1,6 +1,6 @@
 /datum/bounty/item/mining/goliath_steaks
 	name = "Lava-Cooked Goliath Steaks"
-	description = "Admiral Pavlov has gone on hunger strike ever since the canteen started serving only monkey and monkey byproducts. She is demanding lava-cooked Goliath steaks."
+	description = "Admiral Pavlov has gone on hunger strike ever since the canteen started serving only monkey and monkey byproducts. She is demanding lava-cooked goliath steaks."
 	reward = CARGO_CRATE_VALUE * 10
 	required_count = 3
 	wanted_types = list(/obj/item/food/meat/steak/goliath = TRUE)
@@ -32,7 +32,7 @@
 
 /datum/bounty/item/mining/skull_helmet
 	name = "Skull Helmet"
-	description = "Station 42's Head of Security has her birthday tomorrow! We want to suprise her with a fashionable skull helmet."
+	description = "Station 42's Head of Security has her birthday tomorrow! We want to surprise her with a fashionable skull helmet."
 	reward = CARGO_CRATE_VALUE * 8
 	wanted_types = list(/obj/item/clothing/head/helmet/skull = TRUE)
 
@@ -43,9 +43,24 @@
 	required_count = 3
 	wanted_types = list(/obj/item/clothing/accessory/talisman = TRUE)
 
+/datum/bounty/item/mining/watcher_wreath
+	name = "Watcher Wreaths"
+	description = "Station 14's Research Director thinks they're onto a break-through on the cultural icons of some pagan beliefs. Ship them a few watcher wreaths for analysis."
+	include_subtypes = FALSE
+	reward = CARGO_CRATE_VALUE * 15
+	required_count = 3
+	wanted_types = list(/obj/item/clothing/neck/wreath = TRUE)
+
+/datum/bounty/item/mining/icewing_wreath
+	name = "Icewing Wreath"
+	description = "We're getting some....weird messages from Station 14's Research Director. And most of what they said was incoherent. But they apparently want an icewing wreath. Could you send them one?"
+	reward = CARGO_CRATE_VALUE * 30
+	required_count = 1
+	wanted_types = list(/obj/item/clothing/neck/wreath/icewing = TRUE)
+
 /datum/bounty/item/mining/bone_dagger
 	name = "Bone Daggers"
-	description = "Central Command's canteen is undergoing budget cuts. Ship over some bone daggers so our Chef can keep working."
+	description = "Central Command's canteen is undergoing budget cuts. Ship over some bone daggers so our chef can keep working."
 	reward = CARGO_CRATE_VALUE * 10
 	required_count = 3
 	wanted_types = list(/obj/item/knife/combat/bone = TRUE)
@@ -54,7 +69,7 @@
 	name = "Mushroom Bowl"
 	description = "Lieutenant Jeb dropped his favorite mushroom bowl. Cheer him up by shipping a new one, will you?"
 	reward = CARGO_CRATE_VALUE * 15 //5x mushroom shavings
-	wanted_types = list(/obj/item/reagent_containers/glass/bowl/mushroom_bowl = TRUE)
+	wanted_types = list(/obj/item/reagent_containers/cup/bowl/mushroom_bowl = TRUE)
 
 /datum/bounty/item/mining/inocybe_mushroom
 	name = "Mushroom Caps"

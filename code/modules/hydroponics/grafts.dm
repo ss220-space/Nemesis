@@ -5,44 +5,39 @@
 	name = "plant graft"
 	desc = "A carefully cut graft off of a freshly grown plant. Can be grafted onto a plant in order to share unique plant traits onto a plant."
 	w_class = WEIGHT_CLASS_TINY
-	icon = 'icons/obj/hydroponics/equipment.dmi'
+	icon = 'icons/obj/service/hydroponics/equipment.dmi'
 	icon_state = "graft_plant"
 	worn_icon_state = "graft"
 	attack_verb_continuous = list("plants", "vegitizes", "crops", "reaps", "farms")
 	attack_verb_simple = list("plant", "vegitize", "crop", "reap", "farm")
-	///The stored trait taken from the parent plant. Defaults to perenial growth.
-	var/datum/plant_gene/stored_trait
-	///Determines the appearance of the graft. Rudimentary right now so it just picks randomly.
-	var/graft_appearance
-	/// The name of the plant this was taken from.
-	var/parent_name = ""
-	///The lifespan stat of the parent seed when the graft was taken.
-	var/lifespan
-	///The endurance stat of the parent seed when the graft was taken.
-	var/endurance
-	///The production stat of the parent seed when the graft was taken.
-	var/production
-	///The weed_rate stat of the parent seed when the graft was taken.
-	var/weed_rate
-	///The weed_chance stat of the parent seed when the graft was taken.
-	var/weed_chance
-	///The yield stat of the parent seed when the graft was taken.
-	var/yield
+	/// Our internal seed used to modify stats or genes by grafting or passed as our seed when propagating vegetatively,
+	var/obj/item/seeds/plant_dna = /obj/item/seeds/apple
 
-
-/obj/item/graft/Initialize(mapload, datum/plant_gene/trait/trait_path)
+/obj/item/graft/Initialize(mapload, obj/item/seeds/mother_plant)
 	. = ..()
-	//Default gene is repeated harvest.
-	if(trait_path)
-		stored_trait = new trait_path
-	else
-		stored_trait = new /datum/plant_gene/trait/repeated_harvest
+	//create our "plant dna" internal seed from the plant the cuttings are taken from.
+	if(mother_plant)
+		if(ispath(mother_plant))
+			plant_dna = new mother_plant()
+			if(!istype(plant_dna))
+				CRASH("Tried to create a graft using a non-seed path.")
+		else if(istype(mother_plant))
+			plant_dna = mother_plant.Copy()
+		else
+			CRASH("Tried to create a graft using a non-seed reference.")
+
 	icon_state = pick(
 		10 ; "graft_plant" , \
 		5 ; "graft_flower" , \
 		4 ; "graft_mushroom" , \
 		1 ; "graft_doom" )
 
-/obj/item/graft/Destroy()
-	QDEL_NULL(stored_trait)
-	return ..()
+	name += " ([plant_dna.plantname])"
+
+	var/static/list/hovering_item_typechecks = list(
+		/obj/item/plant_analyzer = list(
+			SCREENTIP_CONTEXT_LMB = "Scan graft",
+		),
+	)
+
+	AddElement(/datum/element/contextual_screentip_item_typechecks, hovering_item_typechecks)

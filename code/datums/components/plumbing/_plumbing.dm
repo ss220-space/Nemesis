@@ -1,147 +1,179 @@
 /datum/component/plumbing
 	dupe_mode = COMPONENT_DUPE_ALLOWED
 	///Index with "1" = /datum/ductnet/theductpointingnorth etc. "1" being the num2text from NORTH define
-	var/list/datum/ductnet/ducts = list()
-	///shortcut to our parents' reagent holder
+	var/list/datum/ductnet/ducts
+	///shortcut to our parents' reagent holder. The holder that sends reagents into the pipeline
 	var/datum/reagents/reagents
-	///TRUE if we wanna add proper pipe overlays under our parent object. this is pretty good if i may so so myself
-	var/use_overlays = TRUE
 	///Whether our tile is covered and we should hide our ducts
 	var/tile_covered = FALSE
 	///directions in wich we act as a supplier
-	var/supply_connects
+	var/supply_connects = NONE
 	///direction in wich we act as a demander
-	var/demand_connects
-	///FALSE to pretty much just not exist in the plumbing world so we can be moved, TRUE to go plumbo mode
-	var/active = FALSE
-	///if TRUE connects will spin with the parent object visually and codually, so you can have it work in any direction. FALSE if you want it to be static
-	var/turn_connects = TRUE
+	var/demand_connects = NONE
 	///The layer on which we connect. Don't add multiple. If you want multiple layer connects for some reason you can just add multiple components with different layers
 	var/ducting_layer = DUCT_LAYER_DEFAULT
-	///In-case we don't want the main machine to get the reagents, but perhaps whoever is buckled to it
-	var/recipient_reagents_holder
-	///How do we apply the new reagents to the receiver? Generally doesn't matter, but some stuff, like people, does care if its injected or whatevs
-	var/methods
-	///What color is our demand connect? Also it's not auto-colored so you'll have to make new sprites if its anything other than red, blue, yellow or green
-	var/demand_color = "red"
-	///What color is our supply connect? Also, refrain from pointlessly using non-standard colors unless it's really funny or something
-	var/supply_color = "blue"
+	///What color is our demand connect?
+	var/demand_color = COLOR_RED
+	///What color is our supply connect?
+	var/supply_color = COLOR_BLUE
+	/// How many distinct reagents can we accept at once
+	/// Ex - if this was set to "3", our component would only request the first 3 reagents found, even if more are available
+	var/distinct_reagent_cap = INFINITY
 
-///turn_connects is for wheter or not we spin with the object to change our pipes
-/datum/component/plumbing/Initialize(start=TRUE, _ducting_layer, _turn_connects=TRUE, datum/reagents/custom_receiver)
+	///Extra offset on supply pipe.
+	var/supply_offset = 0
+	///Extra offset on demand pipe.
+	var/demand_offset = 0
+
+/datum/component/plumbing/Initialize(ducting_layer)
 	if(!ismovable(parent))
 		return COMPONENT_INCOMPATIBLE
 
-	if(_ducting_layer)
-		ducting_layer = _ducting_layer
-
-	var/atom/movable/AM = parent
-	if(!AM.reagents && !custom_receiver)
+	var/atom/movable/parent_movable = parent
+	if(!parent_movable.reagents)
 		return COMPONENT_INCOMPATIBLE
 
-	reagents = AM.reagents
-	turn_connects = _turn_connects
+	if(GLOB.plumbing_layer_names["[ducting_layer]"])
+		src.ducting_layer = ducting_layer
 
-	set_recipient_reagents_holder(custom_receiver ? custom_receiver : AM.reagents)
+	ducts = list()
 
-	if(start)
-		//We're registering here because I need to check whether we start active or not, and this is just easier
-		//Should be called after we finished. Done this way because other networks need to finish setting up aswell
-		RegisterSignal(parent, list(COMSIG_COMPONENT_ADDED), .proc/enable)
+	reagents = parent_movable.reagents
+
+	on_parent_dir_change(parent_movable, NONE, parent_movable.dir)
+	if(parent_movable.anchored)
+		if(PERFORM_ALL_TESTS(maptest_log_mapping))
+			var/datum/overlap = ducting_layer_check(parent_movable, ducting_layer)
+			if(!isnull(overlap))
+				var/message = GLOB.plumbing_layer_names["[ducting_layer]"]
+				if(istype(overlap, /obj/machinery/duct))
+					message = "plumbing duct on [message]"
+				else
+					message = "plumbing machine on [message]"
+				log_mapping("Overlapping [message] detected at [AREACOORD(parent_movable)]")
+				parent_movable.set_anchored(FALSE)
+				return
+		enable()
 
 /datum/component/plumbing/RegisterWithParent()
-	RegisterSignal(parent, list(COMSIG_MOVABLE_MOVED,COMSIG_PARENT_PREQDELETED), .proc/disable)
-	RegisterSignal(parent, list(COMSIG_OBJ_DEFAULT_UNFASTEN_WRENCH), .proc/toggle_active)
-	RegisterSignal(parent, list(COMSIG_OBJ_HIDE), .proc/hide)
-	RegisterSignal(parent, list(COMSIG_ATOM_UPDATE_OVERLAYS), .proc/create_overlays) //called by lateinit on startup
-	RegisterSignal(parent, list(COMSIG_MOVABLE_CHANGE_DUCT_LAYER), .proc/change_ducting_layer)
+	RegisterSignal(parent, COMSIG_ATOM_TOOL_ACT(TOOL_WRENCH), PROC_REF(check_wrench))
+	RegisterSignal(parent, COMSIG_MOVABLE_SET_ANCHORED, PROC_REF(toggle_active))
+	RegisterSignal(parent, COMSIG_OBJ_HIDE, PROC_REF(hide))
+	RegisterSignal(parent, COMSIG_ATOM_UPDATE_OVERLAYS, PROC_REF(create_overlays))
+	RegisterSignal(parent, COMSIG_ATOM_POST_DIR_CHANGE, PROC_REF(on_parent_dir_change))
+	RegisterSignal(parent, COMSIG_MOVABLE_CHANGE_DUCT_LAYER, PROC_REF(change_ducting_layer))
+	RegisterSignal(parent, COMSIG_ATOM_EXAMINE, PROC_REF(on_examine))
 
 /datum/component/plumbing/UnregisterFromParent()
-	UnregisterSignal(parent, list(COMSIG_MOVABLE_MOVED,COMSIG_PARENT_PREQDELETED, COMSIG_OBJ_DEFAULT_UNFASTEN_WRENCH,COMSIG_OBJ_HIDE, \
-	COMSIG_ATOM_UPDATE_OVERLAYS, COMSIG_MOVABLE_CHANGE_DUCT_LAYER, COMSIG_COMPONENT_ADDED))
+	UnregisterSignal(parent, list(
+		COMSIG_ATOM_TOOL_ACT(TOOL_WRENCH),
+		COMSIG_MOVABLE_SET_ANCHORED,
+		COMSIG_OBJ_HIDE,
+		COMSIG_ATOM_UPDATE_OVERLAYS,
+		COMSIG_ATOM_POST_DIR_CHANGE,
+		COMSIG_MOVABLE_CHANGE_DUCT_LAYER,
+		COMSIG_ATOM_EXAMINE,
+	))
 
 /datum/component/plumbing/Destroy()
-	ducts = null
+	disable()
+	ducts.Cut()
 	reagents = null
-	set_recipient_reagents_holder(null) //null is there so it's obvious we're setting this to nothing
 	return ..()
 
-/datum/component/plumbing/process()
-	if(!demand_connects || !reagents)
-		STOP_PROCESSING(SSfluids, src)
-		return
-	if(reagents.total_volume < reagents.maximum_volume)
-		for(var/D in GLOB.cardinals)
-			if(D & demand_connects)
-				send_request(D)
+///Returns if the machine is active or not
+/datum/component/plumbing/proc/active()
+	var/atom/movable/parent_movable = parent
+	return parent_movable.anchored
 
-///Can we be added to the ductnet?
-/datum/component/plumbing/proc/can_add(datum/ductnet/D, dir)
-	if(!active)
-		return
-	if(!dir || !D)
-		return FALSE
-	if(num2text(dir) in ducts)
-		return FALSE
+///Returns the reagent holder meant to receive the reagents. Can be different from the one that sends reagents to the network
+/datum/component/plumbing/proc/recipient_reagents_holder()
+	return reagents
 
-	return TRUE
+///settle wherever we are, and start behaving like a piece of plumbing
+/datum/component/plumbing/proc/enable()
+	if(demand_connects)
+		START_PROCESSING(SSplumbing, src)
 
-///called from in process(). only calls process_request(), but can be overwritten for children with special behaviour
-/datum/component/plumbing/proc/send_request(dir)
-	process_request(amount = MACHINE_REAGENT_TRANSFER, reagent = null, dir = dir)
+	for(var/direction in GLOB.cardinals)
+		if(!(direction & (demand_connects | supply_connects)))
+			continue
 
-///check who can give us what we want, and how many each of them will give us
-/datum/component/plumbing/proc/process_request(amount, reagent, dir)
-	var/list/valid_suppliers = list()
-	var/datum/ductnet/net
-	if(!ducts.Find(num2text(dir)))
-		return
-	net = ducts[num2text(dir)]
-	for(var/A in net.suppliers)
-		var/datum/component/plumbing/supplier = A
-		if(supplier.can_give(amount, reagent, net))
-			valid_suppliers += supplier
-	// Need to ask for each in turn very carefully, making sure we get the total volume. This is to avoid a division that would always round down and become 0
-	var/targetVolume = reagents.total_volume + amount
-	var/suppliersLeft = valid_suppliers.len
-	for(var/A in valid_suppliers)
-		var/datum/component/plumbing/give = A
-		var/currentRequest = (targetVolume - reagents.total_volume) / suppliersLeft
-		give.transfer_to(src, currentRequest, reagent, net)
-		suppliersLeft--
+		var/opposite_dir = REVERSE_DIR(direction)
+		for(var/atom/movable/found_atom in get_step(parent, direction))
+			var/obj/machinery/duct/duct = found_atom
+			if(istype(duct))
+				if(duct.neighbours && (duct.duct_layer & ducting_layer))
+					duct.neighbours[parent] = opposite_dir
+					duct.update_appearance(UPDATE_ICON_STATE)
+					duct.net.add_plumber(src, direction)
+				continue
 
-///returns TRUE when they can give the specified amount and reagent. called by process request
-/datum/component/plumbing/proc/can_give(amount, reagent, datum/ductnet/net)
-	if(amount <= 0)
-		return
+			for(var/datum/component/plumbing/plumber as anything in found_atom.GetComponents(/datum/component/plumbing))
+				if(plumber.active() && (plumber.ducting_layer & ducting_layer))
+					if((plumber.demand_connects & opposite_dir) && (supply_connects & direction) || (plumber.supply_connects & opposite_dir) && (demand_connects & direction)) //make sure we arent connecting two supplies or demands
+						var/datum/ductnet/net = new
+						net.add_plumber(src, direction)
+						net.add_plumber(plumber, opposite_dir)
 
-	if(reagent) //only asked for one type of reagent
-		for(var/A in reagents.reagent_list)
-			var/datum/reagent/R = A
-			if(R.type == reagent)
-				return TRUE
-	else if(reagents.total_volume > 0) //take whatever
-		return TRUE
-
-///this is where the reagent is actually transferred and is thus the finish point of our process()
-/datum/component/plumbing/proc/transfer_to(datum/component/plumbing/target, amount, reagent, datum/ductnet/net)
-	if(!reagents || !target || !target.reagents)
-		return FALSE
-	if(reagent)
-		reagents.trans_id_to(target.recipient_reagents_holder, reagent, amount)
-	else
-		reagents.trans_to(target.recipient_reagents_holder, amount, round_robin = TRUE, methods = methods)//we deal with alot of precise calculations so we round_robin=TRUE. Otherwise we get floating point errors, 1 != 1 and 2.5 + 2.5 = 6
-
-///We create our luxurious piping overlays/underlays, to indicate where we do what. only called once if use_overlays = TRUE in Initialize()
-/datum/component/plumbing/proc/create_overlays(atom/movable/AM, list/overlays)
+/datum/component/plumbing/proc/disable()
 	SIGNAL_HANDLER
 
-	if(tile_covered || !use_overlays)
+	STOP_PROCESSING(SSplumbing, src)
+
+	while(ducts.len)
+		var/datum/ductnet/net = ducts[ducts[1]]
+
+		//disconnect ourself from any ducts connected to us
+		for(var/obj/machinery/duct/pipe as anything in net.ducts)
+			if(pipe.neighbours[parent])
+				pipe.neighbours -= parent
+				pipe.update_appearance(UPDATE_ICON_STATE)
+
+		//remove ourself from this network and delete it if emtpy
+		if(net.remove_plumber(src))
+			qdel(net)
+
+/datum/component/plumbing/proc/check_wrench(obj/parent_obj, mob/user, tool, processing_recipes)
+	SIGNAL_HANDLER
+
+	if(!active())
+		var/datum/overlap = ducting_layer_check(parent_obj, -ducting_layer)
+		if(!isnull(overlap))
+			parent_obj.balloon_alert(user, "overlapping [istype(overlap, /obj/machinery/duct) ? "duct" : "machine"] detected!")
+			return ITEM_INTERACT_FAILURE
+
+/datum/component/plumbing/proc/toggle_active(obj/parent_obj, new_state)
+	SIGNAL_HANDLER
+
+	// Follow atmos's rule of exposing the connection if you unwrench it and only hiding again if tile is placed back down.
+	if(tile_covered)
+		tile_covered = FALSE
+		parent_obj.update_appearance()
+
+	if(new_state)
+		enable()
+	else
+		disable()
+
+/datum/component/plumbing/proc/hide(atom/movable/parent_obj, underfloor_accessibility)
+	SIGNAL_HANDLER
+
+	var/atom/movable/parent_movable = parent
+	// If machine is unanchored, keep connector visible.
+	// This doesn't necessary map to `active`, so check parent.
+	var/should_hide = !underfloor_accessibility
+	if(parent_movable.anchored || !should_hide)
+		tile_covered = should_hide
+		parent_obj.update_appearance()
+
+/datum/component/plumbing/proc/create_overlays(atom/movable/parent_movable, list/overlays)
+	SIGNAL_HANDLER
+
+	if(tile_covered)
 		return
 
-	//Copied from ducts handle_layer()
 	var/offset
-
 	switch(ducting_layer)
 		if(FIRST_DUCT_LAYER)
 			offset = -10
@@ -154,217 +186,172 @@
 		if(FIFTH_DUCT_LAYER)
 			offset = 10
 
-	var/duct_x = offset
-	var/duct_y = offset
+	var/duct_layer = PLUMBING_PIPE_VISIBILE_LAYER + ducting_layer * 0.0003
 
-
-	for(var/D in GLOB.cardinals)
+	for(var/direction in GLOB.cardinals)
 		var/color
-		var/direction
-		if(D & initial(demand_connects))
+		var/duct_x = offset - parent_movable.pixel_x - parent_movable.pixel_w
+		var/duct_y = offset - parent_movable.pixel_y - parent_movable.pixel_z
+		if(direction & initial(demand_connects))
 			color = demand_color
-		else if(D & initial(supply_connects))
+			if(demand_offset)
+				switch(parent_movable.dir)
+					if(NORTH)
+						duct_y -= demand_offset
+					if(SOUTH)
+						duct_y += demand_offset
+					if(EAST)
+						duct_x -= demand_offset
+					if(WEST)
+						duct_x += demand_offset
+		else if(direction & initial(supply_connects))
 			color = supply_color
+			if(supply_offset)
+				switch(parent_movable.dir)
+					if(NORTH)
+						duct_y += supply_offset
+					if(SOUTH)
+						duct_y -= supply_offset
+					if(EAST)
+						duct_x += supply_offset
+					if(WEST)
+						duct_x -= supply_offset
 		else
 			continue
 
-		var/image/I
+		var/image/overlay = image('icons/obj/pipes_n_cables/hydrochem/connects.dmi', "[dir2text(direction)]-[ducting_layer]", layer = duct_layer)
+		overlay.color = color
+		overlay.pixel_w = duct_x
+		overlay.pixel_z = duct_y
+		overlays += overlay
 
-		switch(D)
-			if(NORTH)
-				direction = "north"
-			if(SOUTH)
-				direction = "south"
-			if(EAST)
-				direction = "east"
-			if(WEST)
-				direction = "west"
-
-		if(turn_connects)
-			I = image('icons/obj/plumbing/connects.dmi', "[direction]-[color]", layer = AM.layer - 1)
-
-		else
-			I = image('icons/obj/plumbing/connects.dmi', "[direction]-[color]-s", layer = AM.layer - 1) //color is not color as in the var, it's just the name of the icon_state
-			I.dir = D
-
-		I.pixel_x = duct_x
-		I.pixel_y = duct_y
-
-		overlays += I
-
-///we stop acting like a plumbing thing and disconnect if we are, so we can safely be moved and stuff
-/datum/component/plumbing/proc/disable()
+/datum/component/plumbing/proc/on_parent_dir_change(atom/movable/parent_obj, old_dir, new_dir)
 	SIGNAL_HANDLER
 
-	if(!active)
-		return
-
-	STOP_PROCESSING(SSfluids, src)
-
-	for(var/A in ducts)
-		var/datum/ductnet/D = ducts[A]
-		D.remove_plumber(src)
-
-	active = FALSE
-
-	for(var/D in GLOB.cardinals)
-		if(D & (demand_connects | supply_connects))
-			for(var/obj/machinery/duct/duct in get_step(parent, D))
-				if(duct.duct_layer == ducting_layer)
-					duct.remove_connects(turn(D, 180))
-					duct.neighbours.Remove(parent)
-					duct.update_appearance()
-
-///settle wherever we are, and start behaving like a piece of plumbing
-/datum/component/plumbing/proc/enable(obj/object, datum/component/component)
-	SIGNAL_HANDLER
-	if(active || (component && component != src))
-		UnregisterSignal(parent, list(COMSIG_COMPONENT_ADDED))
-		return
-
-	update_dir()
-	active = TRUE
-
-	var/atom/movable/AM = parent
-	for(var/obj/machinery/duct/D in AM.loc) //Destroy any ducts under us. Ducts also self-destruct if placed under a plumbing machine. machines disable when they get moved
-		if(D.anchored) //that should cover everything
-			D.disconnect_duct()
-
-	if(demand_connects)
-		START_PROCESSING(SSfluids, src)
-
-	for(var/D in GLOB.cardinals)
-
-		if(D & (demand_connects | supply_connects))
-			for(var/atom/movable/A in get_step(parent, D))
-
-				if(istype(A, /obj/machinery/duct))
-					var/obj/machinery/duct/duct = A
-					duct.attempt_connect()
-				else
-					for(var/datum/component/plumbing/plumber as anything in A.GetComponents(/datum/component/plumbing))
-						if(plumber.ducting_layer == ducting_layer)
-							direct_connect(plumber, D)
-
-/// Toggle our machinery on or off. This is called by a hook from default_unfasten_wrench with anchored as only param, so we dont have to copypaste this on every object that can move
-/datum/component/plumbing/proc/toggle_active(obj/O, new_state)
-	SIGNAL_HANDLER
-	if(new_state)
-		enable()
-	else
-		disable()
-
-/** We update our connects only when we settle down by taking our current and original direction to find our new connects
-* If someone wants it to fucking spin while connected to something go actually knock yourself out
-*/
-/datum/component/plumbing/proc/update_dir()
-	if(!turn_connects)
-		return
-
-	var/atom/movable/AM = parent
-	var/new_demand_connects
-	var/new_supply_connects
-	var/new_dir = AM.dir
-	var/angle = 180 - dir2angle(new_dir)
-
-	if(new_dir == SOUTH)
-		demand_connects = initial(demand_connects)
-		supply_connects = initial(supply_connects)
-	else
-		for(var/D in GLOB.cardinals)
-			if(D & initial(demand_connects))
-				new_demand_connects += turn(D, angle)
-			if(D & initial(supply_connects))
-				new_supply_connects += turn(D, angle)
+	demand_connects = initial(demand_connects)
+	supply_connects = initial(supply_connects)
+	if(new_dir != SOUTH)
+		var/angle = 180 - dir2angle(new_dir)
+		var/new_demand_connects = NONE
+		var/new_supply_connects = NONE
+		for(var/direction in GLOB.cardinals)
+			if(direction & demand_connects)
+				new_demand_connects |= turn(direction, angle)
+			if(direction & supply_connects)
+				new_supply_connects |= turn(direction, angle)
 		demand_connects = new_demand_connects
 		supply_connects = new_supply_connects
+	parent_obj.update_appearance(UPDATE_OVERLAYS)
 
-///Give the direction of a pipe, and it'll return wich direction it originally was when it's object pointed SOUTH
-/datum/component/plumbing/proc/get_original_direction(dir)
-	var/atom/movable/AM = parent
-	return turn(dir, dir2angle(AM.dir) - 180)
-
-//special case in-case we want to connect directly with another machine without a duct
-/datum/component/plumbing/proc/direct_connect(datum/component/plumbing/P, dir)
-	if(!P.active)
-		return
-	var/opposite_dir = turn(dir, 180)
-	if(P.demand_connects & opposite_dir && supply_connects & dir || P.supply_connects & opposite_dir && demand_connects & dir) //make sure we arent connecting two supplies or demands
-		var/datum/ductnet/net = new()
-		net.add_plumber(src, dir)
-		net.add_plumber(P, opposite_dir)
-
-/datum/component/plumbing/proc/hide(atom/movable/AM, should_hide)
-	SIGNAL_HANDLER
-
-	tile_covered = should_hide
-	AM.update_appearance()
-
-/datum/component/plumbing/proc/change_ducting_layer(obj/caller, obj/O, new_layer = DUCT_LAYER_DEFAULT)
-	SIGNAL_HANDLER
-	ducting_layer = new_layer
-
-	if(ismovable(parent))
-		var/atom/movable/AM = parent
-		AM.update_appearance()
-
-	if(O)
-		playsound(O, 'sound/items/ratchet.ogg', 10, TRUE) //sound
-
-	//quickly disconnect and reconnect the network.
-	if(active)
+	if(length(ducts))
 		disable()
 		enable()
 
-/datum/component/plumbing/proc/set_recipient_reagents_holder(datum/reagents/receiver)
-	if(recipient_reagents_holder)
-		UnregisterSignal(recipient_reagents_holder, COMSIG_PARENT_QDELETING) //stop tracking whoever we were tracking
-	if(receiver)
-		RegisterSignal(receiver, COMSIG_PARENT_QDELETING, .proc/handle_reagent_del) //on deletion call a wrapper proc that clears us, and maybe reagents too
-
-	recipient_reagents_holder = receiver
-
-/datum/component/plumbing/proc/handle_reagent_del(datum/source)
+/datum/component/plumbing/proc/change_ducting_layer(obj/source, obj/changer, new_layer = DUCT_LAYER_DEFAULT)
 	SIGNAL_HANDLER
-	if(source == reagents)
-		reagents = null
-	if(source == recipient_reagents_holder)
-		set_recipient_reagents_holder(null)
 
-///has one pipe input that only takes, example is manual output pipe
-/datum/component/plumbing/simple_demand
-	demand_connects = SOUTH
+	ducting_layer = new_layer
+	source.update_appearance(UPDATE_OVERLAYS)
 
-///has one pipe output that only supplies. example is liquid pump and manual input pipe
-/datum/component/plumbing/simple_supply
-	supply_connects = SOUTH
+	if(changer)
+		playsound(changer, 'sound/items/tools/ratchet.ogg', 10, TRUE) //sound
 
-///input and output, like a holding tank
-/datum/component/plumbing/tank
-	demand_connects = WEST
-	supply_connects = EAST
+	if(length(ducts))
+		disable()
+		enable()
 
-/datum/component/plumbing/manifold
-	demand_connects = NORTH
-	supply_connects = SOUTH
+/datum/component/plumbing/process()
+	if(!demand_connects)
+		return PROCESS_KILL
 
-/datum/component/plumbing/manifold/change_ducting_layer(obj/caller, obj/O, new_layer)
-	return
+	var/datum/reagents/receiver = recipient_reagents_holder()
+	if(QDELETED(receiver))
+		return PROCESS_KILL
 
-#define READY 2
-///Baby component for the buffer plumbing machine
-/datum/component/plumbing/buffer
-	demand_connects = WEST
-	supply_connects = EAST
+	if(!receiver.holder_full())
+		for(var/dir in GLOB.cardinals)
+			if(dir & demand_connects)
+				send_request(dir)
 
-/datum/component/plumbing/buffer/Initialize(start=TRUE, _turn_connects=TRUE, _ducting_layer, datum/reagents/custom_receiver)
-	if(!istype(parent, /obj/machinery/plumbing/buffer))
-		return COMPONENT_INCOMPATIBLE
+/datum/component/plumbing/proc/on_examine(atom/movable/source, mob/user, list/examine_list)
+	SIGNAL_HANDLER
 
-	return ..()
+	if(distinct_reagent_cap != INFINITY)
+		examine_list += span_notice("This plumbing component will only accept up to [distinct_reagent_cap] distinct reagents at once.")
 
-/datum/component/plumbing/buffer/can_give(amount, reagent, datum/ductnet/net)
-	var/obj/machinery/plumbing/buffer/buffer = parent
-	return (buffer.mode == READY) ? ..() : FALSE
+///called from in process(). only calls process_request(), but can be overwritten for children with special behaviour
+/datum/component/plumbing/proc/send_request(dir)
+	var/amount_to_give = MACHINE_REAGENT_TRANSFER
+	// infinite cap means we need to special handling, process_request will just grab as much as it wants.
+	if(distinct_reagent_cap == INFINITY)
+		process_request(amount_to_give, null, dir) // null for no specific reagent, we're not picky.
+		return
 
-#undef READY
+	// we have a cap, so we need to figure out what reagents we want
+	var/list/all_allowed_reagents = get_all_network_reagents(ducts["[dir]"])
+	if(length(all_allowed_reagents) > distinct_reagent_cap)
+		all_allowed_reagents.Cut(distinct_reagent_cap + 1)
+	else if(!length(all_allowed_reagents))
+		return
+
+	// request an even amount of each allowed reagent
+	var/amount_per_reagent = round(amount_to_give / length(all_allowed_reagents), CHEMICAL_VOLUME_ROUNDING)
+	for(var/allowed_reagent in all_allowed_reagents)
+		process_request(amount_per_reagent, allowed_reagent, dir)
+
+/// Returns a list of all distinct reagent types available in the passed duct network.
+/// The passed net can be null, it is handled.
+/datum/component/plumbing/proc/get_all_network_reagents(datum/ductnet/net)
+	var/list/distinct_reagents = list()
+	for(var/datum/reagent/existing_regent as anything in reagents.reagent_list)
+		distinct_reagents |= existing_regent.type
+	for(var/datum/component/plumbing/supplier as anything in net?.suppliers)
+		for(var/datum/reagent/chemical as anything in supplier.reagents.reagent_list)
+			distinct_reagents |= chemical.type
+	return distinct_reagents
+
+///check who can give us what we want, and how many each of them will give us
+/datum/component/plumbing/proc/process_request(amount = MACHINE_REAGENT_TRANSFER, reagent, dir, round_robin = TRUE)
+	//find the duct to take from
+	var/dirtext = num2text(dir)
+	var/datum/ductnet/net = ducts[dirtext]
+	if(QDELETED(net))
+		if(net)
+			ducts -= dirtext
+		return FALSE
+
+	//find all valid suppliers in the duct
+	var/list/valid_suppliers = list()
+	for(var/datum/component/plumbing/supplier as anything in net?.suppliers)
+		if(supplier.can_give(amount, reagent, net))
+			valid_suppliers += supplier
+	var/suppliersLeft = length(valid_suppliers)
+	if(!suppliersLeft)
+		return FALSE
+
+	//take an equal amount from each supplier
+	var/currentRequest
+	var/target_volume = reagents.total_volume + amount
+	for(var/datum/component/plumbing/give as anything in valid_suppliers)
+		currentRequest = (target_volume - reagents.total_volume) / suppliersLeft
+		give.transfer_to(src, currentRequest, reagent, net, round_robin)
+		suppliersLeft--
+	return TRUE
+
+///returns TRUE when they can give the specified amount and reagent. called by process request
+/datum/component/plumbing/proc/can_give(amount, reagent, datum/ductnet/net)
+	SHOULD_BE_PURE(TRUE)
+
+	if(amount <= 0)
+		return FALSE
+
+	if(reagent) //only asked for one type of reagent
+		return reagents.has_reagent(reagent)
+	else if(reagents.total_volume) //take whatever
+		return TRUE
+
+	return FALSE
+
+///this is where the reagent is actually transferred and is thus the finish point of our process()
+/datum/component/plumbing/proc/transfer_to(datum/component/plumbing/target, amount, reagent, datum/ductnet/net, round_robin = TRUE)
+	reagents.trans_to(target.recipient_reagents_holder(), amount, target_id = reagent, methods = round_robin ? LINEAR : NONE)

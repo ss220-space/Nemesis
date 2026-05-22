@@ -45,13 +45,13 @@ GLOBAL_LIST_INIT(adventure_loot_generator_index,generate_generator_index())
 	var/list/still_locked_packs = list()
 	for(var/pack_type in unlockable_packs)
 		var/datum/supply_pack/pack_singleton = SSshuttle.supply_packs[pack_type]
-		if(!pack_singleton.special_enabled)
+		if(!(pack_singleton.order_flags & ORDER_SPECIAL_ENABLED))
 			still_locked_packs += pack_type
 	if(!length(still_locked_packs)) // Just give out some cash instead.
 		var/datum/adventure_loot_generator/simple/cash/replacement = new
 		return replacement.generate()
 	var/chosen_pack_type = pick(still_locked_packs)
-	return new /obj/item/trade_chip(null,chosen_pack_type)
+	return list(new /obj/item/trade_chip(null, chosen_pack_type))
 
 /// Just picks and instatiates the path from the list
 /datum/adventure_loot_generator/simple
@@ -95,18 +95,23 @@ GLOBAL_LIST_INIT(adventure_loot_generator_index,generate_generator_index())
 /datum/adventure_loot_generator/pet
 	id = "pets"
 	var/carrier_type = /obj/item/pet_carrier/biopod
-	var/list/possible_pets = list(/mob/living/simple_animal/pet/cat/space,/mob/living/simple_animal/pet/dog/corgi,/mob/living/simple_animal/pet/penguin/baby,/mob/living/simple_animal/pet/dog/pug)
+	var/list/possible_pets = list(
+		/mob/living/basic/pet/cat/space,
+		/mob/living/basic/pet/dog/corgi,
+		/mob/living/basic/pet/dog/pug,
+		/mob/living/basic/pet/penguin/baby,
+	)
 
 /datum/adventure_loot_generator/pet/generate()
 	var/obj/item/pet_carrier/carrier = new carrier_type()
 	var/chosen_pet_type = pick(possible_pets)
-	var/mob/living/simple_animal/pet/pet = new chosen_pet_type()
+	var/mob/living/basic/pet/pet = new chosen_pet_type()
 	carrier.add_occupant(pet)
-	return carrier
+	return list(carrier)
 
 /obj/item/antique
 	name = "antique"
-	desc = "Valuable and completly incomprehensible."
+	desc = "Valuable and completely incomprehensible."
 	icon = 'icons/obj/exploration.dmi'
 	icon_state = "antique"
 
@@ -128,10 +133,10 @@ GLOBAL_LIST_INIT(adventure_loot_generator_index,generate_generator_index())
 
 /obj/item/trade_chip/proc/try_to_unlock_contract(mob/user)
 	var/datum/supply_pack/pack_singleton = SSshuttle.supply_packs[unlocked_pack_type]
-	if(!unlocked_pack_type || !pack_singleton || !pack_singleton.special)
+	if(!unlocked_pack_type || !pack_singleton || !(pack_singleton.order_flags & ORDER_SPECIAL))
 		to_chat(user,span_danger("This chip is invalid!"))
 		return
-	pack_singleton.special_enabled = TRUE
+	pack_singleton.order_flags |= ORDER_SPECIAL_ENABLED
 	to_chat(user,span_notice("Contract accepted into nanotrasen supply database."))
 	qdel(src)
 
@@ -143,19 +148,18 @@ GLOBAL_LIST_INIT(adventure_loot_generator_index,generate_generator_index())
 	icon = 'icons/obj/exploration.dmi'
 	icon_state = "firelance"
 	inhand_icon_state = "firelance"
-	righthand_file = 'icons/mob/inhands/misc/firelance_righthand.dmi'
-	lefthand_file = 'icons/mob/inhands/misc/firelance_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/items/firelance_righthand.dmi'
+	lefthand_file = 'icons/mob/inhands/items/firelance_lefthand.dmi'
 	var/windup_time = 10 SECONDS
 	var/melt_range = 3
-	var/charge_per_use = 200
-	var/obj/item/stock_parts/cell/cell
+	var/obj/item/stock_parts/power_store/cell
 
 /obj/item/firelance/Initialize(mapload)
 	. = ..()
-	cell = new /obj/item/stock_parts/cell(src)
+	cell = new /obj/item/stock_parts/power_store/cell(src)
 	AddComponent(/datum/component/two_handed)
 
-/obj/item/firelance/attack(mob/living/M, mob/living/user, params)
+/obj/item/firelance/attack(mob/living/M, mob/living/user, list/modifiers, list/attack_modifiers)
 	if(!user.combat_mode)
 		return
 	. = ..()
@@ -163,30 +167,32 @@ GLOBAL_LIST_INIT(adventure_loot_generator_index,generate_generator_index())
 /obj/item/firelance/get_cell()
 	return cell
 
-/obj/item/firelance/afterattack(atom/target, mob/user, proximity_flag, click_parameters)
-	. = ..()
-	if(!HAS_TRAIT(src,TRAIT_WIELDED))
-		to_chat(user,span_notice("You need to wield [src] in two hands before you can fire it."))
-		return
+/obj/item/firelance/ranged_interact_with_atom(atom/interacting_with, mob/living/user, list/modifiers)
+	. = ITEM_INTERACT_BLOCKING
+	if(!HAS_TRAIT(src, TRAIT_WIELDED))
+		to_chat(user, span_notice("You need to wield [src] in two hands before you can fire it."))
+		return .
 	if(LAZYACCESS(user.do_afters, "firelance"))
-		return
-	if(!cell.use(charge_per_use))
-		to_chat(user,span_warning("[src] battery ran dry!"))
-		return
-	ADD_TRAIT(user,TRAIT_IMMOBILIZED,src)
-	to_chat(user,span_notice("You begin to charge [src]"))
+		return .
+	if(!cell.use(0.2 * STANDARD_CELL_CHARGE))
+		to_chat(user,span_warning("[src]'s battery ran dry!"))
+		return .
+	ADD_TRAIT(user, TRAIT_IMMOBILIZED, REF(src))
+	to_chat(user,span_notice("You begin to charge [src]..."))
 	inhand_icon_state = "firelance_charging"
-	user.update_inv_hands()
-	if(do_after(user,windup_time,interaction_key="firelance",extra_checks = CALLBACK(src, .proc/windup_checks)))
+	user.update_held_items()
+	if(do_after(user,windup_time,interaction_key="firelance",extra_checks = CALLBACK(src, PROC_REF(windup_checks))))
 		var/turf/start_turf = get_turf(user)
 		var/turf/last_turf = get_ranged_target_turf(start_turf,user.dir,melt_range)
 		start_turf.Beam(last_turf,icon_state="solar_beam",time=1 SECONDS)
 		for(var/turf/turf_to_melt in get_line(start_turf,last_turf))
 			if(turf_to_melt.density)
 				turf_to_melt.Melt()
+		. = ITEM_INTERACT_SUCCESS
 	inhand_icon_state = initial(inhand_icon_state)
-	user.update_inv_hands()
-	REMOVE_TRAIT(user,TRAIT_IMMOBILIZED,src)
+	user.update_held_items()
+	REMOVE_TRAIT(user, TRAIT_IMMOBILIZED, REF(src))
+	return .
 
 /// Additional windup checks
 /obj/item/firelance/proc/windup_checks()

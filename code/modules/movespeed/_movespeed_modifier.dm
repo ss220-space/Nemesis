@@ -53,6 +53,12 @@ Key procs
 	if(!id)
 		id = "[type]" //We turn the path into a string.
 
+/datum/movespeed_modifier/vv_edit_var(var_name, var_value)
+	if(GLOB.movespeed_modification_cache[type] == src)
+		return FALSE
+
+	return ..()
+
 GLOBAL_LIST_EMPTY(movespeed_modification_cache)
 
 /// Grabs a STATIC MODIFIER datum from cache. YOU MUST NEVER EDIT THESE DATUMS, OR IT WILL AFFECT ANYTHING ELSE USING IT TOO!
@@ -193,13 +199,6 @@ GLOBAL_LIST_EMPTY(movespeed_modification_cache)
 	. = LAZYCOPY(movespeed_modification)
 	for(var/id in movespeed_mod_immunities)
 		. -= id
-
-/// Calculate the total slowdown of all movespeed modifiers
-/mob/proc/total_multiplicative_slowdown()
-	. = 0
-	for(var/id in get_movespeed_modifiers())
-		var/datum/movespeed_modifier/M = movespeed_modification[id]
-		. += M.multiplicative_slowdown
 
 /// Checks if a move speed modifier is valid and not missing any data
 /proc/movespeed_data_null_check(datum/movespeed_modifier/M) //Determines if a data list is not meaningful and should be discarded.

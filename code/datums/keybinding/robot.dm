@@ -12,7 +12,7 @@
 	description = "Equips or unequips the first module"
 	keybind_signal = COMSIG_KB_SILICON_TOGGLEMODULEONE_DOWN
 
-/datum/keybinding/robot/moduleone/down(client/user)
+/datum/keybinding/robot/moduleone/down(client/user, turf/target, mousepos_x, mousepos_y)
 	. = ..()
 	if(.)
 		return
@@ -27,7 +27,7 @@
 	description = "Equips or unequips the second module"
 	keybind_signal = COMSIG_KB_SILICON_TOGGLEMODULETWO_DOWN
 
-/datum/keybinding/robot/moduletwo/down(client/user)
+/datum/keybinding/robot/moduletwo/down(client/user, turf/target, mousepos_x, mousepos_y)
 	. = ..()
 	if(.)
 		return
@@ -42,7 +42,7 @@
 	description = "Equips or unequips the third module"
 	keybind_signal = COMSIG_KB_SILICON_TOGGLEMODULETHREE_DOWN
 
-/datum/keybinding/robot/modulethree/down(client/user)
+/datum/keybinding/robot/modulethree/down(client/user, turf/target, mousepos_x, mousepos_y)
 	. = ..()
 	if(.)
 		return
@@ -57,10 +57,29 @@
 	description = "Unequips the active module"
 	keybind_signal = COMSIG_KB_SILICON_UNEQUIPMODULE_DOWN
 
-/datum/keybinding/robot/unequip_module/down(client/user)
+/datum/keybinding/robot/unequip_module/down(client/user, turf/target, mousepos_x, mousepos_y)
 	. = ..()
 	if(.)
 		return
 	var/mob/living/silicon/robot/R = user.mob
 	R.uneq_active()
+	return TRUE
+
+/datum/keybinding/robot/undeploy
+	category = CATEGORY_AI
+	hotkey_keys = list("=")
+	name = "undeploy"
+	full_name = "Disconnect from shell"
+	description = "Returns you to your AI core"
+	keybind_signal = COMSIG_KB_SILION_UNDEPLOY_DOWN
+
+/datum/keybinding/robot/undeploy/down(client/user, turf/target, mousepos_x, mousepos_y)
+	. = ..()
+	if(.)
+		return
+	var/mob/living/silicon/robot/shell/our_shell = user.mob
+	//We make sure our shell is actually a shell
+	if(our_shell.shell == FALSE)
+		return
+	our_shell.undeploy()
 	return TRUE

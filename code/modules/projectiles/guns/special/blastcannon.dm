@@ -12,7 +12,7 @@
 /obj/item/gun/blastcannon
 	name = "blast cannon"
 	desc = "A surprisingly portable device used to concentrate a bomb's blast energy to a narrow wave. Small enough to stow in a bag."
-	icon = 'icons/obj/guns/wide_guns.dmi'
+	icon = 'icons/obj/weapons/guns/wide_guns.dmi'
 	icon_state = "blastcannon_empty"
 	lefthand_file = 'icons/mob/inhands/weapons/64x_guns_left.dmi'
 	righthand_file = 'icons/mob/inhands/weapons/64x_guns_right.dmi'
@@ -23,7 +23,7 @@
 	base_icon_state = "blastcannon"
 	w_class = WEIGHT_CLASS_NORMAL
 	force = 10
-	fire_sound = 'sound/weapons/blastcannon.ogg'
+	fire_sound = 'sound/items/weapons/blastcannon.ogg'
 	item_flags = NONE
 	clumsy_check = FALSE
 	randomspread = FALSE
@@ -49,9 +49,7 @@
 
 /obj/item/gun/blastcannon/Initialize(mapload)
 	. = ..()
-	if(!pin)
-		pin = new
-	RegisterSignal(src, COMSIG_ATOM_INTERNAL_EXPLOSION, .proc/channel_blastwave)
+	RegisterSignal(src, COMSIG_ATOM_INTERNAL_EXPLOSION, PROC_REF(channel_blastwave))
 	AddElement(/datum/element/update_icon_updates_onmob)
 
 /obj/item/gun/blastcannon/Destroy()
@@ -62,11 +60,11 @@
 	cached_target = null
 	return ..()
 
-/obj/item/gun/blastcannon/handle_atom_del(atom/A)
-	if(A == bomb)
+/obj/item/gun/blastcannon/Exited(atom/movable/gone, direction)
+	. = ..()
+	if(gone == bomb)
 		bomb = null
 		update_appearance()
-	return ..()
 
 /obj/item/gun/blastcannon/assume_air(datum/gas_mixture/giver)
 	qdel(giver)
@@ -110,8 +108,8 @@
 	update_appearance()
 	return TRUE
 
-/obj/item/gun/blastcannon/afterattack(atom/target, mob/user, flag, params)
-	if((!bomb && bombcheck) || !target || (get_dist(get_turf(target), get_turf(user)) <= 2))
+/obj/item/gun/blastcannon/try_fire_gun(atom/target, mob/living/user, params)
+	if((!bomb && bombcheck) || isnull(target) || (get_dist(get_turf(target), get_turf(user)) <= 2))
 		return ..()
 
 	cached_target = WEAKREF(target)
@@ -121,12 +119,12 @@
 			span_danger("[user] points [src] at [target]!"),
 			span_danger("You point [src] at [target]!")
 		)
-		return
+		return FALSE
 
 	cached_firer = WEAKREF(user)
 	if(!bomb)
-		fire_debug(target, user, flag, params)
-		return
+		fire_debug(target, user, params)
+		return TRUE
 
 	playsound(src, dry_fire_sound, 30, TRUE) // *click
 	user.visible_message(
@@ -136,11 +134,10 @@
 	var/turf/current_turf = get_turf(src)
 	var/turf/target_turf = get_turf(target)
 	message_admins("Blastcannon transfer valve opened by [ADMIN_LOOKUPFLW(user)] at [ADMIN_VERBOSEJMP(current_turf)] while aiming at [ADMIN_VERBOSEJMP(target_turf)] (target).")
-	log_game("Blastcannon transfer valve opened by [key_name(user)] at [AREACOORD(current_turf)] while aiming at [AREACOORD(target_turf)] (target).")
+	user.log_message("opened blastcannon transfer valve at [AREACOORD(current_turf)] while aiming at [AREACOORD(target_turf)] (target).", LOG_GAME)
 	bomb.toggle_valve()
 	update_appearance()
-	return
-
+	return TRUE
 
 /**
  * Channels an internal explosion into a blastwave projectile.
@@ -161,15 +158,15 @@
 		return
 
 	if(!ismob(loc))
-		INVOKE_ASYNC(src, .proc/fire_dropped, heavy, medium, light)
+		INVOKE_ASYNC(src, PROC_REF(fire_dropped), heavy, medium, light)
 		return
 
 	var/mob/holding = loc
 	var/target = cached_target?.resolve()
 	if(target && (holding.get_active_held_item() == src) && cached_firer && (holding == cached_firer.resolve()))
-		INVOKE_ASYNC(src, .proc/fire_intentionally, target, holding, heavy, medium, light, cached_modifiers)
+		INVOKE_ASYNC(src, PROC_REF(fire_intentionally), target, holding, heavy, medium, light, cached_modifiers)
 	else
-		INVOKE_ASYNC(src, .proc/fire_accidentally, holding, heavy, medium, light)
+		INVOKE_ASYNC(src, PROC_REF(fire_accidentally), holding, heavy, medium, light)
 	return
 
 /**
@@ -194,7 +191,7 @@
 	SSexplosions.shake_the_room(start_turf, max(heavy, medium, light, 0), (capped_heavy * 15) + (capped_medium * 20), capped_heavy, capped_medium)
 
 	var/obj/projectile/blastwave/blastwave = new(loc, heavy, medium, light)
-	blastwave.preparePixelProjectile(target, start_turf, params2list(modifiers), spread)
+	blastwave.aim_projectile(target, start_turf, params2list(modifiers), spread)
 	blastwave.fire()
 	cached_firer = null
 	cached_target = null
@@ -221,7 +218,8 @@
 	var/turf/start_turf = get_turf(src)
 	var/turf/target_turf = get_turf(target)
 	message_admins("Blast wave fired from [ADMIN_VERBOSEJMP(start_turf)] at [ADMIN_VERBOSEJMP(target_turf)] ([target]) by [ADMIN_LOOKUPFLW(firer)] with power [heavy]/[medium]/[light].")
-	log_game("Blast wave fired from [AREACOORD(start_turf)] at [AREACOORD(target_turf)] ([target]) by [key_name(firer)] with power [heavy]/[medium]/[light].")
+	firer.log_message("fired a blast wave from [AREACOORD(start_turf)] at [AREACOORD(target_turf)] ([target]) with power [heavy]/[medium]/[light].", LOG_GAME)
+	firer.log_message("fired a blast wave from [AREACOORD(start_turf)] at [AREACOORD(target_turf)] ([target]) with power [heavy]/[medium]/[light].", LOG_ATTACK, log_globally = FALSE)
 	fire_blastwave(target, heavy, medium, light, modifiers)
 	return
 
@@ -263,7 +261,7 @@
  * - light: The light impact range of the blastwave.
  */
 /obj/item/gun/blastcannon/proc/fire_dropped(heavy, medium, light)
-	src.visible_message("<span class='danger'>[src] suddenly goes off!")
+	src.visible_message(span_danger("[src] suddenly goes off!"))
 	var/turf/target = get_edge_target_turf(src, dir)
 	var/mob/firer = cached_firer.resolve()
 	var/turf/start_turf = get_turf(src)
@@ -289,8 +287,7 @@
 	name = "blast wave"
 	icon_state = "blastwave"
 	damage = 0
-	nodamage = FALSE
-	flag = BOMB // Doesn't actually have any functional purpose. But it makes sense.
+	armor_flag = BOMB // Doesn't actually have any functional purpose. But it makes sense.
 	movement_type = FLYING
 	projectile_phasing = ALL // just blows up the turfs lmao
 	phasing_ignore_direct_target = TRUE // If we don't do this the blastcannon shot can be blocked by random items.
@@ -311,7 +308,11 @@
 	src.reactionary = reactionary
 	return ..()
 
-/obj/projectile/blastwave/Range()
+// Though the projectile itself is not damaging its effects are
+/obj/projectile/blastwave/is_hostile_projectile()
+	return TRUE
+
+/obj/projectile/blastwave/reduce_range()
 	. = ..()
 	if(QDELETED(src))
 		return
@@ -319,13 +320,7 @@
 	var/decrement = 1
 	var/atom/location = loc
 	if (reactionary)
-		if(location.density || !isturf(location))
-			decrement += location.explosion_block
-		for(var/obj/thing in location)
-			if (thing == src)
-				continue
-			var/the_block = thing.explosion_block
-			decrement += the_block == EXPLOSION_BLOCK_PROC ? thing.GetExplosionBlock() : the_block
+		decrement += location.explosive_resistance
 
 	range = max(range - decrement + 1, 0) // Already decremented by 1 in the parent. Exists so that if we pass through something with negative block it extends the range.
 	heavy_ex_range = max(heavy_ex_range - decrement, 0)

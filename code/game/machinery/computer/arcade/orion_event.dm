@@ -67,8 +67,8 @@
 	text = "Oh no! The engine has broken down! \
 	You can repair it with an engine part, or you \
 	can make repairs for 3 days."
-	emag_message = "<span class='warning'>You hear some large object lurch to a halt right behind you! When you go to look, nothing's there...</span>"
-	emag_sound = 'sound/effects/creak1.ogg'
+	emag_message = span_warning("You hear some large object lurch to a halt right behind you! When you go to look, nothing's there...")
+	emag_sound = 'sound/effects/creak/creak1.ogg'
 	weight = 2
 	event_responses = list()
 
@@ -114,19 +114,19 @@
 
 /datum/orion_event/electronic_part/emag_effect(obj/machinery/computer/arcade/orion_trail/game, mob/living/gamer)
 	playsound(game, 'sound/effects/empulse.ogg', 50, TRUE)
-	game.visible_message(span_danger("[src] malfunctions, randomizing in-game stats!"))
+	game.visible_message(span_danger("[game] malfunctions, randomizing in-game stats!"))
 	var/oldfood = game.food
 	var/oldfuel = game.fuel
 	game.food = rand(10,80) / rand(1,2)
 	game.fuel = rand(10,60) / rand(1,2)
 	if(game.electronics)
-		addtimer(CALLBACK(game, .proc/revert_random, game, oldfood, oldfuel), 1 SECONDS)
+		addtimer(CALLBACK(src, PROC_REF(revert_random), game, oldfood, oldfuel), 1 SECONDS)
 
 /datum/orion_event/electronic_part/proc/revert_random(obj/machinery/computer/arcade/orion_trail/game, oldfood, oldfuel)
 	if(oldfuel > game.fuel && oldfood > game.food)
-		game.audible_message(span_danger("[src] lets out a somehow reassuring chime."))
+		game.audible_message(span_danger("[game] lets out a somehow reassuring chime."))
 	else if(oldfuel < game.fuel || oldfood < game.food)
-		game.audible_message(span_danger("[src] lets out a somehow ominous chime."))
+		game.audible_message(span_danger("[game] lets out a somehow ominous chime."))
 	game.food = oldfood
 	game.fuel = oldfuel
 	playsound(game, 'sound/machines/chime.ogg', 50, TRUE)
@@ -158,21 +158,21 @@
 
 /datum/orion_event/hull_part/emag_effect(obj/machinery/computer/arcade/orion_trail/game, mob/living/gamer)
 	if(prob(10+gamer_skill))
-		game.say("Something slams into the floor around [src] - luckily, it didn't get through!")
+		game.say("Something slams into the floor around [game] - luckily, it didn't get through!")
 		playsound(game, 'sound/effects/bang.ogg', 50, TRUE)
 		return
 	playsound(game, 'sound/effects/bang.ogg', 100, TRUE)
-	for(var/turf/open/floor/smashed in orange(1, src))
+	for(var/turf/open/floor/smashed in orange(1, game))
 		smashed.ScrapeAway()
-	game.say("Something slams into the floor around [src], exposing it to space!")
+	game.say("Something slams into the floor around [game], exposing it to space!")
 	if(game.hull)
-		addtimer(CALLBACK(game, .proc/fix_floor, game), 1 SECONDS)
+		addtimer(CALLBACK(src, PROC_REF(fix_floor), game), 1 SECONDS)
 
 /datum/orion_event/hull_part/proc/fix_floor(obj/machinery/computer/arcade/orion_trail/game)
-	game.say("A new floor suddenly appears around [src]. What the hell?")
-	playsound(game, 'sound/weapons/genhit.ogg', 100, TRUE)
-	for(var/turf/open/space/fixed in orange(1, src))
-		fixed.PlaceOnTop(/turf/open/floor/plating)
+	game.say("A new floor suddenly appears around [game]. What the hell?")
+	playsound(game, 'sound/items/weapons/genhit.ogg', 100, TRUE)
+	for(var/turf/open/space/fixed in orange(1, game))
+		fixed.place_on_top(/turf/open/floor/plating)
 
 #define BUTTON_EXPLORE_SHIP "Explore Ship"
 #define BUTTON_LEAVE_THE_DERELICT "Leave the Derelict"
@@ -219,7 +219,7 @@
 			var/lostfuel = rand(4,7)
 			var/deadname = game.remove_crewmember()
 			game.fuel -= lostfuel
-			text = "[deadname] was lost deep in the wreckage, and your own vessel lost [lostfuel] Fuel maneuvering to the the abandoned ship."
+			text = "[deadname] was lost deep in the wreckage, and your own vessel lost [lostfuel] Fuel maneuvering to the abandoned ship."
 			event_responses += BUTTON_WHERE_DID_YOU_GO
 		if(36 to 65)
 			var/oldfood = rand(5,11)
@@ -260,11 +260,11 @@
 /datum/orion_event/raiders/emag_effect(obj/machinery/computer/arcade/orion_trail/game, mob/living/gamer)
 	if(prob(50-gamer_skill))
 		to_chat(usr, span_userdanger("You hear battle shouts. The tramping of boots on cold metal. Screams of agony. The rush of venting air. Are you going insane?"))
-		gamer.hallucination += 30
+		gamer.adjust_hallucinations(60 SECONDS)
 	else
 		to_chat(usr, span_userdanger("Something strikes you from behind! It hurts like hell and feel like a blunt weapon, but nothing is there..."))
 		gamer.take_bodypart_damage(30)
-		playsound(game, 'sound/weapons/genhit2.ogg', 100, TRUE)
+		playsound(game, 'sound/items/weapons/genhit2.ogg', 100, TRUE)
 
 /datum/orion_event/illness
 	name = "Space Illness"
@@ -321,7 +321,7 @@
 	gamer.Paralyze(60)
 	game.say("A sudden gust of powerful wind slams [gamer] into the floor!")
 	gamer.take_bodypart_damage(25)
-	playsound(game, 'sound/weapons/genhit.ogg', 100, TRUE)
+	playsound(game, 'sound/items/weapons/genhit.ogg', 100, TRUE)
 
 /datum/orion_event/changeling_infiltration
 	name = "Changeling Infiltration"
@@ -412,7 +412,7 @@
 		game.turns += 1
 		return ..()
 	if(prob(75-gamer_skill))
-		game.encounter_event(/datum/orion_event/black_hole_death)
+		game.encounter_event(/datum/orion_event/black_hole_death, usr)
 		return
 	game.turns += 1
 	..()
@@ -437,8 +437,8 @@
 		playsound(game.loc, 'sound/effects/supermatter.ogg', 100, TRUE)
 		game.say("A miniature black hole suddenly appears in front of [game], devouring [gamer] alive!")
 		gamer.Stun(200, ignore_canstun = TRUE) //you can't run :^)
-		var/black_hole = new /obj/singularity/academy(gamer.loc)
-		addtimer(CALLBACK(game, /atom/movable/proc/say, "[black_hole] winks out, just as suddenly as it appeared."), 50)
+		var/black_hole = new /obj/singularity/orion(gamer.loc)
+		addtimer(CALLBACK(game, TYPE_PROC_REF(/atom/movable, say), "[black_hole] winks out, just as suddenly as it appeared."), 5 SECONDS)
 		QDEL_IN(black_hole, 5 SECONDS)
 
 #define BUTTON_DOCK "Dock"
@@ -525,8 +525,25 @@
 				game.say("WEEWOO! WEEWOO! Spaceport security en route!")
 				playsound(game, 'sound/items/weeoo1.ogg', 100, FALSE)
 				for(var/i in 1 to 3)
-					var/mob/living/simple_animal/hostile/syndicate/ranged/smg/orion/spaceport_security = new(get_turf(src))
-					spaceport_security.GiveTarget(usr)
+					var/mob/living/basic/trooper/syndicate/ranged/smg/orion/spaceport_security = new(get_turf(game))
+					spaceport_security.ai_controller.set_blackboard_key(BB_BASIC_MOB_CURRENT_TARGET, usr)
 	game.fuel += fuel
 	game.food += food
 
+#undef BUTTON_A_GOOD_FIND
+#undef BUTTON_CONTINUE
+#undef BUTTON_CONTINUE_TRAVELS
+#undef BUTTON_DOCK
+#undef BUTTON_EXPLORE_SHIP
+#undef BUTTON_FIX_ENGINE
+#undef BUTTON_GO_AROUND
+#undef BUTTON_KEEP_SPEED
+#undef BUTTON_LEAVE_THE_DERELICT
+#undef BUTTON_OH
+#undef BUTTON_REPAIR_ELECTRONICS
+#undef BUTTON_RESTORE_HULL
+#undef BUTTON_SLOW_DOWN
+#undef BUTTON_SPEED_PAST
+#undef BUTTON_WAIT
+#undef BUTTON_WELCOME_ABOARD
+#undef BUTTON_WHERE_DID_YOU_GO

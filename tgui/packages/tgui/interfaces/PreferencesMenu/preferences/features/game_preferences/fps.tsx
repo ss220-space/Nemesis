@@ -1,13 +1,12 @@
-import { Dropdown, NumberInput, Stack } from "../../../../../components";
-import { Feature, FeatureNumericData, FeatureValueProps } from "../base";
+import { Dropdown, NumberInput, Stack } from 'tgui-core/components';
+
+import type { Feature, FeatureNumericData, FeatureValueProps } from '../base';
 
 type FpsServerData = FeatureNumericData & {
   recommended_fps: number;
-}
+};
 
-const FpsInput = (
-  props: FeatureValueProps<number, number, FpsServerData>
-) => {
+function FpsInput(props: FeatureValueProps<number, number, FpsServerData>) {
   const { handleSetValue, serverData } = props;
 
   let recommened = `Recommended`;
@@ -19,7 +18,7 @@ const FpsInput = (
     <Stack fill>
       <Stack.Item basis="70%">
         <Dropdown
-          selected={props.value === -1 ? recommened : "Custom"}
+          selected={props.value === -1 ? recommened : 'Custom'}
           onSelected={(value) => {
             if (value === recommened) {
               handleSetValue(-1);
@@ -28,29 +27,29 @@ const FpsInput = (
             }
           }}
           width="100%"
-          options={[
-            recommened,
-            "Custom",
-          ]}
+          options={[recommened, 'Custom']}
         />
       </Stack.Item>
 
       <Stack.Item>
-        {serverData && props.value !== -1 && (<NumberInput
-          onChange={(e, value) => {
-            props.handleSetValue(value);
-          }}
-          minValue={1}
-          maxValue={serverData.maximum}
-          value={props.value}
-        />)}
+        {serverData && props.value !== -1 && (
+          <NumberInput
+            onChange={(value) => {
+              props.handleSetValue(value);
+            }}
+            minValue={1}
+            maxValue={serverData.maximum}
+            value={props.value}
+            step={1}
+          />
+        )}
       </Stack.Item>
     </Stack>
   );
-};
+}
 
 export const clientfps: Feature<number, number, FpsServerData> = {
-  name: "FPS",
-  category: "GAMEPLAY",
+  name: 'FPS',
+  category: 'GAMEPLAY',
   component: FpsInput,
 };

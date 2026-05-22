@@ -1,25 +1,18 @@
-#define HOLOPAD_MAX_DIAL_TIME 200
-
-#define HOLORECORD_DELAY "delay"
-#define HOLORECORD_SAY "say"
-#define HOLORECORD_SOUND "sound"
-#define HOLORECORD_LANGUAGE "lang"
-#define HOLORECORD_PRESET "preset"
-#define HOLORECORD_RENAME "rename"
-
-#define HOLORECORD_MAX_LENGTH 200
-
-/mob/camera/ai_eye/remote/holo/setLoc(turf/destination, force_update = FALSE)
-	. = ..()
-	var/obj/machinery/holopad/H = origin
-	H?.move_hologram(eye_user, loc)
+/mob/eye/camera/remote/holo/setLoc(turf/destination, force_update = FALSE)
+	// If we're moving outside the space of our projector, then just... don't
+	var/obj/machinery/holopad/H = origin_ref?.resolve()
+	if(!H?.move_hologram(user_ref?.resolve(), destination))
+		sprint = initial(sprint) // Reset sprint so it doesn't balloon in our calling proc
+		return
+	return ..()
 
 /obj/machinery/holopad/remove_eye_control(mob/living/user)
-	if(user.client)
-		user.reset_perspective(null)
-	user.remote_control = null
+	var/mob/eye/camera/remote/eye = user.remote_control
+	if(!istype(eye))
+		CRASH("Attempted to remove eye control from non-camera eye. Something has gone horribly wrong.")
+	eye.assign_user(null)
 
-//this datum manages it's own references
+//this datum manages its own references
 
 /datum/holocall
 	///the one that called
@@ -32,7 +25,7 @@
 	var/list/dialed_holopads
 
 	///user's eye, once connected
-	var/mob/camera/ai_eye/remote/holo/eye
+	var/mob/eye/camera/remote/holo/eye
 	///user's hologram, once connected
 	var/obj/effect/overlay/holo_pad_hologram/hologram
 	///hangup action
@@ -42,10 +35,10 @@
 	///calls from a head of staff autoconnect, if the receiving pad is not secure.
 	var/head_call = FALSE
 
-//creates a holocall made by `caller` from `calling_pad` to `callees`
-/datum/holocall/New(mob/living/caller, obj/machinery/holopad/calling_pad, list/callees, elevated_access = FALSE)
+//creates a holocall made by `call_source` from `calling_pad` to `callees`
+/datum/holocall/New(mob/living/call_source, obj/machinery/holopad/calling_pad, list/callees, elevated_access = FALSE)
 	call_start_time = world.time
-	user = caller
+	user = call_source
 	calling_pad.outgoing_call = src
 	calling_holopad = calling_pad
 	head_call = elevated_access
@@ -74,9 +67,7 @@
 //cleans up ALL references :)
 /datum/holocall/Destroy()
 	QDEL_NULL(hangup)
-
-	if(!QDELETED(eye))
-		QDEL_NULL(eye)
+	QDEL_NULL(eye)
 
 	if(connected_holopad && !QDELETED(hologram))
 		hologram = null
@@ -165,15 +156,8 @@
 	hologram = answering_holopad.activate_holo(user)
 	hologram.HC = src
 
-	//eyeobj code is horrid, this is the best copypasta I could make
-	eye = new
-	eye.origin = answering_holopad
-	eye.eye_initialized = TRUE
-	eye.eye_user = user
-	eye.name = "Camera Eye ([user.name])"
-	user.remote_control = eye
-	user.reset_perspective(eye)
-	eye.setLoc(answering_holopad.loc)
+	eye = new(get_turf(answering_holopad), answering_holopad)
+	eye.assign_user(user)
 
 	hangup = new(eye, src)
 	hangup.Grant(user)
@@ -189,7 +173,7 @@
 	if(QDELETED(src))
 		return FALSE
 
-	. = !QDELETED(user) && !user.incapacitated() && !QDELETED(calling_holopad) && calling_holopad.is_operational && user.loc == calling_holopad.loc
+	. = !QDELETED(user) && !user.incapacitated && !QDELETED(calling_holopad) && calling_holopad.is_operational && user.loc == calling_holopad.loc
 
 	if(.)
 		if(!connected_holopad)
@@ -203,7 +187,7 @@
 
 /datum/action/innate/end_holocall
 	name = "End Holocall"
-	icon_icon = 'icons/mob/actions/actions_silicon.dmi'
+	button_icon = 'icons/mob/actions/actions_silicon.dmi'
 	button_icon_state = "camera_off"
 	var/datum/holocall/hcall
 
@@ -231,9 +215,9 @@
 /obj/item/disk/holodisk
 	name = "holorecord disk"
 	desc = "Stores recorder holocalls."
-	icon_state = "holodisk"
+	sticker_icon_state = "o_holo"
 	obj_flags = UNIQUE_RENAME
-	custom_materials = list(/datum/material/iron = 100, /datum/material/glass = 100)
+	custom_materials = list(/datum/material/iron = SMALL_MATERIAL_AMOUNT, /datum/material/glass = SMALL_MATERIAL_AMOUNT)
 	var/datum/holorecord/record
 	//Preset variables
 	var/preset_image_type
@@ -242,27 +226,33 @@
 /obj/item/disk/holodisk/Initialize(mapload)
 	. = ..()
 	if(preset_record_text)
-		INVOKE_ASYNC(src, .proc/build_record)
+		INVOKE_ASYNC(src, PROC_REF(build_record))
 
 /obj/item/disk/holodisk/Destroy()
 	QDEL_NULL(record)
 	return ..()
 
-/obj/item/disk/holodisk/attackby(obj/item/W, mob/user, params)
-	if(istype(W, /obj/item/disk/holodisk))
-		var/obj/item/disk/holodisk/holodiskOriginal = W
-		if (holodiskOriginal.record)
-			if (!record)
-				record = new
-			record.caller_name = holodiskOriginal.record.caller_name
-			record.caller_image = holodiskOriginal.record.caller_image
-			record.entries = holodiskOriginal.record.entries.Copy()
-			record.language = holodiskOriginal.record.language
-			to_chat(user, span_notice("You copy the record from [holodiskOriginal] to [src] by connecting the ports!"))
-			name = holodiskOriginal.name
-		else
-			to_chat(user, span_warning("[holodiskOriginal] has no record on it!"))
-	..()
+/obj/item/disk/holodisk/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	if(!istype(tool, /obj/item/disk/holodisk))
+		return NONE
+
+	var/obj/item/disk/holodisk/holodisk_original = tool
+
+	if (!holodisk_original.record)
+		to_chat(user, span_warning("[holodisk_original] has no record on it!"))
+		return ITEM_INTERACT_BLOCKING
+
+	if (!record)
+		record = new
+
+	record.caller_name = holodisk_original.record.caller_name
+	record.caller_image = holodisk_original.record.caller_image
+	record.entries = holodisk_original.record.entries.Copy()
+	record.language = holodisk_original.record.language
+	to_chat(user, span_notice("You copy the record from [holodisk_original] to [src] by connecting the ports!"))
+	name = holodisk_original.name
+
+	return ITEM_INTERACT_SUCCESS
 
 /obj/item/disk/holodisk/proc/build_record()
 	record = new
@@ -300,7 +290,7 @@
 				if(ispath(preset_type,/datum/preset_holoimage))
 					record.entries += list(list(HOLORECORD_PRESET,preset_type))
 	if(!preset_image_type)
-		record.caller_image = image('icons/mob/animal.dmi',"old")
+		record.caller_image = image('icons/mob/simple/animal.dmi',"old")
 	else
 		var/datum/preset_holoimage/H = new preset_image_type
 		record.caller_image = H.build_image()
@@ -322,33 +312,17 @@
 		if(outfit_type)
 			mannequin.equipOutfit(outfit_type,TRUE)
 		mannequin.setDir(SOUTH)
-		COMPILE_OVERLAYS(mannequin)
 		. = image(mannequin)
 		unset_busy_human_dummy("HOLODISK_PRESET")
 
-/obj/item/disk/holodisk/example
-	preset_image_type = /datum/preset_holoimage/clown
-	preset_record_text = {"
-	NAME Clown
-	DELAY 10
-	SAY Why did the chaplain cross the maint ?
-	DELAY 20
-	SAY He wanted to get to the other side!
-	SOUND clownstep
-	DELAY 30
-	LANGUAGE /datum/language/narsie
-	SAY Helped him get there!
-	DELAY 10
-	SAY ALSO IM SECRETLY A GORILLA
-	DELAY 10
-	PRESET /datum/preset_holoimage/gorilla
-	NAME Gorilla
-	LANGUAGE /datum/language/common
-	SAY OOGA
-	DELAY 20"}
+/datum/preset_holoimage/clown
+	outfit_type = /datum/outfit/job/clown
 
 /datum/preset_holoimage/engineer
 	outfit_type = /datum/outfit/job/engineer
+
+/datum/preset_holoimage/corgi
+	nonhuman_mobtype = /mob/living/basic/pet/dog/corgi
 
 /datum/preset_holoimage/engineer/mod
 	outfit_type = /datum/outfit/job/engineer/mod
@@ -372,16 +346,43 @@
 	outfit_type = /datum/outfit/job/captain
 
 /datum/preset_holoimage/nanotrasenprivatesecurity
-	outfit_type = /datum/outfit/nanotrasensoldiercorpse2
+	outfit_type = /datum/outfit/nanotrasensoldiercorpse
 
-/datum/preset_holoimage/gorilla
-	nonhuman_mobtype = /mob/living/simple_animal/hostile/gorilla
+/datum/preset_holoimage/syndicatebattlecruisercaptain
+	outfit_type = /datum/outfit/syndicate_empty/battlecruiser
 
-/datum/preset_holoimage/corgi
-	nonhuman_mobtype = /mob/living/simple_animal/pet/dog/corgi
+/datum/preset_holoimage/hivebot
+	nonhuman_mobtype = /mob/living/basic/hivebot
 
-/datum/preset_holoimage/clown
-	outfit_type = /datum/outfit/job/clown
+/datum/preset_holoimage/ai
+	nonhuman_mobtype = /mob/living/silicon/ai
+
+/datum/preset_holoimage/robot
+	nonhuman_mobtype = /mob/living/silicon/robot
+
+/datum/preset_holoimage/assistant
+	outfit_type = /datum/outfit/job/assistant
+
+/obj/item/disk/holodisk/example
+	preset_image_type = /datum/preset_holoimage/clown
+	preset_record_text = {"
+	NAME Clown
+	DELAY 10
+	SAY Why did the chaplain cross the maint ?
+	DELAY 20
+	SAY He wanted to get to the other side!
+	SOUND clownstep
+	DELAY 30
+	LANGUAGE /datum/language/narsie
+	SAY Helped him get there!
+	DELAY 10
+	SAY ALSO IM SECRETLY A GORILLA
+	DELAY 10
+	PRESET /datum/preset_holoimage/gorilla
+	NAME Gorilla
+	LANGUAGE /datum/language/common
+	SAY OOGA
+	DELAY 20"}
 
 /obj/item/disk/holodisk/donutstation/whiteship
 	name = "Blackbox Print-out #DS024"
@@ -471,3 +472,123 @@
 	NAME Blackbox Automated Message
 	SAY Connection lost. Dumping audio logs to disk.
 	DELAY 50"}
+
+/obj/item/disk/holodisk/ruin/ghost_restaurant
+	name = "Blackbox Print-out #NG234"
+	preset_image_type = /datum/preset_holoimage/assistant
+	preset_record_text = {"
+	NAME Aron Blue
+	SAY Message from NTGrub Themed Surprise Deliveries, Trademark.
+	DELAY 20
+	NAME Henry Fresh
+	SAY Must you always say the full name, dude?
+	DELAY 20
+	NAME Aron Blue
+	SAY Ahem!
+	DELAY 20
+	NAME Aron Blue
+	SAY It says that they loved our new robot themes!
+	DELAY 20
+	NAME Henry Fresh
+	SAY Oh dang!
+	DELAY 20
+	NAME Henry Fresh
+	SAY Will we be moved to the main team?
+	DELAY 20
+	NAME Aron Blue
+	SAY Hell yeah we will! High five!
+	DELAY 20
+	SOUND punch
+	NAME Henry Fresh
+	SAY High five!
+	DELAY 20
+	NAME Henry Fresh
+	SAY Oh, new order. Its for, hah, *Funny Food*.
+	DELAY 20
+	NAME Aron Blue
+	SAY Easy!
+	DELAY 20
+	NAME Aron Blue
+	SAY I will dress up this robot as a clown.
+	DELAY 20
+	NAME Henry Fresh
+	SAY Well, if you are that basic, lets make it ask for a Banana Pie.
+	DELAY 20
+	NAME Aron Blue
+	SAY Gateway to Planetside Pagliacci 15 is open.
+	DELAY 20
+	NAME Aron Blue
+	SAY Feels appropriate.
+	DELAY 15
+	SOUND clown_step
+	DELAY 10
+	SOUND sparks
+	DELAY 10
+	NAME Aron Blue
+	SAY Next order is for a simple farm dish.
+	DELAY 20
+	NAME Henry Fresh
+	SAY Unlike you, I am creative.
+	DELAY 20
+	NAME Henry Fresh
+	SAY I'll dress it up as a scarecrow.
+	SOUND rustle
+	DELAY 20
+	NAME Aron Blue
+	SAY Let's ask for uuuh, Hot Potato.
+	DELAY 20
+	NAME Henry Fresh
+	SAY Send it to the new place. Firebase Balthazord.
+	DELAY 20
+	NAME Henry Fresh
+	SAY Wait.
+	DELAY 10
+	NAME Henry Fresh
+	SAY You know its called Baked Potato, right?
+	DELAY 10
+	SOUND sparks
+	DELAY 20
+	NAME Aron Blue
+	SAY Shut up, they'll know what I meant!
+	DELAY 20
+	SOUND sparks
+	DELAY 10
+	NAME Henry Fresh
+	SAY Its back.
+	DELAY 20
+	NAME Henry Fresh
+	SAY Haha, it brought a raw potato.
+	DELAY 20
+	NAME Aron Blue
+	SAY HENRY ITS TICK-
+	DELAY 20
+	SOUND explosion
+	DELAY 20
+	PRESET /datum/preset_holoimage/corgi
+	NAME Blackbox Automated Message
+	SAY Connection lost. Dumping audio logs to disk.
+	DELAY 50
+	"}
+
+/obj/item/disk/holodisk/ruin/space/travelers_rest
+	name = "Owner's memo"
+	desc = "A holodisk containing a small memo from the previous owner, addressed to someone else."
+	preset_image_type = /datum/preset_holoimage/engineer/atmos
+	preset_record_text = {"
+		NAME Space Adventurer
+		SOUND PING
+		DELAY 20
+		SAY Hey, I left you this message for when you come back.
+		DELAY 50
+		SAY I picked up an emergency signal from a freighter and I'm going there to search for some goodies.
+		DELAY 50
+		SAY You can crash here if you need to, but make sure to check the anchor cables before you leave.
+		DELAY 50
+		SAY If you don't, this thing might drift off into space.
+		DELAY 50
+		SAY Then some weirdo could find it and potentially claim it as their own.
+		DELAY 50
+		SAY Anyway, gotta go, see ya!
+		DELAY 40
+		SOUND sparks
+	"}

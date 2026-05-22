@@ -7,7 +7,7 @@
 	name = "decoration material spawner"
 	icon_state = "tile"
 	loot = list(
-		/obj/item/stack/sheet/sandblock{amount = 30} = 25,
+		/obj/item/stack/ore/glass/thirty = 25,
 		/obj/item/stack/sheet/mineral/wood{amount = 30} = 25,
 		/obj/item/stack/sheet/bronze/thirty = 20,
 		/obj/item/stack/tile/noslip{amount = 20} = 10,
@@ -32,12 +32,12 @@
 	name = "ornament spawner"
 	icon_state = "lamp"
 	loot = list(
-		/obj/item/sign = 10,
-		/obj/item/flashlight/lamp/green = 10,
-		/obj/item/plaque = 5,
+		/obj/item/flashlight/lamp = 35,
+		/obj/item/flashlight/lamp/green = 35,
+		/obj/item/flashlight/lantern = 10,
+		/obj/item/phone = 10,
 		/obj/item/flashlight/lantern/jade = 5,
-		/obj/item/phone = 5,
-		/obj/item/flashlight/lamp/bananalamp = 3,
+		/obj/item/flashlight/lamp/bananalamp = 5,
 	)
 
 /obj/effect/spawner/random/decoration/generic
@@ -70,6 +70,7 @@
 		/obj/structure/statue/gold/cmo = 5,
 		/obj/structure/statue/gold/ce = 5,
 		/obj/structure/statue/gold/rd = 5,
+		/obj/structure/statue/gold/qm = 5,
 		/obj/structure/statue/bananium/clown = 1,
 		/obj/structure/statue/elder_atmosian = 1,
 		/obj/structure/statue/uranium/nuke = 1,
@@ -79,11 +80,26 @@
 		/obj/structure/statue/diamond/ai2 = 1,
 	)
 
+/obj/effect/spawner/random/decoration/statue/make_item(spawn_loc, type_path_to_make)
+	var/obj/structure/statue/statue = ..()
+	if(istype(statue))
+		statue.set_anchored(TRUE)
+
+	return statue
+
 /obj/effect/spawner/random/decoration/showcase
 	name = "showcase spawner"
 	icon_state = "showcase"
 	loot_type_path = /obj/structure/showcase
 	loot = list()
+
+/obj/effect/spawner/random/decoration/microwave
+	name = "microwave showcase spawner"
+	icon_state = "showcase"
+	loot = list(
+		/obj/structure/showcase/machinery/microwave,
+		/obj/structure/showcase/machinery/microwave_engineering,
+	)
 
 /obj/effect/spawner/random/decoration/glowstick
 	name = "random colored glowstick"
@@ -98,8 +114,39 @@
 		/obj/item/flashlight/glowstick/pink,
 	)
 
+/obj/effect/spawner/random/decoration/glowstick/on
+	name = "random colored glowstick (on)"
+	icon_state = "glowstick"
+	loot = list(
+		/obj/item/flashlight/glowstick,
+		/obj/item/flashlight/glowstick/red,
+		/obj/item/flashlight/glowstick/blue,
+		/obj/item/flashlight/glowstick/cyan,
+		/obj/item/flashlight/glowstick/orange,
+		/obj/item/flashlight/glowstick/yellow,
+		/obj/item/flashlight/glowstick/pink,
+	)
+
+/obj/effect/spawner/random/decoration/glowstick/on/make_item(spawn_loc, type_path_to_make)
+	. = ..()
+
+	var/obj/item/flashlight/glowstick = .
+
+	glowstick.set_light_on(TRUE)
+
 /obj/effect/spawner/random/decoration/paint
 	name = "paint spawner"
 	icon_state = "paint"
 	loot_subtype_path = /obj/item/paint
 	loot = list()
+
+/obj/effect/spawner/random/decoration/flower
+	name = "random flower spawner"
+	icon_state = "flower"
+	loot = list(
+		/obj/item/food/grown/poppy,
+		/obj/item/food/grown/harebell,
+		/obj/item/food/grown/trumpet,
+		/obj/item/food/grown/sunflower,
+		/obj/item/food/grown/rose,
+	)

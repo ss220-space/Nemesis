@@ -5,9 +5,10 @@
 	icon_state = "pylon"
 	light_range = 1.5
 	light_color = COLOR_SOFT_RED
-	break_sound = 'sound/effects/glassbr2.ogg'
-	break_message = "<span class='warning'>The blood-red crystal falls to the floor and shatters!</span>"
+	break_sound = 'sound/effects/glass/glassbr2.ogg'
+	break_message = span_warning("The blood-red crystal falls to the floor and shatters!")
 	/// Length of the cooldown in between tile corruptions. Doubled if no turfs are found.
+	custom_materials = list(/datum/material/runedmetal = SHEET_MATERIAL_AMOUNT * 4)
 	var/corruption_cooldown_duration = 5 SECONDS
 	/// The cooldown for corruptions.
 	COOLDOWN_DECLARE(corruption_cooldown)
@@ -22,6 +23,7 @@
 		burn_heal = 0.4, \
 		blood_heal = 0.4, \
 		simple_heal = 1.2, \
+		wound_clotting = 0.1, \
 		requires_visibility = FALSE, \
 		limit_to_trait = TRAIT_HEALS_FROM_CULT_PYLONS, \
 		healing_color = COLOR_CULT_RED, \
@@ -48,18 +50,16 @@
 		var/static/list/blacklisted_pylon_turfs = typecacheof(list(
 			/turf/closed,
 			/turf/open/floor/engine/cult,
-			/turf/open/space,
-			/turf/open/lava,
-			/turf/open/chasm,
+			/turf/open/misc/asteroid,
 		))
-		if(is_type_in_typecache(nearby_turf, blacklisted_pylon_turfs))
+		if(isgroundlessturf(nearby_turf) || is_type_in_typecache(nearby_turf, blacklisted_pylon_turfs))
 			continue
 		validturfs |= nearby_turf
 
 	if(length(validturfs))
 		var/turf/converted_turf = pick(validturfs)
-		if(istype(converted_turf, /turf/open/floor/plating))
-			converted_turf.PlaceOnTop(/turf/open/floor/engine/cult, flags = CHANGETURF_INHERIT_AIR)
+		if(isplatingturf(converted_turf))
+			converted_turf.place_on_top(/turf/open/floor/engine/cult, flags = CHANGETURF_INHERIT_AIR)
 		else
 			converted_turf.ChangeTurf(/turf/open/floor/engine/cult, flags = CHANGETURF_INHERIT_AIR)
 

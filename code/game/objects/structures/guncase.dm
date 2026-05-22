@@ -2,7 +2,7 @@
 /obj/structure/guncase
 	name = "gun locker"
 	desc = "A locker that holds guns."
-	icon = 'icons/obj/closet.dmi'
+	icon = 'icons/obj/storage/closet.dmi'
 	icon_state = "shotguncase"
 	anchored = FALSE
 	density = TRUE
@@ -27,11 +27,11 @@
 	if(case_type && LAZYLEN(contents))
 		var/mutable_appearance/gun_overlay = mutable_appearance(icon, case_type)
 		for(var/i in 1 to contents.len)
-			gun_overlay.pixel_x = 3 * (i - 1)
+			gun_overlay.pixel_w = 3 * (i - 1)
 			. += new /mutable_appearance(gun_overlay)
 	. += "[icon_state]_[open ? "open" : "door"]"
 
-/obj/structure/guncase/attackby(obj/item/I, mob/living/user, params)
+/obj/structure/guncase/attackby(obj/item/I, mob/living/user, list/modifiers, list/attack_modifiers)
 	if(iscyborg(user) || isalien(user))
 		return
 	if(istype(I, gun_category) && open)
@@ -82,7 +82,7 @@
 			item_image.copy_overlays(thing)
 		items += list("[thing.name] ([i])" = item_image)
 
-	var/pick = show_radial_menu(user, src, items, custom_check = CALLBACK(src, .proc/check_menu, user), radius = 36, require_near = TRUE)
+	var/pick = show_radial_menu(user, src, items, custom_check = CALLBACK(src, PROC_REF(check_menu), user), radius = 36, require_near = TRUE)
 	if(!pick)
 		return
 
@@ -92,7 +92,6 @@
 		return
 	if(!user.put_in_hands(weapon))
 		weapon.forceMove(get_turf(src))
-	update_appearance()
 
 /**
  * check_menu: Checks if we are allowed to interact with a radial menu
@@ -105,11 +104,12 @@
 		return FALSE
 	if(!istype(user))
 		return FALSE
-	if(user.incapacitated())
+	if(user.incapacitated)
 		return FALSE
 	return TRUE
 
-/obj/structure/guncase/handle_atom_del(atom/A)
+/obj/structure/guncase/Exited(atom/movable/gone, direction)
+	. = ..()
 	update_appearance()
 
 /obj/structure/guncase/contents_explosion(severity, target)
@@ -130,6 +130,10 @@
 /obj/structure/guncase/ecase
 	name = "energy gun locker"
 	desc = "A locker that holds energy guns."
-	icon_state = "ecase"
 	case_type = "egun"
 	gun_category = /obj/item/gun/energy/e_gun
+
+/obj/structure/guncase/wt550
+	name = "WT-550 gun locker"
+	desc = "A locker that holds WT-550 rifles."
+	case_type = "wt550"

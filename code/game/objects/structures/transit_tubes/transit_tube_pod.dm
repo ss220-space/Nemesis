@@ -2,7 +2,7 @@
 #define MOVE_ANIMATION_STAGE_TWO 2
 
 /obj/structure/transit_tube_pod
-	icon = 'icons/obj/atmospherics/pipes/transit_tube.dmi'
+	icon = 'icons/obj/pipes_n_cables/transit_tube.dmi'
 	icon_state = "pod"
 	animate_movement = FORWARD_STEPS
 	anchored = TRUE
@@ -14,9 +14,8 @@
 
 /obj/structure/transit_tube_pod/Initialize(mapload)
 	. = ..()
-	air_contents.add_gases(/datum/gas/oxygen, /datum/gas/nitrogen)
-	air_contents.gases[/datum/gas/oxygen][MOLES] = MOLES_O2STANDARD
-	air_contents.gases[/datum/gas/nitrogen][MOLES] = MOLES_N2STANDARD
+	var/list/new_gases = list(/datum/gas/oxygen = MOLES_O2STANDARD, /datum/gas/nitrogen = MOLES_N2STANDARD)
+	air_contents.adjust_multiple_gases(new_gases)
 	air_contents.temperature = T20C
 
 /obj/structure/transit_tube_pod/Destroy()
@@ -27,7 +26,7 @@
 	icon_state = contents.len ? occupied_icon_state : initial(icon_state)
 	return ..()
 
-/obj/structure/transit_tube_pod/attackby(obj/item/I, mob/user, params)
+/obj/structure/transit_tube_pod/attackby(obj/item/I, mob/user, list/modifiers, list/attack_modifiers)
 	if(I.tool_behaviour == TOOL_CROWBAR)
 		if(!moving)
 			I.play_tool_sound(src)
@@ -35,27 +34,24 @@
 				user.visible_message(span_notice("[user] empties \the [src]."), span_notice("You empty \the [src]."))
 				empty_pod()
 			else
-				deconstruct(TRUE, user)
+				deconstruct(TRUE)
 	else
 		return ..()
 
-/obj/structure/transit_tube_pod/deconstruct(disassembled = TRUE, mob/user)
-	if(!(flags_1 & NODECONSTRUCT_1))
-		var/atom/location = get_turf(src)
-		if(user)
-			location = user.loc
-			add_fingerprint(user)
-			user.visible_message(span_notice("[user] removes [src]."), span_notice("You remove [src]."))
-		var/obj/structure/c_transit_tube_pod/R = new/obj/structure/c_transit_tube_pod(location)
-		transfer_fingerprints_to(R)
-		R.setDir(dir)
-		empty_pod(location)
-	qdel(src)
+/obj/structure/transit_tube_pod/atom_deconstruct(disassembled = TRUE)
+	var/atom/location = get_turf(src)
+	var/obj/structure/c_transit_tube_pod/tube_pod = new/obj/structure/c_transit_tube_pod(location)
+	transfer_fingerprints_to(tube_pod)
+	tube_pod.setDir(dir)
+	empty_pod(location)
 
 /obj/structure/transit_tube_pod/ex_act(severity, target)
 	. = ..()
-	if(!QDELETED(src))
-		empty_pod()
+	if(QDELETED(src))
+		return TRUE
+
+	empty_pod()
+	return TRUE
 
 /obj/structure/transit_tube_pod/contents_explosion(severity, target)
 	switch(severity)
@@ -66,13 +62,13 @@
 		if(EXPLODE_LIGHT)
 			SSexplosions.low_mov_atom += contents
 
-/obj/structure/transit_tube_pod/singularity_pull(S, current_size)
+/obj/structure/transit_tube_pod/singularity_pull(atom/singularity, current_size)
 	..()
 	if(current_size >= STAGE_FIVE)
 		deconstruct(FALSE)
 
 /obj/structure/transit_tube_pod/container_resist_act(mob/living/user)
-	if(!user.incapacitated())
+	if(!user.incapacitated)
 		empty_pod()
 		return
 	if(!moving)
@@ -97,10 +93,10 @@
 	moving = TRUE
 	current_tube = tube
 
-	var/datum/move_loop/engine = SSmove_manager.force_move_dir(src, dir, 0, priority = MOVEMENT_ABOVE_SPACE_PRIORITY)
-	RegisterSignal(engine, COMSIG_MOVELOOP_PREPROCESS_CHECK, .proc/before_pipe_transfer)
-	RegisterSignal(engine, COMSIG_MOVELOOP_POSTPROCESS, .proc/after_pipe_transfer)
-	RegisterSignal(engine, COMSIG_PARENT_QDELETING, .proc/engine_finish)
+	var/datum/move_loop/engine = GLOB.move_manager.force_move_dir(src, dir, 0, priority = MOVEMENT_ABOVE_SPACE_PRIORITY)
+	RegisterSignal(engine, COMSIG_MOVELOOP_PREPROCESS_CHECK, PROC_REF(before_pipe_transfer))
+	RegisterSignal(engine, COMSIG_MOVELOOP_POSTPROCESS, PROC_REF(after_pipe_transfer))
+	RegisterSignal(engine, COMSIG_QDELETING, PROC_REF(engine_finish))
 	calibrate_engine(engine)
 
 /obj/structure/transit_tube_pod/proc/before_pipe_transfer(datum/move_loop/move/source)
@@ -151,7 +147,7 @@
 
 	var/obj/structure/transit_tube/TT = locate(/obj/structure/transit_tube) in loc
 	//landed on a turf without transit tube or not in our direction
-	if(!TT || (!(dir in TT.tube_dirs) && !(turn(dir,180) in TT.tube_dirs)))
+	if(!TT || (!(dir in TT.tube_dirs) && !(REVERSE_DIR(dir) in TT.tube_dirs)))
 		outside_tube()
 
 /obj/structure/transit_tube_pod/proc/outside_tube()
@@ -184,7 +180,7 @@
 	for(var/obj/structure/transit_tube/station/station in loc)
 		if(station.pod_moving)
 			return
-		if(direction == turn(station.boarding_dir,180))
+		if(direction == REVERSE_DIR(station.boarding_dir))
 			if(station.open_status == STATION_TUBE_OPEN)
 				user.forceMove(loc)
 				update_appearance()
@@ -216,7 +212,8 @@
 	occupied_icon_state = "temppod_occupied"
 
 /obj/structure/transit_tube_pod/dispensed/outside_tube()
-	qdel(src)
+	if(!QDELETED(src))
+		qdel(src)
 
 #undef MOVE_ANIMATION_STAGE_ONE
 #undef MOVE_ANIMATION_STAGE_TWO

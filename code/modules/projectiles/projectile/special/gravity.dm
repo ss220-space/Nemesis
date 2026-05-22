@@ -2,11 +2,10 @@
 	name = "repulsion bolt"
 	icon = 'icons/effects/effects.dmi'
 	icon_state = "chronofield"
-	hitsound = 'sound/weapons/wave.ogg'
+	hitsound = 'sound/items/weapons/wave.ogg'
 	damage = 0
 	damage_type = BRUTE
-	nodamage = TRUE
-	color = "#33CCFF"
+	color = COLOR_BLUE_LIGHT
 	var/turf/T
 	var/power = 4
 	var/list/thrown_items = list()
@@ -17,7 +16,7 @@
 	if(istype(C)) //Hard-coded maximum power so servers can't be crashed by trying to throw the entire Z level's items
 		power = min(C.gun?.power, 15)
 
-/obj/projectile/gravityrepulse/on_hit()
+/obj/projectile/gravityrepulse/on_hit(atom/target, blocked = 0, pierce_hit)
 	. = ..()
 	T = get_turf(src)
 	for(var/atom/movable/A in range(T, power))
@@ -37,10 +36,9 @@
 	name = "attraction bolt"
 	icon = 'icons/effects/effects.dmi'
 	icon_state = "chronofield"
-	hitsound = 'sound/weapons/wave.ogg'
+	hitsound = 'sound/items/weapons/wave.ogg'
 	damage = 0
 	damage_type = BRUTE
-	nodamage = TRUE
 	color = "#FF6600"
 	var/turf/T
 	var/power = 4
@@ -52,7 +50,7 @@
 	if(istype(C)) //Hard-coded maximum power so servers can't be crashed by trying to throw the entire Z level's items
 		power = min(C.gun?.power, 15)
 
-/obj/projectile/gravityattract/on_hit()
+/obj/projectile/gravityattract/on_hit(atom/target, blocked = 0, pierce_hit)
 	. = ..()
 	T = get_turf(src)
 	for(var/atom/movable/A in range(T, power))
@@ -71,11 +69,10 @@
 	name = "gravitational blast"
 	icon = 'icons/effects/effects.dmi'
 	icon_state = "chronofield"
-	hitsound = 'sound/weapons/wave.ogg'
+	hitsound = 'sound/items/weapons/wave.ogg'
 	damage = 0
 	damage_type = BRUTE
-	nodamage = TRUE
-	color = "#101010"
+	color = COLOR_FULL_TONER_BLACK
 	var/turf/T
 	var/power = 4
 	var/list/thrown_items = list()
@@ -86,11 +83,11 @@
 	if(istype(C)) //Hard-coded maximum power so servers can't be crashed by trying to throw the entire Z level's items
 		power = min(C.gun?.power, 15)
 
-/obj/projectile/gravitychaos/on_hit()
+/obj/projectile/gravitychaos/on_hit(atom/target, blocked = 0, pierce_hit)
 	. = ..()
 	T = get_turf(src)
 	for(var/atom/movable/A in range(T, power))
-		if(A == src|| (firer && A == src.firer) || A.anchored || thrown_items[A])
+		if(A == src || (firer && A == src.firer) || A.anchored || thrown_items[A])
 			continue
 		if(ismob(A))
 			var/mob/M = A

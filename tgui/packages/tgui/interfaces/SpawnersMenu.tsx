@@ -1,22 +1,28 @@
-import { useBackend } from '../backend';
-import { Button, LabeledList, Section, Stack } from '../components';
-import { Window } from '../layouts';
+import { useBackend } from 'tgui/backend';
+import { Window } from 'tgui/layouts';
+import { Button, LabeledList, Section, Stack } from 'tgui-core/components';
+import type { BooleanLike } from 'tgui-core/react';
+import { capitalizeAll } from 'tgui-core/string';
 
-type SpawnersMenuContext = {
-  spawners: spawner[];
+type Data = {
+  spawners: Spawner[];
 };
 
-type spawner = {
+type Spawner = {
   name: string;
   amount_left: number;
-  you_are_text?: string;
-  flavor_text?: string;
-  important_text?: string;
-};
+  infinite: BooleanLike;
+} & Partial<{
+  desc: string;
+  you_are_text: string;
+  flavor_text: string;
+  important_text: string;
+}>;
 
-export const SpawnersMenu = (props, context) => {
-  const { act, data } = useBackend<SpawnersMenuContext>(context);
-  const spawners = data.spawners || [];
+export const SpawnersMenu = (props) => {
+  const { act, data } = useBackend<Data>();
+  const { spawners = [] } = data;
+
   return (
     <Window title="Spawners Menu" width={700} height={525}>
       <Window.Content scrollable>
@@ -26,40 +32,57 @@ export const SpawnersMenu = (props, context) => {
               <Section
                 fill
                 // Capitalizes the spawner name
-                title={spawner.name.replace(/^\w/, (c) => c.toUpperCase())}
+                title={capitalizeAll(spawner.name)}
                 buttons={
                   <Stack>
-                    <Stack.Item fontSize="14px" color="green">
-                      {spawner.amount_left} left
-                    </Stack.Item>
+                    {spawner.infinite ? (
+                      <Stack.Item fontSize="14px" color="green">
+                        Infinite
+                      </Stack.Item>
+                    ) : (
+                      <Stack.Item fontSize="14px" color="green">
+                        {spawner.amount_left} left
+                      </Stack.Item>
+                    )}
                     <Stack.Item>
                       <Button
                         content="Jump"
                         onClick={() =>
                           act('jump', {
                             name: spawner.name,
-                          })}
+                          })
+                        }
                       />
                       <Button
                         content="Spawn"
                         onClick={() =>
                           act('spawn', {
                             name: spawner.name,
-                          })}
+                          })
+                        }
                       />
                     </Stack.Item>
                   </Stack>
-                }>
+                }
+              >
                 <LabeledList>
-                  <LabeledList.Item label="Origin">
-                    {spawner.you_are_text || 'Unknown'}
-                  </LabeledList.Item>
-                  <LabeledList.Item label="Directives">
-                    {spawner.flavor_text || 'None'}
-                  </LabeledList.Item>
-                  <LabeledList.Item color="bad" label="Conditions">
-                    {spawner.important_text || 'None'}
-                  </LabeledList.Item>
+                  {spawner.desc ? (
+                    <LabeledList.Item label="Description">
+                      {spawner.desc}
+                    </LabeledList.Item>
+                  ) : (
+                    <div>
+                      <LabeledList.Item label="Origin">
+                        {spawner.you_are_text || 'Unknown'}
+                      </LabeledList.Item>
+                      <LabeledList.Item label="Directives">
+                        {spawner.flavor_text || 'None'}
+                      </LabeledList.Item>
+                      <LabeledList.Item color="bad" label="Conditions">
+                        {spawner.important_text || 'None'}
+                      </LabeledList.Item>
+                    </div>
+                  )}
                 </LabeledList>
               </Section>
             </Stack.Item>

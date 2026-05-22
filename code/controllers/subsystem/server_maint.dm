@@ -3,9 +3,9 @@
 SUBSYSTEM_DEF(server_maint)
 	name = "Server Tasks"
 	wait = 6
-	flags = SS_POST_FIRE_TIMING
+	ss_flags = SS_POST_FIRE_TIMING
 	priority = FIRE_PRIORITY_SERVER_MAINT
-	init_order = INIT_ORDER_SERVER_MAINT
+	init_stage = INITSTAGE_EARLY
 	runlevels = RUNLEVEL_LOBBY | RUNLEVELS_DEFAULT
 	var/list/currentrun
 	///Associated list of list names to lists to clear of nulls
@@ -17,7 +17,10 @@ SUBSYSTEM_DEF(server_maint)
 /datum/controller/subsystem/server_maint/PreInit()
 	world.hub_password = "" //quickly! before the hubbies see us.
 
-/datum/controller/subsystem/server_maint/Initialize(timeofday)
+/datum/controller/subsystem/server_maint/Initialize()
+	if (fexists("tmp/"))
+		fdel("tmp/")
+
 	if (CONFIG_GET(flag/hub))
 		world.update_hub_visibility(TRUE)
 	//Keep in mind, because of how delay works adding a list here makes each list take wait * delay more time to clear
@@ -30,7 +33,12 @@ SUBSYSTEM_DEF(server_maint)
 		"dead_mob_list" = GLOB.dead_mob_list,
 		"keyloop_list" = GLOB.keyloop_list, //A null here will cause new clients to be unable to move. totally unacceptable
 	)
-	return ..()
+
+	var/datum/tgs_version/tgsversion = world.TgsVersion()
+	if(tgsversion)
+		SSblackbox.record_feedback("text", "server_tools", 1, tgsversion.raw_parameter)
+
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/server_maint/fire(resumed = FALSE)
 	if(!resumed)
@@ -58,8 +66,7 @@ SUBSYSTEM_DEF(server_maint)
 	var/afk_period
 	if(kick_inactive)
 		afk_period = CONFIG_GET(number/afk_period)
-	for(var/I in currentrun)
-		var/client/C = I
+	for(var/client/C as anything in currentrun)
 		//handle kicking inactive players
 		if(round_started && kick_inactive && !C.holder && C.is_afk(afk_period))
 			var/cmob = C.mob
@@ -69,13 +76,12 @@ SUBSYSTEM_DEF(server_maint)
 				QDEL_IN(C, 1) //to ensure they get our message before getting disconnected
 				continue
 
-		if (!(!C || world.time - C.connection_time < PING_BUFFER_TIME || C.inactivity >= (wait-1)))
-			winset(C, null, "command=.update_ping+[num2text(world.time+world.tick_lag*TICK_USAGE_REAL/100, 32)]")
-
 		if (MC_TICK_CHECK) //one day, when ss13 has 1000 people per server, you guys are gonna be glad I added this tick check
 			return
 
 /datum/controller/subsystem/server_maint/Shutdown()
+	if (fexists("tmp/"))
+		fdel("tmp/")
 	kick_clients_in_lobby(span_boldannounce("The round came to an end with you in the lobby."), TRUE) //second parameter ensures only afk clients are kicked
 	var/server = CONFIG_GET(string/server)
 	for(var/thing in GLOB.clients)
@@ -85,9 +91,6 @@ SUBSYSTEM_DEF(server_maint)
 		C?.tgui_panel?.send_roundrestart()
 		if(server) //if you set a server location in config.txt, it sends you there instead of trying to reconnect to the same world address. -- NeoFite
 			C << link("byond://[server]")
-	var/datum/tgs_version/tgsversion = world.TgsVersion()
-	if(tgsversion)
-		SSblackbox.record_feedback("text", "server_tools", 1, tgsversion.raw_parameter)
 
 
 /datum/controller/subsystem/server_maint/proc/UpdateHubStatus()

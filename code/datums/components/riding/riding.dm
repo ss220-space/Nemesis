@@ -1,3 +1,8 @@
+/// Offsets applied for people riding something
+#define RIDING_SOURCE "riding"
+/// Offsets applied for something being ridden
+#define BEING_RIDDEN_SOURCE "being_ridden"
+
 /**
  * This is the riding component, which is applied to a movable atom by the [ridable element][/datum/element/ridable] when a mob is successfully buckled to said movable.
  *
@@ -9,29 +14,26 @@
 /datum/component/riding
 	dupe_mode = COMPONENT_DUPE_UNIQUE
 
-	var/last_move_diagonal = FALSE
-	///tick delay between movements, lower = faster, higher = slower
+	/// Tick delay between movements, lower = faster, higher = slower
 	var/vehicle_move_delay = 2
-
 	/**
 	 * If the driver needs a certain item in hand (or inserted, for vehicles) to drive this. For vehicles, this must be duplicated on the actual vehicle object in their
 	 * [/obj/vehicle/var/key_type] variable because the vehicle objects still have a few special checks/functions of their own I'm not porting over to the riding component
 	 * quite yet. Make sure if you define it on the vehicle, you define it here too.
 	 */
 	var/keytype
-
-	/// position_of_user = list(dir = list(px, py)), or RIDING_OFFSET_ALL for a generic one.
-	var/list/riding_offsets = list()
-	/// ["[DIRECTION]"] = layer. Don't set it for a direction for default, set a direction to null for no change.
-	var/list/directional_vehicle_layers = list()
-	/// same as above but instead of layer you have a list(px, py)
-	var/list/directional_vehicle_offsets = list()
 	/// allow typecache for only certain turfs, forbid to allow all but those. allow only certain turfs will take precedence.
 	var/list/allowed_turf_typecache
 	/// allow typecache for only certain turfs, forbid to allow all but those. allow only certain turfs will take precedence.
 	var/list/forbid_turf_typecache
+	/// additional traits to add to anyone riding this vehicle
+	var/list/rider_traits = list(TRAIT_NO_FLOATING_ANIM)
 	/// We don't need roads where we're going if this is TRUE, allow normal movement in space tiles
 	var/override_allow_spacemove = FALSE
+	/// determines behavior for other mobs trying to unbuckle riders
+	var/other_unbuckle = CAN_FORCE_UNBUCKLE
+	/// Like last_bumped for mobs, but for vehicles. Exists to allow the door bump cooldown while also passing door openings through Bumped()
+	var/vehicle_last_bumped = 0
 
 	/**
 	 * Ride check flags defined for the specific riding component types, so we know if we need arms, legs, or whatever.
@@ -44,69 +46,86 @@
 	COOLDOWN_DECLARE(vehicle_move_cooldown)
 
 
-/datum/component/riding/Initialize(mob/living/riding_mob, force = FALSE, buckle_mob_flags= NONE, potion_boost = FALSE)
+/datum/component/riding/Initialize(mob/living/riding_mob, force = FALSE, buckle_mob_flags = NONE)
 	if(!ismovable(parent))
 		return COMPONENT_INCOMPATIBLE
 
-	handle_specials(riding_mob)
 	riding_mob.updating_glide_size = FALSE
 	ride_check_flags |= buckle_mob_flags
 
-	if(potion_boost)
+	if(HAS_TRAIT(parent, TRAIT_SPEED_POTIONED))
 		vehicle_move_delay = round(CONFIG_GET(number/movedelay/run_delay) * 0.85, 0.01)
-
 
 /datum/component/riding/RegisterWithParent()
 	. = ..()
-	RegisterSignal(parent, COMSIG_ATOM_DIR_CHANGE, .proc/vehicle_turned)
-	RegisterSignal(parent, COMSIG_MOVABLE_UNBUCKLE, .proc/vehicle_mob_unbuckle)
-	RegisterSignal(parent, COMSIG_MOVABLE_BUCKLE, .proc/vehicle_mob_buckle)
-	RegisterSignal(parent, COMSIG_MOVABLE_MOVED, .proc/vehicle_moved)
-	RegisterSignal(parent, COMSIG_MOVABLE_BUMP, .proc/vehicle_bump)
-	RegisterSignal(parent, COMSIG_BUCKLED_CAN_Z_MOVE, .proc/riding_can_z_move)
-
-/**
- * This proc handles all of the proc calls to things like set_vehicle_dir_layer() that a type of riding datum needs to call on creation
- *
- * The original riding component had these procs all called from the ridden object itself through the use of GetComponent() and LoadComponent()
- * This was obviously problematic for componentization, but while lots of the variables being set were able to be moved to component variables,
- * the proc calls couldn't be. Thus, anything that has to do an initial proc call should be handled here.
- */
-/datum/component/riding/proc/handle_specials()
-	return
+	RegisterSignal(parent, COMSIG_ATOM_DIR_CHANGE, PROC_REF(vehicle_turned))
+	RegisterSignal(parent, COMSIG_MOVABLE_UNBUCKLE, PROC_REF(vehicle_mob_unbuckle))
+	RegisterSignal(parent, COMSIG_MOVABLE_BUCKLE, PROC_REF(vehicle_mob_buckle))
+	RegisterSignal(parent, COMSIG_MOVABLE_MOVED, PROC_REF(vehicle_moved))
+	RegisterSignal(parent, COMSIG_MOVABLE_BUMP, PROC_REF(vehicle_bump))
+	RegisterSignal(parent, COMSIG_BUCKLED_CAN_Z_MOVE, PROC_REF(riding_can_z_move))
+	RegisterSignals(parent, GLOB.movement_type_addtrait_signals, PROC_REF(on_movement_type_trait_gain))
+	RegisterSignals(parent, GLOB.movement_type_removetrait_signals, PROC_REF(on_movement_type_trait_loss))
+	RegisterSignal(parent, COMSIG_SUPERMATTER_CONSUMED, PROC_REF(on_entered_supermatter))
+	switch(other_unbuckle)
+		if(CANNOT_FORCE_UNBUCKLE)
+			RegisterSignal(parent, COMSIG_ATOM_ATTACK_HAND, PROC_REF(block_unbuckle))
+		if(CAN_DISARM_UNBUCKLE)
+			RegisterSignal(parent, COMSIG_ATOM_ATTACK_HAND, PROC_REF(block_unbuckle))
+			if(isliving(parent))
+				RegisterSignal(parent, COMSIG_LIVING_DISARM_HIT, PROC_REF(parent_disarmed))
 
 /// This proc is called when a rider unbuckles, whether they chose to or not. If there's no more riders, this will be the riding component's death knell.
 /datum/component/riding/proc/vehicle_mob_unbuckle(datum/source, mob/living/rider, force = FALSE)
 	SIGNAL_HANDLER
 
+	restore_rider_layer_and_offsets(rider)
+	handle_unbuckle(rider)
+
 	var/atom/movable/movable_parent = parent
-	restore_position(rider)
+	if(movable_parent.has_buckled_mobs())
+		update_parent_layer_and_offsets(movable_parent.dir, animate = TRUE)
+	else
+		restore_parent_layer_and_offsets()
+		qdel(src)
+
+/datum/component/riding/proc/handle_unbuckle(mob/living/rider)
 	unequip_buckle_inhands(rider)
 	rider.updating_glide_size = TRUE
-	if(!movable_parent.has_buckled_mobs())
-		qdel(src)
+	UnregisterSignal(rider, COMSIG_LIVING_TRY_PULL)
+	UnregisterSignal(rider, COMSIG_LIVING_DISARM_HIT)
+	for (var/trait in GLOB.movement_type_trait_to_flag)
+		if (HAS_TRAIT(parent, trait))
+			REMOVE_TRAIT(rider, trait, REF(src))
+	rider.remove_traits(rider_traits, REF(src))
 
 /// This proc is called when a rider buckles, allowing for offsets to be set properly
 /datum/component/riding/proc/vehicle_mob_buckle(datum/source, mob/living/rider, force = FALSE)
 	SIGNAL_HANDLER
 
 	var/atom/movable/movable_parent = parent
-	handle_vehicle_layer(movable_parent.dir)
-	handle_vehicle_offsets(movable_parent.dir)
+	update_parent_layer_and_offsets(movable_parent.dir, animate = TRUE)
+	handle_buckle(rider)
 
-/// Some ridable atoms may want to only show on top of the rider in certain directions, like wheelchairs
-/datum/component/riding/proc/handle_vehicle_layer(dir)
-	var/atom/movable/AM = parent
-	var/static/list/defaults = list(TEXT_NORTH = OBJ_LAYER, TEXT_SOUTH = ABOVE_MOB_LAYER, TEXT_EAST = ABOVE_MOB_LAYER, TEXT_WEST = ABOVE_MOB_LAYER)
-	. = defaults["[dir]"]
-	if(directional_vehicle_layers["[dir]"])
-		. = directional_vehicle_layers["[dir]"]
-	if(isnull(.)) //you can set it to null to not change it.
-		. = AM.layer
-	AM.layer = .
+/datum/component/riding/proc/handle_buckle(mob/living/rider)
+	if(rider.pulling == parent)
+		rider.stop_pulling()
+	RegisterSignal(rider, COMSIG_LIVING_TRY_PULL, PROC_REF(on_rider_try_pull))
+	if(other_unbuckle == CAN_DISARM_UNBUCKLE)
+		RegisterSignal(rider, COMSIG_LIVING_DISARM_HIT, PROC_REF(rider_disarmed))
 
-/datum/component/riding/proc/set_vehicle_dir_layer(dir, layer)
-	directional_vehicle_layers["[dir]"] = layer
+	for (var/trait in GLOB.movement_type_trait_to_flag)
+		if (HAS_TRAIT(parent, trait))
+			ADD_TRAIT(rider, trait, REF(src))
+	rider.add_traits(rider_traits, REF(src))
+
+/// This proc is called when the rider attempts to grab the thing they're riding, preventing them from doing so.
+/datum/component/riding/proc/on_rider_try_pull(mob/living/rider_pulling, atom/movable/target, force)
+	SIGNAL_HANDLER
+	if(target == parent)
+		var/mob/living/ridden = parent
+		ridden.balloon_alert(rider_pulling, "not while riding it!")
+		return COMSIG_LIVING_CANCEL_PULL
 
 /// This is called after the ridden atom is successfully moved and is used to handle icon stuff
 /datum/component/riding/proc/vehicle_moved(datum/source, oldloc, dir, forced)
@@ -120,8 +139,7 @@
 		ride_check(buckled_mob)
 	if(QDELETED(src))
 		return // runtimed with piggy's without this, look into this more
-	handle_vehicle_offsets(dir)
-	handle_vehicle_layer(dir)
+	update_parent_layer_and_offsets(dir)
 
 /// Turning is like moving
 /datum/component/riding/proc/vehicle_turned(datum/source, _old_dir, new_dir)
@@ -136,56 +154,81 @@
 /datum/component/riding/proc/ride_check(mob/living/rider, consequences = TRUE)
 	return TRUE
 
-/datum/component/riding/proc/handle_vehicle_offsets(dir)
-	var/atom/movable/AM = parent
-	var/AM_dir = "[dir]"
-	var/passindex = 0
-	if(!AM.has_buckled_mobs())
+#define GET_X_OFFSET(offsets) (length(offsets) >= 1 ? offsets[1] : 0)
+#define GET_Y_OFFSET(offsets) (length(offsets) >= 2 ? offsets[2] : 0)
+#define GET_LAYER(offsets, default) (length(offsets) >= 3 ? offsets[3] : default)
+
+/datum/component/riding/proc/update_parent_layer_and_offsets(dir, animate = FALSE)
+	var/atom/movable/seat = parent
+	if(!seat.has_buckled_mobs())
 		return
 
-	for(var/m in AM.buckled_mobs)
+	var/passindex = 0
+	for(var/mob/living/buckled_mob as anything in seat.buckled_mobs)
 		passindex++
-		var/mob/living/buckled_mob = m
-		var/list/offsets = get_offsets(passindex)
-		buckled_mob.setDir(dir)
-		dir_loop:
-			for(var/offsetdir in offsets)
-				if(offsetdir == AM_dir)
-					var/list/diroffsets = offsets[offsetdir]
-					buckled_mob.pixel_x = diroffsets[1]
-					if(diroffsets.len >= 2)
-						buckled_mob.pixel_y = diroffsets[2]
-					if(diroffsets.len == 3)
-						buckled_mob.layer = diroffsets[3]
-					break dir_loop
-	var/list/static/default_vehicle_pixel_offsets = list(TEXT_NORTH = list(0, 0), TEXT_SOUTH = list(0, 0), TEXT_EAST = list(0, 0), TEXT_WEST = list(0, 0))
-	var/px = default_vehicle_pixel_offsets[AM_dir]
-	var/py = default_vehicle_pixel_offsets[AM_dir]
-	if(directional_vehicle_offsets[AM_dir])
-		if(isnull(directional_vehicle_offsets[AM_dir]))
-			px = AM.pixel_x
-			py = AM.pixel_y
-		else
-			px = directional_vehicle_offsets[AM_dir][1]
-			py = directional_vehicle_offsets[AM_dir][2]
-	AM.pixel_x = px
-	AM.pixel_y = py
+		update_rider_layer_and_offsets(dir, passindex, buckled_mob)
 
-/datum/component/riding/proc/set_vehicle_dir_offsets(dir, x, y)
-	directional_vehicle_offsets["[dir]"] = list(x, y)
+	var/list/offsets = get_parent_offsets_and_layers()?["[dir]"]
+	var/px = GET_X_OFFSET(offsets)
+	var/py = GET_Y_OFFSET(offsets)
+	var/layer = GET_LAYER(offsets, seat.layer)
 
-//Override this to set your vehicle's various pixel offsets
-/datum/component/riding/proc/get_offsets(pass_index) // list(dir = x, y, layer)
-	. = list(TEXT_NORTH = list(0, 0), TEXT_SOUTH = list(0, 0), TEXT_EAST = list(0, 0), TEXT_WEST = list(0, 0))
-	if(riding_offsets["[pass_index]"])
-		. = riding_offsets["[pass_index]"]
-	else if(riding_offsets["[RIDING_OFFSET_ALL]"])
-		. = riding_offsets["[RIDING_OFFSET_ALL]"]
+	if(isliving(seat))
+		var/mob/living/living_seat = seat
+		living_seat.add_offsets(BEING_RIDDEN_SOURCE, x_add = px, y_add = py, animate = animate)
+	else
+		seat.pixel_x = px + seat.base_pixel_x
+		seat.pixel_y = py + seat.base_pixel_y
+	seat.layer = layer
 
-/datum/component/riding/proc/set_riding_offsets(index, list/offsets)
-	if(!islist(offsets))
-		return FALSE
-	riding_offsets["[index]"] = offsets
+/datum/component/riding/proc/update_rider_layer_and_offsets(dir, passindex, mob/living/rider, animate = FALSE)
+	if(rider.dir != dir)
+		rider.setDir(dir)
+
+	var/list/diroffsets = get_rider_offsets_and_layers(passindex, rider)?["[dir]"]
+	var/x_offset = GET_X_OFFSET(diroffsets)
+	var/y_offset = GET_Y_OFFSET(diroffsets)
+	var/layer = GET_LAYER(diroffsets, rider.layer)
+
+	// if they are intended to be buckled, offset their existing offset
+	var/atom/movable/seat = parent
+	if(seat.buckle_lying && rider.body_position == LYING_DOWN)
+		y_offset += (-1 * PIXEL_Y_OFFSET_LYING)
+
+	// Rider uses pixel_z offsets as they're above the turf, not up north on the turf
+	rider.add_offsets(RIDING_SOURCE, x_add = x_offset, z_add = y_offset, animate = animate)
+	rider.layer = layer
+
+#undef GET_X_OFFSET
+#undef GET_Y_OFFSET
+#undef GET_LAYER
+
+/**
+ * Determines where riders get offset while riding
+ *
+ * * pass_index: The index of the rider in the list of buckled mobs
+ * * mob/offsetter: The mob that is being offset
+ */
+/datum/component/riding/proc/get_rider_offsets_and_layers(pass_index, mob/offsetter) as /list // list(dir = x, y, layer)
+	RETURN_TYPE(/list)
+	return list(
+		TEXT_NORTH = list(0, 0),
+		TEXT_SOUTH = list(0, 0),
+		TEXT_EAST =  list(0, 0),
+		TEXT_WEST =  list(0, 0),
+	)
+
+/**
+ * Determines where the parent gets offset while riders are riding
+ */
+/datum/component/riding/proc/get_parent_offsets_and_layers() as /list // list(dir = x, y, layer)
+	RETURN_TYPE(/list)
+	return list(
+		TEXT_NORTH = list(0, 0, OBJ_LAYER),
+		TEXT_SOUTH = list(0, 0, ABOVE_MOB_LAYER),
+		TEXT_EAST =  list(0, 0, ABOVE_MOB_LAYER),
+		TEXT_WEST =  list(0, 0, ABOVE_MOB_LAYER),
+	)
 
 /**
  * This proc is used to see if we have the appropriate key to drive this atom, if such a key is needed. Returns FALSE if we don't have what we need to drive.
@@ -203,12 +246,22 @@
 	return user.is_holding_item_of_type(keytype)
 
 //BUCKLE HOOKS
-/datum/component/riding/proc/restore_position(mob/living/buckled_mob)
-	if(buckled_mob)
-		buckled_mob.pixel_x = buckled_mob.base_pixel_x
-		buckled_mob.pixel_y = buckled_mob.base_pixel_y
-		if(buckled_mob.client)
-			buckled_mob.client.view_size.resetToDefault()
+/datum/component/riding/proc/restore_rider_layer_and_offsets(mob/living/buckled_mob)
+	buckled_mob.remove_offsets(RIDING_SOURCE)
+	buckled_mob.layer = initial(buckled_mob.layer)
+	var/atom/source = parent
+	SET_PLANE_EXPLICIT(buckled_mob, initial(buckled_mob.plane), source)
+	buckled_mob.client?.view_size.resetToDefault()
+
+/datum/component/riding/proc/restore_parent_layer_and_offsets()
+	var/atom/movable/seat = parent
+	if(isliving(seat))
+		var/mob/living/living_seat = seat
+		living_seat.remove_offsets(BEING_RIDDEN_SOURCE)
+	else
+		seat.pixel_x = seat.base_pixel_x
+		seat.pixel_y = seat.base_pixel_y
+	seat.layer = initial(seat.layer)
 
 //MOVEMENT
 /datum/component/riding/proc/turf_check(turf/next, turf/current)
@@ -227,15 +280,17 @@
 /// So we can check all occupants when we bump a door to see if anyone has access
 /datum/component/riding/proc/vehicle_bump(atom/movable/movable_parent, obj/machinery/door/possible_bumped_door)
 	SIGNAL_HANDLER
-	if(!istype(possible_bumped_door))
+	if(!istype(possible_bumped_door) || world.time - vehicle_last_bumped <= 0.3 SECONDS)
 		return
-	for(var/occupant in movable_parent.buckled_mobs)
-		INVOKE_ASYNC(possible_bumped_door, /obj/machinery/door/.proc/bumpopen, occupant)
+	for(var/mob/living/occupant in movable_parent.buckled_mobs)
+		vehicle_last_bumped = world.time
+		occupant.last_bumped = 0
+		INVOKE_ASYNC(possible_bumped_door, TYPE_PROC_REF(/atom, Bumped), occupant)
 
 /datum/component/riding/proc/Unbuckle(atom/movable/M)
-	addtimer(CALLBACK(parent, /atom/movable/.proc/unbuckle_mob, M), 0, TIMER_UNIQUE)
+	addtimer(CALLBACK(parent, TYPE_PROC_REF(/atom/movable/, unbuckle_mob), M), 0, TIMER_UNIQUE)
 
-/datum/component/riding/proc/Process_Spacemove(direction)
+/datum/component/riding/proc/Process_Spacemove(direction, continuous_move)
 	var/atom/movable/AM = parent
 	return override_allow_spacemove || AM.has_gravity()
 
@@ -255,3 +310,130 @@
 /datum/component/riding/proc/riding_can_z_move(atom/movable/movable_parent, direction, turf/start, turf/destination, z_move_flags, mob/living/rider)
 	SIGNAL_HANDLER
 	return COMPONENT_RIDDEN_ALLOW_Z_MOVE
+
+/// Called when our vehicle gains a movement trait, so we can apply it to the riders
+/datum/component/riding/proc/on_movement_type_trait_gain(atom/movable/source, trait)
+	SIGNAL_HANDLER
+	var/atom/movable/movable_parent = parent
+	for (var/mob/rider in movable_parent.buckled_mobs)
+		ADD_TRAIT(rider, trait, REF(src))
+
+/// Called when our vehicle loses a movement trait, so we can remove it from the riders
+/datum/component/riding/proc/on_movement_type_trait_loss(atom/movable/source, trait)
+	SIGNAL_HANDLER
+	var/atom/movable/movable_parent = parent
+	for (var/mob/rider in movable_parent.buckled_mobs)
+		REMOVE_TRAIT(rider, trait, REF(src))
+
+/// Block attempts to unbuckle by direct click in certain conditions
+/datum/component/riding/proc/block_unbuckle(atom/movable/source, mob/living/unbuckler)
+	SIGNAL_HANDLER
+
+	if(!source.has_buckled_mobs() || (unbuckler in source.buckled_mobs))
+		return NONE
+
+	switch(other_unbuckle)
+		if(CANNOT_FORCE_UNBUCKLE)
+			to_chat(unbuckler, span_warning("You can't dismount [source]'s rider[length(source.buckled_mobs) == 1 ? "" : "s"]!"))
+		if(CAN_DISARM_UNBUCKLE)
+			parent_disarmed(source, unbuckler)
+
+	return COMPONENT_CANCEL_ATTACK_CHAIN
+
+/// If our parent is a living mob it can  be disarmed which may trigger a forced unbuckle
+/datum/component/riding/proc/parent_disarmed(mob/living/source, mob/living/disarmer)
+	SIGNAL_HANDLER
+	if(!source.has_buckled_mobs() || (disarmer in source.buckled_mobs))
+		return
+	var/mob/living/throwing = pick(source.buckled_mobs)
+	var/disarm_chance = get_disarm_chance(source) + get_disarm_chance(disarmer)
+	if(!prob(disarm_chance))
+		if(disarm_chance > 0)
+			source.visible_message(
+				span_warning("[disarmer] shoves [source] around, trying to throw off [source.p_their()] rider[length(source.buckled_mobs) == 1 ? "" : "s"]!"),
+				span_warning("[disarmer] shoves you around, trying to throw off your rider[length(source.buckled_mobs) == 1 ? "" : "s"]!"),
+				vision_distance = COMBAT_MESSAGE_RANGE,
+			)
+			if(source.is_blind())
+				to_chat(source, span_warning("Someone shoves you around, trying to throw off your rider[length(source.buckled_mobs) == 1 ? "" : "s"]!"))
+			if(!disarmer.is_blind())
+				switch(disarm_chance)
+					if(50 to INFINITY)
+						to_chat(disarmer, span_warning("[source] barely holds stable as you shove them around! Keep at it!"))
+					if(25 to 50)
+						to_chat(disarmer, span_warning("[source] holds stable as you shove them around! Weakening [source.p_their()] stability would help..."))
+					if(-INFINITY to 25)
+						to_chat(disarmer, span_warning("[source] effortlessly holds stable as you shove them around! You'd need to weaken [source.p_their()] stability...!"))
+		return
+	source.visible_message(
+		span_warning("As [disarmer] shoves [source] around, [throwing] is thrown from [parent]!"),
+		span_warning("As [disarmer] shoves you around, [throwing] is thrown from you!"),
+	)
+	if(source.is_blind())
+		to_chat(source, span_warning("As someone shoves you around, you feel [length(source.buckled_mobs) == 1 ? "your rider" : "one of your riders"] get thrown from you!"))
+
+	source.unbuckle_mob(throwing, force = TRUE)
+	throwing.Knockdown(throwing.has_status_effect(/datum/status_effect/staggered) ? SHOVE_KNOCKDOWN_COLLATERAL : SHOVE_KNOCKDOWN_HUMAN)
+
+/// If our rider is disarmed, they may be thrown from the vehicle depending on their and the disarmer's stats
+/datum/component/riding/proc/rider_disarmed(mob/living/rider, mob/living/disarmer)
+	SIGNAL_HANDLER
+	var/disarm_chance = get_disarm_chance(parent) + get_disarm_chance(rider)
+	if(!prob(disarm_chance))
+		if(disarm_chance > 0)
+			rider.visible_message(
+				span_warning("[disarmer] shoves [rider] around, trying to throw [rider.p_them()] off [parent]!"),
+				span_warning("As [disarmer] shoves you around, you [(disarm_chance >= 50 ? "barely" : (disarm_chance >= 25 ? "" : "effortlessly"))] manage to hold on to [parent]!"),
+				vision_distance = COMBAT_MESSAGE_RANGE,
+			)
+			if(rider.is_blind())
+				to_chat(rider, span_warning("As someone shoves you around, you [(disarm_chance >= 50 ? "barely" : (disarm_chance >= 25 ? "" : "effortlessly"))] manage to hold on to [parent]!"))
+			if(!disarmer.is_blind())
+				switch(disarm_chance)
+					if(50 to INFINITY)
+						to_chat(disarmer, span_warning("[rider] barely holds on to [parent] as you shove them around! Keep at it!"))
+					if(25 to 50)
+						to_chat(disarmer, span_warning("[rider] holds on to [parent] as you shove them around! Weakening [rider.p_their()] [pick("balance", "grip", "hold")] would help..."))
+					if(-INFINITY to 25)
+						to_chat(disarmer, span_warning("[rider] effortlessly holds on to [parent] as you shove them around! You'd need to weaken [rider.p_their()] [pick("balance", "grip", "hold")]...!"))
+		return
+
+	rider.visible_message(
+		span_warning("As [disarmer] shoves [rider] around, [rider.p_they()] lose [rider.p_their()] [pick("balance", "grip", "hold")] and fall off [parent]!"),
+		span_warning("As [disarmer] shoves you around, you lose your [pick("balance", "grip", "hold")] and fall off [parent]!")
+	)
+	if(rider.is_blind())
+		to_chat(rider, span_warning("As someone shoves you around, you lose your [pick("balance", "grip", "hold")] and fall off [parent]!"))
+
+	var/atom/movable/riding = parent
+	riding.unbuckle_mob(rider, force = TRUE)
+	if(rider.has_status_effect(/datum/status_effect/staggered))
+		rider.Knockdown(2 SECONDS)
+
+/// Calculates chance to be thrown off the mount based on mob state
+/datum/component/riding/proc/get_disarm_chance(mob/living/disarmed)
+	if(!isliving(disarmed))
+		return 0
+
+	var/staminaloss = round(disarmed.get_stamina_loss(), 0.1)
+	var/healthpercent = round(1 - (disarmed.health / disarmed.maxHealth), 0.01)
+
+	var/chance = 0
+
+	chance += disarmed.has_status_effect(/datum/status_effect/staggered) ? 25 : 0
+	chance += INCAPACITATED_IGNORING(disarmed, INCAPABLE_STASIS) ? 75 : 0
+	chance += staminaloss >= 10 ? (staminaloss * 0.5) : 0
+	chance += healthpercent >= 0.25 ? ((disarmed.health / disarmed.maxHealth) * 50) : 0
+
+	chance -= max(0, disarmed.mob_size - MOB_SIZE_HUMAN) * 12.5
+
+	return chance
+
+/// When we touch a crystal, kill everything inside us
+/datum/component/riding/proc/on_entered_supermatter(atom/movable/ridden, atom/movable/supermatter)
+	SIGNAL_HANDLER
+	for (var/mob/passenger as anything in ridden.buckled_mobs)
+		passenger.Bump(supermatter)
+
+#undef RIDING_SOURCE
+#undef BEING_RIDDEN_SOURCE

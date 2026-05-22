@@ -3,7 +3,7 @@
  */
 /datum/element/firestacker
 	element_flags = ELEMENT_BESPOKE
-	id_arg_index = 2
+	argument_hash_start_idx = 2
 	/// How many firestacks to apply per hit
 	var/amount
 
@@ -15,10 +15,10 @@
 
 	src.amount = amount
 
-	RegisterSignal(target, COMSIG_MOVABLE_IMPACT, .proc/impact, override = TRUE)
+	RegisterSignal(target, COMSIG_MOVABLE_IMPACT, PROC_REF(impact), override = TRUE)
 	if(isitem(target))
-		RegisterSignal(target, COMSIG_ITEM_ATTACK, .proc/item_attack, override = TRUE)
-		RegisterSignal(target, COMSIG_ITEM_ATTACK_SELF, .proc/item_attack_self, override = TRUE)
+		RegisterSignal(target, COMSIG_ITEM_ATTACK, PROC_REF(item_attack), override = TRUE)
+		RegisterSignal(target, COMSIG_ITEM_ATTACK_SELF, PROC_REF(item_attack_self), override = TRUE)
 
 /datum/element/firestacker/Detach(datum/source)
 	. = ..()
@@ -27,10 +27,10 @@
 /datum/element/firestacker/proc/stack_on(datum/owner, mob/living/target)
 	target.adjust_fire_stacks(amount)
 
-/datum/element/firestacker/proc/impact(datum/source, atom/hit_atom, datum/thrownthing/throwingdatum)
+/datum/element/firestacker/proc/impact(datum/source, atom/hit_atom, datum/thrownthing/throwing_datum, caught)
 	SIGNAL_HANDLER
 
-	if(isliving(hit_atom))
+	if(!caught && isliving(hit_atom))
 		stack_on(source, hit_atom)
 
 /datum/element/firestacker/proc/item_attack(datum/source, atom/movable/target, mob/living/user)

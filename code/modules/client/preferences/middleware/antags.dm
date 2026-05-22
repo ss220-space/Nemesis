@@ -1,6 +1,14 @@
+/// Antagonists that don't have a dynamic ruleset, but do have a preference
+GLOBAL_LIST_INIT(non_ruleset_antagonists, list(
+	ROLE_GLITCH = /datum/antagonist/bitrunning_glitch,
+	ROLE_FUGITIVE = /datum/antagonist/fugitive,
+	ROLE_LONE_OPERATIVE = /datum/antagonist/nukeop/lone,
+	ROLE_SENTIENCE = /datum/antagonist/sentient_creature,
+))
+
 /datum/preference_middleware/antags
 	action_delegations = list(
-		"set_antags" = .proc/set_antags,
+		"set_antags" = PROC_REF(set_antags),
 	)
 
 /datum/preference_middleware/antags/get_ui_static_data(mob/user)
@@ -28,7 +36,7 @@
 
 /datum/preference_middleware/antags/get_ui_assets()
 	return list(
-		get_asset_datum(/datum/asset/spritesheet/antagonists),
+		get_asset_datum(/datum/asset/spritesheet_batched/antagonists),
 	)
 
 /datum/preference_middleware/antags/proc/set_antags(list/params, mob/user)
@@ -59,14 +67,9 @@
 /datum/preference_middleware/antags/proc/get_antag_bans()
 	var/list/antag_bans = list()
 
-	for (var/datum/dynamic_ruleset/dynamic_ruleset as anything in subtypesof(/datum/dynamic_ruleset))
-		var/antag_flag = initial(dynamic_ruleset.antag_flag)
-		var/antag_flag_override = initial(dynamic_ruleset.antag_flag_override)
-
-		if (isnull(antag_flag))
-			continue
-
-		if (is_banned_from(preferences.parent.ckey, list(antag_flag_override || antag_flag, ROLE_SYNDICATE)))
+	var/is_banned_from_all = is_banned_from(preferences.parent.ckey, ROLE_SYNDICATE)
+	for (var/antag_flag in get_all_antag_flags())
+		if (is_banned_from_all || is_banned_from(preferences.parent.ckey, antag_flag))
 			antag_bans += serialize_antag_name(antag_flag)
 
 	return antag_bans
@@ -76,18 +79,8 @@
 		return
 
 	var/list/antag_days_left = list()
-
-	for (var/datum/dynamic_ruleset/dynamic_ruleset as anything in subtypesof(/datum/dynamic_ruleset))
-		var/antag_flag = initial(dynamic_ruleset.antag_flag)
-		var/antag_flag_override = initial(dynamic_ruleset.antag_flag_override)
-
-		if (isnull(antag_flag))
-			continue
-
-		var/days_needed = preferences.parent?.get_remaining_days(
-			GLOB.special_roles[antag_flag_override || antag_flag]
-		)
-
+	for (var/antag_flag in get_all_antag_flags())
+		var/days_needed = preferences.parent?.get_days_to_play_antag(antag_flag) || 0
 		if (days_needed > 0)
 			antag_days_left[serialize_antag_name(antag_flag)] = days_needed
 
@@ -99,36 +92,71 @@
 	if (isnull(serialized_antags))
 		serialized_antags = list()
 
-		for (var/special_role in GLOB.special_roles)
+		for (var/special_role in get_all_antag_flags())
 			serialized_antags[serialize_antag_name(special_role)] = special_role
 
 	return serialized_antags
 
+/**
+ * Returns a list of all antag flags that are available to the player
+ *
+ * So this includes stuff like traitor, wizard, fugitive, but does not include wizard apprentice or hypnotized
+ */
+/proc/get_all_antag_flags() as /list
+	var/static/list/antag_flags
+	if(antag_flags)
+		return antag_flags
+
+	var/list/ruleset_antags = list()
+	for(var/datum/dynamic_ruleset/ruleset as anything in subtypesof(/datum/dynamic_ruleset))
+		var/antag_flag = initial(ruleset.pref_flag)
+		var/jobban_flag = initial(ruleset.jobban_flag)
+
+		if(antag_flag)
+			ruleset_antags |= antag_flag
+		if(jobban_flag)
+			ruleset_antags |= jobban_flag
+
+	antag_flags = ruleset_antags | GLOB.non_ruleset_antagonists
+	return antag_flags
+
+/**
+ * Returns the number of days more the client's account must be to play the passed in antag
+ */
+/client/proc/get_days_to_play_antag(checked_antag_flag)
+	var/static/list/antag_time_limits
+	if(!antag_time_limits)
+		antag_time_limits = list()
+		for(var/datum/dynamic_ruleset/ruleset as anything in subtypesof(/datum/dynamic_ruleset))
+			var/antag_flag = initial(ruleset.pref_flag)
+			var/min_days = GET_DYNAMIC_CONFIG(ruleset, minimum_required_age)
+
+			antag_time_limits[antag_flag] = min_days
+
+	return get_remaining_days(antag_time_limits[checked_antag_flag] || 0)
+
 /// Sprites generated for the antagonists panel
-/datum/asset/spritesheet/antagonists
+/datum/asset/spritesheet_batched/antagonists
 	name = "antagonists"
 	early = TRUE
-	cross_round_cachable = TRUE
 
-/datum/asset/spritesheet/antagonists/create_spritesheets()
-	// Antagonists that don't have a dynamic ruleset, but do have a preference
-	var/static/list/non_ruleset_antagonists = list(
-		ROLE_FUGITIVE = /datum/antagonist/fugitive,
-		ROLE_LONE_OPERATIVE = /datum/antagonist/nukeop/lone,
-	)
+	/// List of keys -> universal icon datums
+	var/list/antag_icons = list()
 
-	var/list/antagonists = non_ruleset_antagonists.Copy()
+/datum/asset/spritesheet_batched/antagonists/create_spritesheets()
+	var/list/antagonists = GLOB.non_ruleset_antagonists.Copy()
 
 	for (var/datum/dynamic_ruleset/ruleset as anything in subtypesof(/datum/dynamic_ruleset))
-		var/datum/antagonist/antagonist_type = initial(ruleset.antag_datum)
-		if (isnull(antagonist_type))
+		var/datum/antagonist/antagonist_type = initial(ruleset.preview_antag_datum)
+		var/antag_flag = initial(ruleset.pref_flag)
+		if(isnull(antagonist_type) || isnull(antag_flag))
 			continue
 
-		// antag_flag is guaranteed to be unique by unit tests.
-		antagonists[initial(ruleset.antag_flag)] = antagonist_type
+		// antag_flag is guaranteed to be unique for all non-RULESET_VARIATION rulesets
+		// the ||= covers specifically those rulesets - prefer the first one over variations
+		antagonists[initial(ruleset.pref_flag)] ||= antagonist_type
 
 	var/list/generated_icons = list()
-	var/list/to_insert = list()
 
 	for (var/antag_flag in antagonists)
 		var/datum/antagonist/antagonist_type = antagonists[antag_flag]
@@ -137,11 +165,14 @@
 		var/spritesheet_key = serialize_antag_name(antag_flag)
 
 		if (!isnull(generated_icons[antagonist_type]))
-			to_insert[spritesheet_key] = generated_icons[antagonist_type]
+			antag_icons[spritesheet_key] = generated_icons[antagonist_type]
+			// make sure IconForge also knows to generate this duplicate for the given key
+			// internal caching will prevent double generation of the same icon
+			insert_icon(spritesheet_key, generated_icons[antagonist_type])
 			continue
 
 		var/datum/antagonist/antagonist = new antagonist_type
-		var/icon/preview_icon = antagonist.get_preview_icon()
+		var/datum/universal_icon/preview_icon = antagonist.get_preview_icon()
 
 		if (isnull(preview_icon))
 			continue
@@ -151,13 +182,14 @@
 		// preview_icons are not scaled at this stage INTENTIONALLY.
 		// If an icon is not prepared to be scaled to that size, it looks really ugly, and this
 		// makes it harder to figure out what size it *actually* is.
-		generated_icons[antagonist_type] = preview_icon
-		to_insert[spritesheet_key] = preview_icon
 
-	for (var/spritesheet_key in to_insert)
-		Insert(spritesheet_key, to_insert[spritesheet_key])
+		// make sure no antagonists are rebuilt
+		generated_icons[antagonist_type] = preview_icon
+		// store for screenshot tests
+		antag_icons[spritesheet_key] = preview_icon
+		insert_icon(spritesheet_key, preview_icon)
 
 /// Serializes an antag name to be used for preferences UI
 /proc/serialize_antag_name(antag_name)
 	// These are sent through CSS, so they need to be safe to use as class names.
-	return lowertext(sanitize_css_class_name(antag_name))
+	return LOWER_TEXT(sanitize_css_class_name(antag_name))

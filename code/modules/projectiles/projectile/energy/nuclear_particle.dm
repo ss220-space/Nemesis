@@ -3,19 +3,19 @@
 	name = "nuclear particle"
 	icon_state = "nuclear_particle"
 	pass_flags = PASSTABLE | PASSGLASS | PASSGRILLE
-	flag = ENERGY
+	armor_flag = ENERGY
 	damage_type = TOX
 	damage = 10
-	speed = 0.4
-	hitsound = 'sound/weapons/emitter2.ogg'
+	speed = 2.5
+	hitsound = 'sound/items/weapons/emitter2.ogg'
 	impact_type = /obj/effect/projectile/impact/xray
 	var/static/list/particle_colors = list(
-		"red" = "#FF0000",
-		"blue" = "#00FF00",
-		"green" = "#0000FF",
-		"yellow" = "#FFFF00",
-		"cyan" = "#00FFFF",
-		"purple" = "#FF00FF"
+		"red" = COLOR_RED,
+		"blue" = COLOR_VIBRANT_LIME,
+		"green" = COLOR_BLUE,
+		"yellow" = COLOR_YELLOW,
+		"cyan" = COLOR_CYAN,
+		"purple" = COLOR_MAGENTA
 	)
 
 /obj/projectile/energy/nuclear_particle/Initialize(mapload)
@@ -27,9 +27,9 @@
 
 /obj/projectile/energy/nuclear_particle/on_hit(atom/target, blocked, pierce_hit)
 	if (ishuman(target))
-		radiation_pulse(target, max_range = 0, threshold = RAD_FULL_INSULATION)
+		SSradiation.irradiate(target)
 
-	..()
+	return ..()
 
 /atom/proc/fire_nuclear_particle(angle = rand(0,360)) //used by fusion to fire random nuclear particles. Fires one particle in a random direction.
 	var/obj/projectile/energy/nuclear_particle/P = new /obj/projectile/energy/nuclear_particle(src)

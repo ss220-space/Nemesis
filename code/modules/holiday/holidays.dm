@@ -1,3 +1,6 @@
+/// List of all holiday-related mail. Do not edit this directly, instead add to var/list/holiday_mail
+GLOBAL_LIST_INIT(holiday_mail, list())
+
 /datum/holiday
 	///Name of the holiday itself. Visible to players.
 	var/name = "If you see this the holiday calendar code is broken"
@@ -18,15 +21,26 @@
 	var/year_offset = 0
 	///Timezones this holiday is celebrated in (defaults to three timezones spanning a 50 hour window covering all timezones)
 	var/list/timezones = list(TIMEZONE_LINT, TIMEZONE_UTC, TIMEZONE_ANYWHERE_ON_EARTH)
-	///If this is defined, drones without a default hat will spawn with this one during the holiday; check drones_as_items.dm to see this used
-	var/obj/item/drone_hat
-	///When this holiday is active, does this prevent mail from arriving to cargo? Try not to use this for longer holidays.
-	var/mail_holiday = FALSE
+	///If this is defined, drones/assistants without a default hat will spawn with this item in their head clothing slot.
+	var/obj/item/holiday_hat
+	///When this holiday is active, does this prevent mail from arriving to cargo? Overrides var/list/holiday_mail. Try not to use this for longer holidays.
+	var/no_mail_holiday = FALSE
+	/// The list of items we add to the mail pool. Can either be a weighted list or a normal list. Leave empty for nothing.
+	var/list/holiday_mail = list()
+	var/poster_name = "generic celebration poster"
+	var/poster_desc = "A poster for celebrating some holiday. Unfortunately, its unfinished, so you can't see what the holiday is."
+	var/poster_icon = "holiday_unfinished"
+	/// Color scheme for this holiday
+	var/list/holiday_colors
+	/// The default pattern of the holiday, if the requested pattern is null.
+	var/holiday_pattern = PATTERN_DEFAULT
 
 // This proc gets run before the game starts when the holiday is activated. Do festive shit here.
 /datum/holiday/proc/celebrate()
-	if(mail_holiday)
+	if(no_mail_holiday)
 		SSeconomy.mail_blocked = TRUE
+	if(LAZYLEN(holiday_mail) && !no_mail_holiday)
+		GLOB.holiday_mail += holiday_mail
 	return
 
 // When the round starts, this proc is ran to get a text message to display to everyone to wish them a happy holiday
@@ -72,6 +86,31 @@
 
 	return FALSE
 
+/// Procs to return holiday themed colors for recoloring atoms
+/datum/holiday/proc/get_holiday_colors(atom/thing_to_color, pattern = holiday_pattern)
+	if(!holiday_colors)
+		return
+	switch(pattern)
+		if(PATTERN_DEFAULT)
+			return holiday_colors[(thing_to_color.y % holiday_colors.len) + 1]
+		if(PATTERN_VERTICAL_STRIPE)
+			return holiday_colors[(thing_to_color.x % holiday_colors.len) + 1]
+
+/proc/request_holiday_colors(atom/thing_to_color, pattern)
+	switch(pattern)
+		if(PATTERN_RANDOM)
+			return "#[random_short_color()]"
+		if(PATTERN_RAINBOW)
+			var/datum/holiday/pride_week/rainbow_datum = new()
+			return rainbow_datum.get_holiday_colors(thing_to_color, PATTERN_DEFAULT)
+	if(!length(GLOB.holidays))
+		return
+	for(var/holiday_key in GLOB.holidays)
+		var/datum/holiday/holiday_real = GLOB.holidays[holiday_key]
+		if(!holiday_real.holiday_colors)
+			continue
+		return holiday_real.get_holiday_colors(thing_to_color, pattern || holiday_real.holiday_pattern)
+
 // The actual holidays
 
 // JANUARY
@@ -81,6 +120,7 @@
 	name = "Fleet Day"
 	begin_month = JANUARY
 	begin_day = 19
+	holiday_hat = /obj/item/clothing/head/mothcap
 
 /datum/holiday/fleet_day/greet()
 	return "This day commemorates another year of successful survival aboard the Mothic Grand Nomad Fleet. Moths galaxywide are encouraged to eat, drink, and be merry."
@@ -103,12 +143,18 @@
 	timezones = list(TIMEZONE_NZDT, TIMEZONE_CHADT)
 	begin_day = 6
 	begin_month = FEBRUARY
+	holiday_colors = list(
+		COLOR_UNION_JACK_BLUE,
+		COLOR_WHITE,
+		COLOR_UNION_JACK_RED,
+		COLOR_WHITE,
+	)
 
 /datum/holiday/nz/getStationPrefix()
 	return pick("Aotearoa","Kiwi","Fish 'n' Chips","Kākāpō","Southern Cross")
 
 /datum/holiday/nz/greet()
-	var/nz_age = text2num(time2text(world.timeofday, "YYYY")) - 1840
+	var/nz_age = text2num(time2text(world.timeofday, "YYYY", TIMEZONE_NZST)) - 1840
 	return "On this day [nz_age] years ago, New Zealand's Treaty of Waitangi, the founding document of the nation, was signed!"
 
 /datum/holiday/valentines
@@ -116,6 +162,14 @@
 	begin_day = 13
 	end_day = 15
 	begin_month = FEBRUARY
+	poster_name = "lovey poster"
+	poster_desc = "A poster celebrating all the relationships built today. Of course, you probably don't have one."
+	poster_icon = "holiday_love"
+	holiday_mail = list(
+		/obj/item/food/bonbon/chocolate_truffle,
+		/obj/item/food/candyheart,
+		/obj/item/food/grown/rose,
+		)
 
 /datum/holiday/valentines/getStationPrefix()
 	return pick("Love","Amore","Single","Smootch","Hug")
@@ -124,10 +178,19 @@
 	name = "Birthday of Space Station 13"
 	begin_day = 16
 	begin_month = FEBRUARY
-	drone_hat = /obj/item/clothing/head/festive
+	holiday_hat = /obj/item/clothing/head/costume/festive
+	poster_name = "station birthday poster"
+	poster_desc = "A poster celebrating another year of the station's operation. Why anyone would be happy to be here is byond you."
+	poster_icon = "holiday_cake" // is a lie
+	holiday_mail = list(
+		/obj/item/clothing/mask/party_horn,
+		/obj/item/food/cakeslice/birthday,
+		/obj/item/sparkler,
+		/obj/item/storage/box/party_poppers,
+	)
 
 /datum/holiday/birthday/greet()
-	var/game_age = text2num(time2text(world.timeofday, "YYYY")) - 2003
+	var/game_age = text2num(time2text(world.timeofday, "YYYY", world.timezone)) - 2003
 	var/Fact
 	switch(game_age)
 		if(16)
@@ -157,6 +220,9 @@
 	name = "Random Acts of Kindness Day"
 	begin_day = 17
 	begin_month = FEBRUARY
+	poster_name = "act of kindness poster"
+	poster_desc = "A poster notifying the reader today is 'Act of Kindness' day. What a nice thing to do."
+	poster_icon = "holiday_kind"
 
 /datum/holiday/random_kindness/greet()
 	return "Go do some random acts of kindness for a stranger!" //haha yeah right
@@ -172,6 +238,22 @@
 	name = "Pi Day"
 	begin_day = 14
 	begin_month = MARCH
+	poster_name = "pi day poster"
+	poster_desc = "A poster celebrating the 3.141529th day of the year. At least theres free pie."
+	poster_icon = "holiday_pi"
+	holiday_mail = list(
+		/obj/item/food/pieslice/apple,
+		/obj/item/food/pieslice/bacid_pie,
+		/obj/item/food/pieslice/blumpkin,
+		/obj/item/food/pieslice/cherry,
+		/obj/item/food/pieslice/frenchsilk,
+		/obj/item/food/pieslice/frostypie,
+		/obj/item/food/pieslice/meatpie,
+		/obj/item/food/pieslice/pumpkin,
+		/obj/item/food/pieslice/shepherds_pie,
+		/obj/item/food/pieslice/tofupie,
+		/obj/item/food/pieslice/xemeatpie,
+	)
 
 /datum/holiday/pi/getStationPrefix()
 	return pick("Sine","Cosine","Tangent","Secant", "Cosecant", "Cotangent")
@@ -180,7 +262,18 @@
 	name = "St. Patrick's Day"
 	begin_day = 17
 	begin_month = MARCH
-	drone_hat = /obj/item/clothing/head/soft/green
+	holiday_hat = /obj/item/clothing/head/soft/green
+	holiday_colors = list(
+		COLOR_IRISH_GREEN,
+		COLOR_WHITE,
+		COLOR_IRISH_ORANGE,
+	)
+	holiday_pattern = PATTERN_VERTICAL_STRIPE
+	/// Could we settle this over a pint?
+	holiday_mail = list(
+		/obj/item/reagent_containers/cup/glass/bottle/ale,
+		/obj/item/reagent_containers/cup/glass/drinkingglass/filled/irish_cream,
+	)
 
 /datum/holiday/no_this_is_patrick/getStationPrefix()
 	return pick("Blarney","Green","Leprechaun","Booze")
@@ -195,21 +288,25 @@
 	begin_month = APRIL
 	begin_day = 1
 	end_day = 2
+	holiday_hat = /obj/item/clothing/head/chameleon/broken
+	holiday_mail = list(
+		/obj/item/clothing/head/costume/whoopee,
+		/obj/item/grown/bananapeel/gros_michel,
+	)
 
 /datum/holiday/april_fools/celebrate()
 	. = ..()
 	SSjob.set_overflow_role(/datum/job/clown)
-	SSticker.login_music = 'sound/ambience/clown.ogg'
-	for(var/i in GLOB.new_player_list)
-		var/mob/dead/new_player/P = i
-		if(P.client)
-			P.client.playtitlemusic()
+	SSticker.set_lobby_music('sound/music/lobby_music/clown.ogg', override = TRUE)
+
+/datum/holiday/april_fools/get_holiday_colors(atom/thing_to_color)
+	return "#[random_short_color()]"
 
 /datum/holiday/spess
 	name = "Cosmonautics Day"
 	begin_day = 12
 	begin_month = APRIL
-	drone_hat = /obj/item/clothing/head/syndicatefake
+	holiday_hat = /obj/item/clothing/head/syndicatefake
 
 /datum/holiday/spess/greet()
 	return "On this day over 600 years ago, Comrade Yuri Gagarin first ventured into space!"
@@ -218,6 +315,13 @@
 	name = "Four-Twenty"
 	begin_day = 20
 	begin_month = APRIL
+	holiday_hat = /obj/item/clothing/head/rasta
+	holiday_colors = list(
+		COLOR_ETHIOPIA_GREEN,
+		COLOR_ETHIOPIA_YELLOW,
+		COLOR_ETHIOPIA_RED,
+	)
+	holiday_mail = list(/obj/item/cigarette/rollie/cannabis)
 
 /datum/holiday/fourtwenty/getStationPrefix()
 	return pick("Snoop","Blunt","Toke","Dank","Cheech","Chong")
@@ -226,6 +330,7 @@
 	name = "National Tea Day"
 	begin_day = 21
 	begin_month = APRIL
+	holiday_mail = list(/obj/item/reagent_containers/cup/glass/mug/tea)
 
 /datum/holiday/tea/getStationPrefix()
 	return pick("Crumpet","Assam","Oolong","Pu-erh","Sweet Tea","Green","Black")
@@ -240,10 +345,25 @@
 	timezones = list(TIMEZONE_TKT, TIMEZONE_TOT, TIMEZONE_NZST, TIMEZONE_NFT, TIMEZONE_LHST, TIMEZONE_AEST, TIMEZONE_ACST, TIMEZONE_ACWST, TIMEZONE_AWST, TIMEZONE_CXT, TIMEZONE_CCT, TIMEZONE_CKT, TIMEZONE_NUT)
 	begin_day = 25
 	begin_month = APRIL
-	drone_hat = /obj/item/food/grown/poppy
+	holiday_hat = /obj/item/food/grown/poppy
 
 /datum/holiday/anz/getStationPrefix()
 	return pick("Australian","New Zealand","Poppy", "Southern Cross")
+
+/datum/holiday/chernobyl
+	name = CHERNOBYL_ANNIVERSARY
+	begin_day = 26
+	begin_month = APRIL
+
+/datum/holiday/chernobyl/getStationPrefix()
+	if(prob(3))
+		return "Not Great, Not Terrible"
+
+	return pick("Atomic", "Nuclear", "Radiation", "Plutonium", "Uranium", "Corium", "Zirconium", "Graphite", "Scram", "Explosion")
+
+/datum/holiday/chernobyl/greet()
+	return "On this day in 1986, the Chernobyl nuclear power plant melted down, causing one of the worst nuclear disasters in human history. \
+		Today serves as a reminder to the lives lost and to the rigorous safety standards our engineers must adhere to when providing power to the station."
 
 // MAY
 
@@ -251,8 +371,8 @@
 	name = "Labor Day"
 	begin_day = 1
 	begin_month = MAY
-	drone_hat = /obj/item/clothing/head/hardhat
-	mail_holiday = TRUE
+	holiday_hat = /obj/item/clothing/head/utility/hardhat
+	no_mail_holiday = TRUE
 
 //Draconic Day is celebrated on May 3rd, the date on which the Draconic language was merged (#26780)
 /datum/holiday/draconic_day
@@ -270,7 +390,8 @@
 	name = "Firefighter's Day"
 	begin_day = 4
 	begin_month = MAY
-	drone_hat = /obj/item/clothing/head/hardhat/red
+	holiday_hat = /obj/item/clothing/head/utility/hardhat/red
+	holiday_mail = list(/obj/item/extinguisher/mini)
 
 /datum/holiday/firefighter/getStationPrefix()
 	return pick("Burning","Blazing","Plasma","Fire")
@@ -279,10 +400,32 @@
 	name = "Bee Day"
 	begin_day = 20
 	begin_month = MAY
-	drone_hat = /obj/item/clothing/mask/animal/rat/bee
+	holiday_mail = list(
+		/obj/item/clothing/suit/hooded/bee_costume,
+		/obj/item/food/honeycomb,
+		/obj/item/food/monkeycube/bee,
+		/obj/item/toy/plush/beeplushie,
+	)
 
 /datum/holiday/bee/getStationPrefix()
 	return pick("Bee","Honey","Hive","Africanized","Mead","Buzz")
+
+/datum/holiday/goth
+	name = "Goth Day"
+	begin_day = 22
+	begin_month = MAY
+	holiday_mail = list(
+		/obj/item/lipstick,
+		/obj/item/lipstick/black,
+		/obj/item/clothing/suit/costume/gothcoat,
+	)
+	holiday_colors = list(
+		COLOR_WHITE,
+		COLOR_BLACK,
+	)
+
+/datum/holiday/goth/getStationPrefix()
+	return pick("Goth", "Sanguine", "Tenebris", "Lacrimosa", "Umbra", "Noctis")
 
 // JUNE
 
@@ -307,19 +450,24 @@
 	begin_day = 17
 	end_day = 17
 	begin_month = JUNE
+	holiday_mail = list(
+		/obj/effect/spawner/random/trash/garbage,
+		/obj/item/storage/bag/trash,
+	)
 
 /datum/holiday/summersolstice
 	name = "Summer Solstice"
 	begin_day = 21
 	begin_month = JUNE
+	holiday_hat = /obj/item/clothing/head/costume/garland
+
 /datum/holiday/pride_week
 	name = PRIDE_WEEK
 	begin_month = JUNE
 	// Stonewall was June 28th, this captures its week.
 	begin_day = 23
 	end_day = 29
-
-	var/static/list/rainbow_colors = list(
+	holiday_colors = list(
 		COLOR_PRIDE_PURPLE,
 		COLOR_PRIDE_BLUE,
 		COLOR_PRIDE_GREEN,
@@ -327,11 +475,20 @@
 		COLOR_PRIDE_ORANGE,
 		COLOR_PRIDE_RED,
 	)
-
-/// Given an atom, will return what color it should be to match the pride flag.
-/datum/holiday/pride_week/proc/get_floor_tile_color(atom/atom)
-	var/turf/turf = get_turf(atom)
-	return rainbow_colors[(turf.y % rainbow_colors.len) + 1]
+	holiday_mail = list(
+		/obj/item/bedsheet/rainbow,
+		/obj/item/clothing/accessory/pride,
+		/obj/item/clothing/gloves/color/rainbow,
+		/obj/item/clothing/head/costume/garland/rainbowbunch,
+		/obj/item/clothing/head/soft/rainbow,
+		/obj/item/clothing/shoes/sneakers/rainbow,
+		/obj/item/clothing/under/color/jumpskirt/rainbow,
+		/obj/item/clothing/under/color/rainbow,
+		/obj/item/food/egg/rainbow,
+		/obj/item/food/grown/rainbow_flower,
+		/obj/item/food/snowcones/rainbow,
+		/obj/item/toy/crayon/rainbow,
+	)
 
 // JULY
 
@@ -339,13 +496,24 @@
 	name = "Doctor's Day"
 	begin_day = 1
 	begin_month = JULY
-	drone_hat = /obj/item/clothing/head/nursehat
+	holiday_hat = /obj/item/clothing/head/costume/nursehat
+	holiday_mail = list(
+		/obj/item/stack/medical/wrap/gauze,
+		/obj/item/stack/medical/ointment,
+		/obj/item/storage/box/bandages,
+	)
 
 /datum/holiday/ufo
 	name = "UFO Day"
 	begin_day = 2
 	begin_month = JULY
-	drone_hat = /obj/item/clothing/mask/facehugger/dead
+	holiday_hat = /obj/item/clothing/head/collectable/xenom
+	holiday_mail = list(
+		/obj/item/toy/plush/abductor,
+		/obj/item/toy/plush/abductor/agent,
+		/obj/item/toy/plush/rouny,
+		/obj/item/toy/toy_xeno,
+	)
 
 /datum/holiday/ufo/getStationPrefix() //Is such a thing even possible?
 	return pick("Ayy","Truth","Tsoukalos","Mulder","Scully") //Yes it is!
@@ -355,7 +523,16 @@
 	timezones = list(TIMEZONE_EDT, TIMEZONE_CDT, TIMEZONE_MDT, TIMEZONE_MST, TIMEZONE_PDT, TIMEZONE_AKDT, TIMEZONE_HDT, TIMEZONE_HST)
 	begin_day = 4
 	begin_month = JULY
-	mail_holiday = TRUE
+	no_mail_holiday = TRUE
+	holiday_hat = /obj/item/clothing/head/cowboy/brown
+	holiday_colors = list(
+		COLOR_OLD_GLORY_BLUE,
+		COLOR_OLD_GLORY_RED,
+		COLOR_WHITE,
+		COLOR_OLD_GLORY_RED,
+		COLOR_WHITE,
+	)
+
 
 /datum/holiday/usa/getStationPrefix()
 	return pick("Independent","American","Burger","Bald Eagle","Star-Spangled", "Fireworks")
@@ -364,25 +541,33 @@
 	name = "Writer's Day"
 	begin_day = 8
 	begin_month = JULY
+	holiday_mail = list(/obj/item/pen/fountain)
 
 /datum/holiday/france
 	name = "Bastille Day"
 	timezones = list(TIMEZONE_CEST)
 	begin_day = 14
 	begin_month = JULY
-	drone_hat = /obj/item/clothing/head/beret
-	mail_holiday = TRUE
+	holiday_hat = /obj/item/clothing/head/beret
+	no_mail_holiday = TRUE
+	holiday_colors = list(
+		COLOR_FRENCH_BLUE,
+		COLOR_WHITE,
+		COLOR_FRENCH_RED
+	)
+	holiday_pattern = PATTERN_VERTICAL_STRIPE
 
 /datum/holiday/france/getStationPrefix()
-	return pick("Francais","Fromage", "Zut", "Merde")
+	return pick("Francais", "Fromage", "Zut", "Merde", "Sacrebleu")
 
 /datum/holiday/france/greet()
 	return "Do you hear the people sing?"
 
-/datum/holiday/hotdogday //I have plans for this.
-	name = "National Hot Dog Day"
+/datum/holiday/hotdogday
+	name = HOTDOG_DAY
 	begin_day = 17
 	begin_month = JULY
+	holiday_mail = list(/obj/item/food/hotdog)
 
 /datum/holiday/hotdogday/greet()
 	return "Happy National Hot Dog Day!"
@@ -392,7 +577,7 @@
 	name = "Wizard's Day"
 	begin_month = JULY
 	begin_day = 27
-	drone_hat = /obj/item/clothing/head/wizard
+	holiday_hat = /obj/item/clothing/head/wizard
 
 /datum/holiday/wizards_day/getStationPrefix()
 	return pick("Dungeon", "Elf", "Magic", "D20", "Edition")
@@ -401,6 +586,7 @@
 	name = "Friendship Day"
 	begin_day = 30
 	begin_month = JULY
+	holiday_mail = list(/obj/item/food/grown/apple)
 
 /datum/holiday/friendship/greet()
 	return "Have a magical [name]!"
@@ -415,6 +601,17 @@
 /datum/holiday/indigenous/getStationPrefix()
 	return pick("Endangered language", "Word", "Language", "Language revitalization", "Potato", "Corn")
 
+// AUGUST
+
+/datum/holiday/ukraine
+	name = "Independence Day of Ukraine"
+	begin_month = AUGUST
+	begin_day = 24
+	holiday_colors = list(COLOR_TRUE_BLUE, COLOR_TANGERINE_YELLOW)
+
+/datum/holiday/ukraine/getStationPrefix()
+	return pick("Kyiv", "Ukraine")
+
 // SEPTEMBER
 
 //Tiziran Unification Day is celebrated on Sept 1st, the day on which lizards were made a roundstart race
@@ -422,6 +619,8 @@
 	name = "Tiziran Unification Day"
 	begin_month = SEPTEMBER
 	begin_day = 1
+	holiday_hat = /obj/item/clothing/head/costume/lizard
+	holiday_mail = list(/obj/item/toy/plush/lizard_plushie)
 
 /datum/holiday/tiziran_unification/greet()
 	return "On this day over 400 years ago, Lizardkind first united under a single banner, ready to face the stars as one unified people."
@@ -430,10 +629,20 @@
 	return pick("Tizira", "Lizard", "Imperial")
 
 /datum/holiday/ianbirthday
-	name = "Ian's Birthday" //github.com/tgstation/tgstation/commit/de7e4f0de0d568cd6e1f0d7bcc3fd34700598acb
+	name = IAN_HOLIDAY //github.com/tgstation/tgstation/commit/de7e4f0de0d568cd6e1f0d7bcc3fd34700598acb
 	begin_month = SEPTEMBER
 	begin_day = 9
 	end_day = 10
+	holiday_mail = list(
+		/obj/item/bedsheet/ian,
+		/obj/item/bedsheet/ian/double,
+		/obj/item/clothing/suit/costume/wellworn_shirt/graphic/ian,
+		/obj/item/clothing/suit/costume/wellworn_shirt/messy/graphic/ian,
+		/obj/item/clothing/suit/costume/wellworn_shirt/wornout/graphic/ian,
+		/obj/item/clothing/suit/hooded/ian_costume,
+		/obj/item/radio/toy,
+		/obj/item/toy/figure/ian,
+	)
 
 /datum/holiday/ianbirthday/greet()
 	return "Happy birthday, Ian!"
@@ -445,7 +654,8 @@
 	name = "Talk-Like-a-Pirate Day"
 	begin_day = 19
 	begin_month = SEPTEMBER
-	drone_hat = /obj/item/clothing/head/pirate
+	holiday_hat = /obj/item/clothing/head/costume/pirate
+	holiday_mail = list(/obj/item/clothing/head/costume/pirate)
 
 /datum/holiday/pirate/greet()
 	return "Ye be talkin' like a pirate today or else ye'r walkin' tha plank, matey!"
@@ -475,13 +685,14 @@
 	name = "Smiling Day"
 	begin_day = 7
 	begin_month = OCTOBER
-	drone_hat = /obj/item/clothing/head/papersack/smiley
+	holiday_hat = /obj/item/clothing/head/costume/papersack/smiley
+	holiday_mail = list(/obj/item/sticker/smile)
 
 /datum/holiday/boss
 	name = "Boss' Day"
 	begin_day = 16
 	begin_month = OCTOBER
-	drone_hat = /obj/item/clothing/head/that
+	holiday_hat = /obj/item/clothing/head/hats/tophat
 
 /datum/holiday/un_day
 	name = "Anniversary of the Foundation of the United Nations"
@@ -500,6 +711,11 @@
 	begin_month = OCTOBER
 	end_day = 2
 	end_month = NOVEMBER
+	holiday_colors = list(COLOR_MOSTLY_PURE_ORANGE, COLOR_PRISONER_BLACK)
+	holiday_mail = list(
+		/obj/item/food/cookie/sugar/spookycoffin,
+		/obj/item/food/cookie/sugar/spookyskull,
+		)
 
 /datum/holiday/halloween/greet()
 	return "Have a spooky Halloween!"
@@ -513,6 +729,7 @@
 	name = "Vegan Day"
 	begin_day = 1
 	begin_month = NOVEMBER
+	holiday_mail = list(/obj/item/food/tofu)
 
 /datum/holiday/vegan/getStationPrefix()
 	return pick("Tofu", "Tempeh", "Seitan", "Tofurkey")
@@ -522,6 +739,11 @@
 	begin_day = 6
 	begin_month = NOVEMBER
 	end_day = 7
+	holiday_colors = list(
+		COLOR_MEDIUM_DARK_RED,
+		COLOR_GOLD,
+		COLOR_MEDIUM_DARK_RED,
+	)
 
 /datum/holiday/october_revolution/getStationPrefix()
 	return pick("Communist", "Soviet", "Bolshevik", "Socialist", "Red", "Workers'")
@@ -530,7 +752,15 @@
 	name = "Remembrance Day"
 	begin_month = NOVEMBER
 	begin_day = 11
-	drone_hat = /obj/item/food/grown/poppy
+	holiday_hat = /obj/item/food/grown/poppy
+	holiday_mail = list(
+		/obj/item/food/grown/harebell,
+		/obj/item/food/grown/poppy,
+		/obj/item/storage/fancy/candle_box,
+	)
+
+/datum/holiday/remembrance_day/greet()
+	return "Lest we forget."
 
 /datum/holiday/remembrance_day/getStationPrefix()
 	return pick("Peace", "Armistice", "Poppy")
@@ -552,7 +782,19 @@
 	name = "Flowers Day"
 	begin_day = 19
 	begin_month = NOVEMBER
-	drone_hat = /obj/item/food/grown/moonflower
+	holiday_hat = /obj/item/food/grown/moonflower
+	holiday_mail = list(
+		/obj/item/food/grown/harebell,
+		/obj/item/food/grown/moonflower,
+		/obj/item/food/grown/poppy,
+		/obj/item/food/grown/poppy/geranium,
+		/obj/item/food/grown/poppy/geranium/fraxinella,
+		/obj/item/food/grown/poppy/lily,
+		/obj/item/food/grown/rose,
+		/obj/item/food/grown/sunflower,
+		/obj/item/grown/carbon_rose,
+		/obj/item/grown/novaflower,
+	)
 
 /datum/holiday/hello
 	name = "Saying-'Hello' Day"
@@ -567,6 +809,11 @@
 	name = "Festival of Holy Lights"
 	begin_month = NOVEMBER
 	begin_day = 28
+	/// If there's more of them I forgot
+	holiday_mail = list(
+		/obj/item/food/energybar,
+		/obj/item/food/pieslice/bacid_pie,
+	)
 
 /datum/holiday/holy_lights/greet()
 	return "The Festival of Holy Lights is the final day of the Ethereal calendar. It is typically a day of prayer followed by celebration to close out the year in style."
@@ -581,7 +828,7 @@
 	begin_day = 1
 	begin_month = DECEMBER
 	end_day = 31
-	drone_hat = /obj/item/clothing/head/santa
+	holiday_hat = /obj/item/clothing/head/costume/santa
 
 /datum/holiday/festive_season/greet()
 	return "Have a nice festive season!"
@@ -595,29 +842,88 @@
 	name = MONKEYDAY
 	begin_day = 14
 	begin_month = DECEMBER
-	drone_hat = /obj/item/clothing/mask/gas/monkeymask
+
+/datum/holiday/monkey/celebrate()
+	. = ..()
+	SSstation.setup_trait(/datum/station_trait/job/pun_pun)
 
 /datum/holiday/doomsday
 	name = "Mayan Doomsday Anniversary"
 	begin_day = 21
 	begin_month = DECEMBER
-	drone_hat = /obj/item/clothing/mask/animal/rat/tribal
 
 /datum/holiday/xmas
 	name = CHRISTMAS
-	begin_day = 23
+	begin_day = 18
 	begin_month = DECEMBER
 	end_day = 27
-	drone_hat = /obj/item/clothing/head/santa
-	mail_holiday = TRUE
+	holiday_hat = /obj/item/clothing/head/costume/santa
+	holiday_mail = list(
+		/obj/item/clothing/head/beanie/christmas,
+		/obj/item/clothing/neck/scarf/christmas,
+		/obj/item/food/cookie/sugar,
+		/obj/item/gift/anything,
+		/obj/item/toy/xmas_cracker,
+	)
+	holiday_colors = list(
+		COLOR_CHRISTMAS_GREEN,
+		COLOR_CHRISTMAS_RED,
+	)
+
+/datum/holiday/xmas/getStationPrefix()
+	return pick(
+		"Bible",
+		"Birthday",
+		"Chimney",
+		"Claus",
+		"Crucifixion",
+		"Elf",
+		"Fir",
+		"Ho Ho Ho",
+		"Jesus",
+		"Jolly",
+		"Merry",
+		"Present",
+		"Sack",
+		"Santa",
+		"Sleigh",
+		"Yule",
+	)
 
 /datum/holiday/xmas/greet()
 	return "Have a merry Christmas!"
+
+/datum/holiday/xmas/celebrate()
+	. = ..()
+	SSticker.OnRoundstart(CALLBACK(src, PROC_REF(roundstart_celebrate)))
+	GLOB.maintenance_loot += list(
+		list(
+			/obj/item/clothing/head/costume/santa = 1,
+			/obj/item/gift/anything = 1,
+			/obj/item/toy/xmas_cracker = 3,
+		) = maint_holiday_weight,
+	)
+
+/datum/holiday/xmas/proc/roundstart_celebrate()
+	for(var/obj/machinery/computer/security/telescreen/entertainment/Monitor as anything in SSmachines.get_machines_by_type_and_subtypes(/obj/machinery/computer/security/telescreen/entertainment))
+		Monitor.icon_state_on = "entertainment_xmas"
+
+	for(var/mob/living/basic/pet/dog/corgi/ian/Ian in GLOB.mob_living_list)
+		Ian.place_on_head(new /obj/item/clothing/head/helmet/space/santahat(Ian))
+
+	var/datum/supply_pack/pack = SSshuttle.supply_packs[/datum/supply_pack/costumes_toys/christmas]
+	pack.order_flags |= ORDER_SPECIAL_ENABLED
 
 /datum/holiday/boxing
 	name = "Boxing Day"
 	begin_day = 26
 	begin_month = DECEMBER
+	holiday_mail = list(
+		/obj/item/clothing/gloves/boxing,
+		/obj/item/clothing/gloves/boxing/blue,
+		/obj/item/clothing/gloves/boxing/green,
+		/obj/item/clothing/gloves/boxing/yellow,
+	)
 
 /datum/holiday/new_year
 	name = NEW_YEAR
@@ -625,8 +931,8 @@
 	begin_month = DECEMBER
 	end_day = 2
 	end_month = JANUARY
-	drone_hat = /obj/item/clothing/head/festive
-	mail_holiday = TRUE
+	holiday_hat = /obj/item/clothing/head/costume/festive
+	no_mail_holiday = TRUE
 
 /datum/holiday/new_year/getStationPrefix()
 	return pick("Party","New","Hangover","Resolution", "Auld")
@@ -646,6 +952,7 @@
 
 /datum/holiday/programmers
 	name = "Programmers' Day"
+	holiday_mail = list(/obj/item/sticker/robot)
 
 /datum/holiday/programmers/shouldCelebrate(dd, mm, yyyy, ddd) //Programmer's day falls on the 2^8th day of the year
 	if(mm == 9)
@@ -715,39 +1022,29 @@
 /datum/holiday/hebrew/passover/getStationPrefix()
 	return pick("Matzah", "Moses", "Red Sea")
 
-
-// HOLIDAY ADDONS
-
-/datum/holiday/xmas/celebrate()
-	. = ..()
-	SSticker.OnRoundstart(CALLBACK(src, .proc/roundstart_celebrate))
-	GLOB.maintenance_loot += list(
-		list(
-			/obj/item/toy/xmas_cracker = 3,
-			/obj/item/clothing/head/santa = 1,
-			/obj/item/a_gift/anything = 1
-		) = maint_holiday_weight,
-	)
-
-/datum/holiday/xmas/proc/roundstart_celebrate()
-	for(var/obj/machinery/computer/security/telescreen/entertainment/Monitor in GLOB.machines)
-		Monitor.icon_state_on = "entertainment_xmas"
-
-	for(var/mob/living/simple_animal/pet/dog/corgi/ian/Ian in GLOB.mob_living_list)
-		Ian.place_on_head(new /obj/item/clothing/head/helmet/space/santahat(Ian))
-
-
-// EASTER (this having it's own spot should be understandable)
+// EASTER (this having its own spot should be understandable)
 
 /datum/holiday/easter
 	name = EASTER
-	drone_hat = /obj/item/clothing/head/rabbitears
+	holiday_hat = /obj/item/clothing/head/costume/rabbitears
+	holiday_mail = list(
+		/obj/item/clothing/head/costume/rabbitears,
+		/obj/item/food/chocolatebunny,
+		/obj/item/food/chocolateegg,
+		/obj/item/food/egg/blue,
+		/obj/item/food/egg/green,
+		/obj/item/food/egg/orange,
+		/obj/item/food/egg/purple,
+		/obj/item/food/egg/rainbow,
+		/obj/item/food/egg/red,
+		/obj/item/food/egg/yellow,
+	)
 	var/const/days_early = 1 //to make editing the holiday easier
 	var/const/days_extra = 1
 
 /datum/holiday/easter/shouldCelebrate(dd, mm, yyyy, ddd)
 	if(!begin_month)
-		current_year = text2num(time2text(world.timeofday, "YYYY"))
+		current_year = text2num(time2text(world.timeofday, "YYYY", world.timezone))
 		var/list/easterResults = EasterDate(current_year+year_offset)
 
 		begin_day = easterResults["day"]
@@ -784,3 +1081,20 @@
 
 /datum/holiday/easter/getStationPrefix()
 	return pick("Fluffy","Bunny","Easter","Egg")
+
+/// Takes a holiday datum, a starting month, ending month, max amount of days to test in, and min/max year as input
+/// Returns a list in the form list("yyyy/m/d", ...) representing all days the holiday runs on in the tested range
+/proc/poll_holiday(datum/holiday/path, min_month, max_month, min_year, max_year, max_day)
+	var/list/deets = list()
+	for(var/year in min_year to max_year)
+		for(var/month in min_month to max_month)
+			for(var/day in 1 to max_day)
+				var/datum/holiday/new_day = new path()
+				if(new_day.shouldCelebrate(day, month, year, iso_to_weekday(day_of_month(year, month, day))))
+					deets += "[year]/[month]/[day]"
+	return deets
+
+/// Does the same as [/proc/poll_holiday], but prints the output to admins instead of returning it
+/proc/print_holiday(datum/holiday/path, min_month, max_month, min_year, max_year, max_day)
+	var/list/deets = poll_holiday(path, min_month, max_month, min_year, max_year, max_day)
+	message_admins("The accepted dates for [path] in the input range [min_year]-[max_year]/[min_month]-[max_month]/1-[max_day] are [deets.Join("\n")]")

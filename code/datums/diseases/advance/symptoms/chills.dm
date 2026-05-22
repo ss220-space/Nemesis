@@ -1,26 +1,18 @@
 #define CHILLS_CHANGE "chills"
-
-/*
-//////////////////////////////////////
-
-Chills
-
-	No change to hidden.
-	Increases resistance.
-	Increases stage speed.
-	Little transmittable.
-	Low level.
-
-Bonus
-	Cools down your body.
-
-//////////////////////////////////////
-*/
+/** Chills
+ * No change to stealth.
+ * Increases resistance.
+ * Increases stage speed.
+ * Increases transmissibility
+ * Low level
+ * Bonus: Cools down your body.
+ */
 
 /datum/symptom/chills
 	name = "Chills"
 	desc = "The virus inhibits the body's thermoregulation, cooling the body down."
-	stealth = 0
+	illness = "Cold Shoulder"
+	stealth = 1
 	resistance = 2
 	stage_speed = 3
 	transmittable = 2
@@ -28,11 +20,12 @@ Bonus
 	severity = 2
 	symptom_delay_min = 10
 	symptom_delay_max = 30
-	var/unsafe = FALSE //over the cold threshold
+	symptom_cure = /datum/reagent/medicine/leporazine
 	threshold_descs = list(
 		"Stage Speed 5" = "Increases the intensity of the cooling; the host can fall below safe temperature levels.",
 		"Stage Speed 10" = "Increases the intensity of the cooling even further."
 	)
+	var/unsafe = FALSE //over the cold threshold
 
 /datum/symptom/chills/Start(datum/disease/advance/A)
 	. = ..()

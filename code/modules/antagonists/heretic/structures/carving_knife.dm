@@ -3,27 +3,20 @@
 	name = "carving knife"
 	desc = "A small knife made of cold steel, pure and perfect. Its sharpness can carve into titanium itself - \
 		but only few can evoke the dangers that lurk beneath reality."
-	icon = 'icons/obj/eldritch.dmi'
+	icon = 'icons/obj/antags/eldritch.dmi'
 	icon_state = "rune_carver"
-	flags_1 = CONDUCT_1
+	icon_angle = -45
+	obj_flags = CONDUCTS_ELECTRICITY
 	sharpness = SHARP_EDGED
 	w_class = WEIGHT_CLASS_SMALL
 	wound_bonus = 20
 	force = 10
 	throwforce = 20
-	hitsound = 'sound/weapons/bladeslice.ogg'
-	attack_verb_continuous = list("attacks", "slashes", "stabs", "slices", "tears", "lacerates", "rips", "dices", "rends")
-	attack_verb_simple = list("attack", "slash", "stab", "slice", "tear", "lacerate", "rip", "dice", "rend")
+	hitsound = 'sound/items/weapons/bladeslice.ogg'
+	attack_verb_continuous = list("attacks", "slashes", "slices", "tears", "lacerates", "rips", "dices", "rends")
+	attack_verb_simple = list("attack", "slash", "slice", "tear", "lacerate", "rip", "dice", "rend")
 	actions_types = list(/datum/action/item_action/rune_shatter)
-	embedding = list(
-		ignore_throwspeed_threshold = TRUE,
-		embed_chance = 75,
-		jostle_chance = 2,
-		jostle_pain_mult = 5,
-		pain_stam_pct = 0.4,
-		pain_mult = 3,
-		rip_time = 15,
-	)
+	embed_type = /datum/embedding/rune_carver
 
 	/// Whether we're currently drawing a rune
 	var/drawing = FALSE
@@ -33,6 +26,23 @@
 	var/list/datum/weakref/current_runes = list()
 	/// Turfs that you cannot draw carvings on
 	var/static/list/blacklisted_turfs = typecacheof(list(/turf/open/space, /turf/open/openspace, /turf/open/lava))
+	var/list/alt_continuous = list("stabs", "pierces", "impales")
+	var/list/alt_simple = list("stab", "pierce", "impale")
+
+/obj/item/melee/rune_carver/Initialize(mapload)
+	. = ..()
+	alt_continuous = string_list(alt_continuous)
+	alt_simple = string_list(alt_simple)
+	AddComponent(/datum/component/alternative_sharpness, SHARP_POINTY, alt_continuous, alt_simple)
+
+/datum/embedding/rune_carver
+	ignore_throwspeed_threshold = TRUE
+	embed_chance = 75
+	jostle_chance = 2
+	jostle_pain_mult = 5
+	pain_stam_pct = 0.4
+	pain_mult = 3
+	rip_time = 1.5 SECONDS
 
 /obj/item/melee/rune_carver/examine(mob/user)
 	. = ..()
@@ -45,21 +55,14 @@
 		var/potion_string = span_info("\tThe " + initial(trap.name) + " - " + initial(trap.carver_tip))
 		. += potion_string
 
-/obj/item/melee/rune_carver/afterattack(atom/target, mob/user, proximity_flag, click_parameters)
-	. = ..()
-	if(!proximity_flag)
-		return
-
+/obj/item/melee/rune_carver/interact_with_atom(atom/interacting_with, mob/living/user, list/modifiers)
 	if(!IS_HERETIC_OR_MONSTER(user))
-		return
+		return NONE
+	if(!isopenturf(interacting_with) || is_type_in_typecache(interacting_with, blacklisted_turfs))
+		return NONE
 
-	if(!isopenturf(target))
-		return
-
-	if(is_type_in_typecache(target, blacklisted_turfs))
-		return
-
-	INVOKE_ASYNC(src, .proc/try_carve_rune, target, user)
+	INVOKE_ASYNC(src, PROC_REF(try_carve_rune), interacting_with, user)
+	return ITEM_INTERACT_SUCCESS
 
 /*
  * Begin trying to carve a rune. Go through a few checks, then call do_carve_rune if successful.
@@ -126,9 +129,10 @@
 /datum/action/item_action/rune_shatter
 	name = "Rune Break"
 	desc = "Destroys all runes carved by this blade."
-	background_icon_state = "bg_ecult"
+	background_icon_state = "bg_heretic"
+	overlay_icon_state = "bg_heretic_border"
 	button_icon_state = "rune_break"
-	icon_icon = 'icons/mob/actions/actions_ecult.dmi'
+	button_icon = 'icons/mob/actions/actions_ecult.dmi'
 
 /datum/action/item_action/rune_shatter/New(Target)
 	. = ..()
@@ -142,7 +146,7 @@
 
 	return ..()
 
-/datum/action/item_action/rune_shatter/IsAvailable()
+/datum/action/item_action/rune_shatter/IsAvailable(feedback = FALSE)
 	. = ..()
 	if(!.)
 		return
@@ -152,12 +156,8 @@
 	if(!length(target_sword.current_runes))
 		return FALSE
 
-/datum/action/item_action/rune_shatter/Trigger(trigger_flags)
-	. = ..()
-	if(!.)
-		return
-
-	owner.playsound_local(get_turf(owner), 'sound/magic/blind.ogg', 50, TRUE)
+/datum/action/item_action/rune_shatter/do_effect(trigger_flags)
+	owner.playsound_local(get_turf(owner), 'sound/effects/magic/blind.ogg', 50, TRUE)
 	var/obj/item/melee/rune_carver/target_sword = target
 	QDEL_LIST(target_sword.current_runes)
 	target_sword.SpinAnimation(5, 1)
@@ -167,7 +167,8 @@
 /obj/structure/trap/eldritch
 	name = "elder carving"
 	desc = "Collection of unknown symbols, they remind you of days long gone..."
-	icon = 'icons/obj/eldritch.dmi'
+	icon = 'icons/obj/service/hand_of_god_structures.dmi'
+	max_integrity = 60
 	/// A tip displayed to heretics who examine the rune carver. Explains what the rune does.
 	var/carver_tip
 	/// Reference to trap owner mob
@@ -180,7 +181,7 @@
 
 /obj/structure/trap/eldritch/on_entered(datum/source, atom/movable/entering_atom)
 	if(!isliving(entering_atom))
-		return ..()
+		return
 	var/mob/living/living_mob = entering_atom
 	if(WEAKREF(living_mob) == owner)
 		return
@@ -188,13 +189,14 @@
 		return
 	return ..()
 
-/obj/structure/trap/eldritch/attacked_by(obj/item/weapon, mob/living/user)
-	if(istype(weapon, /obj/item/melee/rune_carver) || istype(weapon, /obj/item/nullrod))
+/obj/structure/trap/eldritch/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	if(istype(tool, /obj/item/melee/rune_carver) || HAS_TRAIT(tool, TRAIT_NULLROD_ITEM))
 		loc.balloon_alert(user, "carving dispelled")
 		playsound(src, 'sound/items/sheath.ogg', 50, TRUE, SHORT_RANGE_SOUND_EXTRARANGE, ignore_walls = FALSE)
 		qdel(src)
+		return ITEM_INTERACT_SUCCESS
 
-	return ..()
+	return NONE
 
 /obj/structure/trap/eldritch/alert
 	name = "alert carving"
@@ -208,7 +210,7 @@
 	var/mob/living/real_owner = owner?.resolve()
 	if(real_owner)
 		to_chat(real_owner, span_userdanger("[victim.real_name] has stepped foot on the alert rune in [get_area(src)]!"))
-		real_owner.playsound_local(get_turf(real_owner), 'sound/magic/curse.ogg', 50, TRUE)
+		real_owner.playsound_local(get_turf(real_owner), 'sound/effects/magic/curse.ogg', 50, TRUE)
 
 /obj/structure/trap/eldritch/tentacle
 	name = "grasping carving"
@@ -224,7 +226,7 @@
 	carbon_victim.Paralyze(5 SECONDS)
 	carbon_victim.apply_damage(20, BRUTE, BODY_ZONE_R_LEG)
 	carbon_victim.apply_damage(20, BRUTE, BODY_ZONE_L_LEG)
-	playsound(src, 'sound/magic/demon_attack1.ogg', 75, TRUE)
+	playsound(src, 'sound/effects/magic/demon_attack1.ogg', 75, TRUE)
 
 /obj/structure/trap/eldritch/mad
 	name = "mad carving"
@@ -237,12 +239,12 @@
 	if(!iscarbon(victim))
 		return
 	var/mob/living/carbon/carbon_victim = victim
-	carbon_victim.adjustStaminaLoss(80)
-	carbon_victim.silent += 10
-	carbon_victim.stuttering += 30
-	carbon_victim.add_confusion(5)
-	carbon_victim.Jitter(10)
-	carbon_victim.Dizzy(20)
-	carbon_victim.blind_eyes(2)
-	SEND_SIGNAL(carbon_victim, COMSIG_ADD_MOOD_EVENT, "gates_of_mansus", /datum/mood_event/gates_of_mansus)
-	playsound(src, 'sound/magic/blind.ogg', 75, TRUE)
+	carbon_victim.adjust_stamina_loss(80)
+	carbon_victim.adjust_silence(20 SECONDS)
+	carbon_victim.adjust_stutter(1 MINUTES)
+	carbon_victim.adjust_confusion(5 SECONDS)
+	carbon_victim.set_jitter_if_lower(20 SECONDS)
+	carbon_victim.set_dizzy_if_lower(40 SECONDS)
+	carbon_victim.adjust_temp_blindness(4 SECONDS)
+	carbon_victim.add_mood_event("gates_of_mansus", /datum/mood_event/gates_of_mansus)
+	playsound(src, 'sound/effects/magic/blind.ogg', 75, TRUE)

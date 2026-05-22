@@ -53,13 +53,13 @@
 	if(!istype(player))
 		return
 
-	INVOKE_ASYNC(src, .proc/request_input_from_player, player)
+	INVOKE_ASYNC(src, PROC_REF(request_input_from_player), player)
 
 /obj/item/circuit_component/input_request/proc/request_input_from_player(mob/player)
 	var/new_option = input_options.value
 	switch(new_option)
 		if(COMP_INPUT_STRING)
-			var/player_input = tgui_input_text(player, "Input a value", "Input value")
+			var/player_input = tgui_input_text(player, "Input a value", "Input value", max_length = MAX_MESSAGE_LEN)
 			if(isnull(player_input))
 				return
 			input_response.set_output(player_input)

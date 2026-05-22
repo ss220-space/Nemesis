@@ -1,3 +1,5 @@
+#define REJECTION_VOMIT_FLAGS (MOB_VOMIT_BLOOD | MOB_VOMIT_STUN | MOB_VOMIT_KNOCKDOWN | MOB_VOMIT_FORCE)
+
 /obj/item/organ/heart/gland/heal
 	abductor_hint = "organic replicator. Forcibly ejects damaged and robotic organs from the abductee and regenerates them. Additionally, forcibly removes reagents (via vomit) from the abductee if they have moderate toxin damage or poison within the bloodstream, and regenerates blood to a healthy threshold if too low. The abductee will also reject implants such as mindshields."
 	cooldown_low = 200
@@ -16,33 +18,33 @@
 		reject_implant(implant)
 		return
 
-	for(var/organ in owner.internal_organs)
+	for(var/organ in owner.organs)
 		if(istype(organ, /obj/item/organ/cyberimp))
 			reject_cyberimp(organ)
 			return
 
-	var/obj/item/organ/appendix/appendix = owner.getorganslot(ORGAN_SLOT_APPENDIX)
-	if((!appendix && !HAS_TRAIT(owner, TRAIT_NOHUNGER)) || (appendix && ((appendix.organ_flags & ORGAN_FAILING) || (appendix.organ_flags & ORGAN_SYNTHETIC))))
+	var/obj/item/organ/appendix/appendix = owner.get_organ_slot(ORGAN_SLOT_APPENDIX)
+	if((!appendix && !HAS_TRAIT(owner, TRAIT_NOHUNGER)) || (appendix && ((appendix.organ_flags & ORGAN_FAILING) || IS_ROBOTIC_ORGAN(appendix))))
 		replace_appendix(appendix)
 		return
 
-	var/obj/item/organ/liver/liver = owner.getorganslot(ORGAN_SLOT_LIVER)
-	if((!liver && !HAS_TRAIT(owner, TRAIT_NOMETABOLISM)) || (liver && ((liver.damage > liver.high_threshold) || (liver.organ_flags & ORGAN_SYNTHETIC))))
+	var/obj/item/organ/liver/liver = owner.get_organ_slot(ORGAN_SLOT_LIVER)
+	if((!liver && !HAS_TRAIT(owner, TRAIT_LIVERLESS_METABOLISM)) || (liver && ((liver.damage > liver.high_threshold) || IS_ROBOTIC_ORGAN(liver))))
 		replace_liver(liver)
 		return
 
-	var/obj/item/organ/lungs/lungs = owner.getorganslot(ORGAN_SLOT_LUNGS)
-	if((!lungs && !HAS_TRAIT(owner, TRAIT_NOBREATH)) || (lungs && ((lungs.damage > lungs.high_threshold) || (lungs.organ_flags & ORGAN_SYNTHETIC))))
+	var/obj/item/organ/lungs/lungs = owner.get_organ_slot(ORGAN_SLOT_LUNGS)
+	if((!lungs && !HAS_TRAIT(owner, TRAIT_NOBREATH)) || (lungs && ((lungs.damage > lungs.high_threshold) || IS_ROBOTIC_ORGAN(lungs))))
 		replace_lungs(lungs)
 		return
 
-	var/obj/item/organ/stomach/stomach = owner.getorganslot(ORGAN_SLOT_STOMACH)
-	if((!stomach && !HAS_TRAIT(owner, TRAIT_NOHUNGER)) || (stomach && ((stomach.damage > stomach.high_threshold) || (stomach.organ_flags & ORGAN_SYNTHETIC))))
+	var/obj/item/organ/stomach/stomach = owner.get_organ_slot(ORGAN_SLOT_STOMACH)
+	if((!stomach && !HAS_TRAIT(owner, TRAIT_NOHUNGER)) || (stomach && ((stomach.damage > stomach.high_threshold) || IS_ROBOTIC_ORGAN(stomach))))
 		replace_stomach(stomach)
 		return
 
-	var/obj/item/organ/eyes/eyes = owner.getorganslot(ORGAN_SLOT_EYES)
-	if(!eyes || (eyes && ((eyes.damage > eyes.low_threshold) || (eyes.organ_flags & ORGAN_SYNTHETIC))))
+	var/obj/item/organ/eyes/eyes = owner.get_organ_slot(ORGAN_SLOT_EYES)
+	if(!eyes || (eyes && ((eyes.damage > eyes.low_threshold) || IS_ROBOTIC_ORGAN(eyes))))
 		replace_eyes(eyes)
 		return
 
@@ -53,11 +55,11 @@
 		if(!limb)
 			replace_limb(zone)
 			return
-		if((limb.get_damage() >= (limb.max_damage / 2)) || (limb.status == BODYPART_ROBOTIC))
+		if((limb.get_damage() >= (limb.max_damage / 2)) || (!IS_ORGANIC_LIMB(limb)) && !HAS_TRAIT(owner, TRAIT_NODISMEMBER))
 			replace_limb(zone, limb)
 			return
 
-	if(owner.getToxLoss() > 40)
+	if(owner.get_tox_loss() > 40)
 		replace_blood()
 		return
 	var/tox_amount = 0
@@ -66,31 +68,31 @@
 	if(tox_amount > 10)
 		replace_blood()
 		return
-	if(owner.blood_volume < BLOOD_VOLUME_OKAY)
-		owner.blood_volume = BLOOD_VOLUME_NORMAL
+	if(owner.get_blood_volume() < BLOOD_VOLUME_OKAY)
+		owner.set_blood_volume(BLOOD_VOLUME_NORMAL)
 		to_chat(owner, span_warning("You feel your blood pulsing within you."))
 		return
 
 	var/obj/item/bodypart/chest/chest = owner.get_bodypart(BODY_ZONE_CHEST)
-	if((chest.get_damage() >= (chest.max_damage / 4)) || (chest.status == BODYPART_ROBOTIC))
+	if((chest.get_damage() >= (chest.max_damage / 4)) || (!IS_ORGANIC_LIMB(chest)))
 		replace_chest(chest)
 		return
 
 /obj/item/organ/heart/gland/heal/proc/reject_implant(obj/item/implant/implant)
 	owner.visible_message(span_warning("[owner] vomits up a tiny mangled implant!"), span_userdanger("You suddenly vomit up a tiny mangled implant!"))
-	owner.vomit(0, TRUE, TRUE, 1, FALSE, FALSE, FALSE, TRUE)
+	owner.vomit(REJECTION_VOMIT_FLAGS, lost_nutrition = 0)
 	implant.removed(owner)
 	qdel(implant)
 
 /obj/item/organ/heart/gland/heal/proc/reject_cyberimp(obj/item/organ/cyberimp/implant)
 	owner.visible_message(span_warning("[owner] vomits up his [implant.name]!"), span_userdanger("You suddenly vomit up your [implant.name]!"))
-	owner.vomit(0, TRUE, TRUE, 1, FALSE, FALSE, FALSE, TRUE)
+	owner.vomit(REJECTION_VOMIT_FLAGS, lost_nutrition = 0)
 	implant.Remove(owner)
 	implant.forceMove(owner.drop_location())
 
 /obj/item/organ/heart/gland/heal/proc/replace_appendix(obj/item/organ/appendix/appendix)
 	if(appendix)
-		owner.vomit(0, TRUE, TRUE, 1, FALSE, FALSE, FALSE, TRUE)
+		owner.vomit(REJECTION_VOMIT_FLAGS, lost_nutrition = 0)
 		appendix.Remove(owner)
 		appendix.forceMove(owner.drop_location())
 		owner.visible_message(span_warning("[owner] vomits up his [appendix.name]!"), span_userdanger("You suddenly vomit up your [appendix.name]!"))
@@ -106,7 +108,7 @@
 /obj/item/organ/heart/gland/heal/proc/replace_liver(obj/item/organ/liver/liver)
 	if(liver)
 		owner.visible_message(span_warning("[owner] vomits up his [liver.name]!"), span_userdanger("You suddenly vomit up your [liver.name]!"))
-		owner.vomit(0, TRUE, TRUE, 1, FALSE, FALSE, FALSE, TRUE)
+		owner.vomit(REJECTION_VOMIT_FLAGS, lost_nutrition = 0)
 		liver.Remove(owner)
 		liver.forceMove(owner.drop_location())
 	else
@@ -121,7 +123,7 @@
 /obj/item/organ/heart/gland/heal/proc/replace_lungs(obj/item/organ/lungs/lungs)
 	if(lungs)
 		owner.visible_message(span_warning("[owner] vomits up his [lungs.name]!"), span_userdanger("You suddenly vomit up your [lungs.name]!"))
-		owner.vomit(0, TRUE, TRUE, 1, FALSE, FALSE, FALSE, TRUE)
+		owner.vomit(REJECTION_VOMIT_FLAGS, lost_nutrition = 0)
 		lungs.Remove(owner)
 		lungs.forceMove(owner.drop_location())
 	else
@@ -136,7 +138,7 @@
 /obj/item/organ/heart/gland/heal/proc/replace_stomach(obj/item/organ/stomach/stomach)
 	if(stomach)
 		owner.visible_message(span_warning("[owner] vomits up his [stomach.name]!"), span_userdanger("You suddenly vomit up your [stomach.name]!"))
-		owner.vomit(0, TRUE, TRUE, 1, FALSE, FALSE, FALSE, TRUE)
+		owner.vomit(REJECTION_VOMIT_FLAGS, lost_nutrition = 0)
 		stomach.Remove(owner)
 		stomach.forceMove(owner.drop_location())
 	else
@@ -157,7 +159,7 @@
 	else
 		to_chat(owner, span_warning("You feel a weird rumble behind your eye sockets..."))
 
-	addtimer(CALLBACK(src, .proc/finish_replace_eyes), rand(100, 200))
+	addtimer(CALLBACK(src, PROC_REF(finish_replace_eyes)), rand(10 SECONDS, 20 SECONDS))
 
 /obj/item/organ/heart/gland/heal/proc/finish_replace_eyes()
 	var/eye_type = /obj/item/organ/eyes
@@ -169,19 +171,19 @@
 
 /obj/item/organ/heart/gland/heal/proc/replace_limb(body_zone, obj/item/bodypart/limb)
 	if(limb)
-		owner.visible_message(span_warning("[owner]'s [limb.name] suddenly detaches from [owner.p_their()] body!"), span_userdanger("Your [limb.name] suddenly detaches from your body!"))
-		playsound(owner, "desecration", 50, TRUE, -1)
+		owner.visible_message(span_warning("[owner]'s [limb.plaintext_zone] suddenly detaches from [owner.p_their()] body!"), span_userdanger("Your [limb.plaintext_zone] suddenly detaches from your body!"))
+		playsound(owner, SFX_DESECRATION, 50, TRUE, -1)
 		limb.drop_limb()
 	else
 		to_chat(owner, span_warning("You feel a weird tingle in your [parse_zone(body_zone)]... even if you don't have one."))
 
-	addtimer(CALLBACK(src, .proc/finish_replace_limb, body_zone), rand(150, 300))
+	addtimer(CALLBACK(src, PROC_REF(finish_replace_limb), body_zone), rand(15 SECONDS, 30 SECONDS))
 
 /obj/item/organ/heart/gland/heal/proc/finish_replace_limb(body_zone)
 	owner.visible_message(span_warning("With a loud snap, [owner]'s [parse_zone(body_zone)] rapidly grows back from [owner.p_their()] body!"),
 	span_userdanger("With a loud snap, your [parse_zone(body_zone)] rapidly grows back from your body!"),
 	span_warning("Your hear a loud snap."))
-	playsound(owner, 'sound/magic/demon_consume.ogg', 50, TRUE)
+	playsound(owner, 'sound/effects/magic/demon_consume.ogg', 50, TRUE)
 	owner.regenerate_limb(body_zone)
 
 /obj/item/organ/heart/gland/heal/proc/replace_blood()
@@ -190,39 +192,41 @@
 
 /obj/item/organ/heart/gland/heal/proc/keep_replacing_blood()
 	var/keep_going = FALSE
-	owner.vomit(0, TRUE, FALSE, 3, FALSE, FALSE, FALSE, TRUE)
+	owner.vomit(vomit_flags = (MOB_VOMIT_BLOOD | MOB_VOMIT_FORCE), lost_nutrition = 0, distance = 3)
 	owner.Stun(15)
-	owner.adjustToxLoss(-15, TRUE, TRUE)
+	owner.adjust_tox_loss(-15, forced = TRUE)
 
-	owner.blood_volume = min(BLOOD_VOLUME_NORMAL, owner.blood_volume + 20)
-	if(owner.blood_volume < BLOOD_VOLUME_NORMAL)
+	owner.adjust_blood_volume(20, maximum = BLOOD_VOLUME_NORMAL)
+	if(owner.get_blood_volume() < BLOOD_VOLUME_NORMAL)
 		keep_going = TRUE
 
-	if(owner.getToxLoss())
+	if(owner.get_tox_loss())
 		keep_going = TRUE
 	for(var/datum/reagent/toxin/R in owner.reagents.reagent_list)
 		owner.reagents.remove_reagent(R.type, 4)
 		if(owner.reagents.has_reagent(R.type))
 			keep_going = TRUE
 	if(keep_going)
-		addtimer(CALLBACK(src, .proc/keep_replacing_blood), 30)
+		addtimer(CALLBACK(src, PROC_REF(keep_replacing_blood)), 3 SECONDS)
 
 /obj/item/organ/heart/gland/heal/proc/replace_chest(obj/item/bodypart/chest/chest)
-	if(chest.status == BODYPART_ROBOTIC)
+	if(!IS_ORGANIC_LIMB(chest))
 		owner.visible_message(span_warning("[owner]'s [chest.name] rapidly expels its mechanical components, replacing them with flesh!"), span_userdanger("Your [chest.name] rapidly expels its mechanical components, replacing them with flesh!"))
-		playsound(owner, 'sound/magic/clockwork/anima_fragment_attack.ogg', 50, TRUE)
+		playsound(owner, 'sound/effects/magic/clockwork/anima_fragment_attack.ogg', 50, TRUE)
 		var/list/dirs = GLOB.alldirs.Copy()
 		for(var/i in 1 to 3)
-			var/obj/effect/decal/cleanable/robot_debris/debris = new(get_turf(owner))
+			var/obj/effect/decal/cleanable/blood/gibs/robot_debris/debris = new(get_turf(owner))
 			debris.streak(dirs)
 	else
 		owner.visible_message(span_warning("[owner]'s [chest.name] sheds off its damaged flesh, rapidly replacing it!"), span_warning("Your [chest.name] sheds off its damaged flesh, rapidly replacing it!"))
 		playsound(owner, 'sound/effects/splat.ogg', 50, TRUE)
 		var/list/dirs = GLOB.alldirs.Copy()
 		for(var/i in 1 to 3)
-			var/obj/effect/decal/cleanable/blood/gibs/gibs = new(get_turf(owner))
+			var/obj/effect/decal/cleanable/blood/gibs/gibs = new(get_turf(owner), owner.get_static_viruses(), blood_dna_info)
 			gibs.streak(dirs)
 
 	var/obj/item/bodypart/chest/new_chest = new(null)
-	new_chest.replace_limb(owner, TRUE)
+	new_chest.replace_limb(owner)
 	qdel(chest)
+
+#undef REJECTION_VOMIT_FLAGS

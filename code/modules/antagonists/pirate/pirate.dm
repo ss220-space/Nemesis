@@ -1,16 +1,19 @@
 /datum/antagonist/pirate
 	name = "\improper Space Pirate"
-	job_rank = ROLE_TRAITOR
+	pref_flag = ROLE_TRAITOR
 	roundend_category = "space pirates"
+	antagpanel_category = ANTAG_GROUP_PIRATES
 	show_in_antagpanel = FALSE
 	show_to_ghosts = TRUE
 	suicide_cry = "FOR ME MATEYS!!"
+	stinger_sound = 'sound/music/antag/pirate/pirate_start.ogg'
 	hijack_speed = 2 // That is without doubt the worst pirate I have ever seen.
+	desensitized_modifier = DESENSITIZED_THRESHOLD
 	var/datum/team/pirate/crew
 
 /datum/antagonist/pirate/greet()
 	. = ..()
-	to_chat(owner, "<B>The station refused to pay for your protection, protect the ship, siphon the credits from the station and raid it for even more loot.</B>")
+	to_chat(owner, "<B>The station refused to pay for your protection. Protect the ship, siphon the [MONEY_NAME] from the station, and raid it for even more loot.</B>")
 	owner.announce_objectives()
 
 /datum/antagonist/pirate/get_team()
@@ -42,21 +45,20 @@
 	. = ..()
 	var/mob/living/owner_mob = mob_override || owner.current
 	var/datum/language_holder/holder = owner_mob.get_language_holder()
-	holder.grant_language(/datum/language/piratespeak, TRUE, TRUE, LANGUAGE_PIRATE)
+	holder.grant_language(/datum/language/piratespeak, source = LANGUAGE_PIRATE)
 	holder.selected_language = /datum/language/piratespeak
 
 /datum/antagonist/pirate/remove_innate_effects(mob/living/mob_override)
 	var/mob/living/owner_mob = mob_override || owner.current
-	owner_mob.remove_language(/datum/language/piratespeak, TRUE, TRUE, LANGUAGE_PIRATE)
-	return ..()
+	owner_mob.remove_language(/datum/language/piratespeak, source = LANGUAGE_PIRATE)
 
 /datum/team/pirate
-	name = "Pirate crew"
+	name = "\improper Pirate crew"
 
 /datum/team/pirate/proc/forge_objectives()
 	var/datum/objective/loot/getbooty = new()
 	getbooty.team = src
-	for(var/obj/machinery/computer/piratepad_control/P in GLOB.machines)
+	for(var/obj/machinery/computer/piratepad_control/P as anything in SSmachines.get_machines_by_type_and_subtypes(/obj/machinery/computer/piratepad_control))
 		var/area/A = get_area(P)
 		if(istype(A,/area/shuttle/pirate))
 			getbooty.cargo_hold = P
@@ -71,24 +73,25 @@
 
 /datum/objective/loot
 	var/obj/machinery/computer/piratepad_control/cargo_hold
-	explanation_text = "Acquire valuable loot and store it in designated area."
+	explanation_text = "Acquire valuable loot and store it in the designated area."
 	var/target_value = 50000
 
 
 /datum/objective/loot/update_explanation_text()
 	if(cargo_hold)
 		var/area/storage_area = get_area(cargo_hold)
-		explanation_text = "Acquire loot and store [target_value] of credits worth in [storage_area.name] cargo hold."
+		explanation_text = "Acquire loot and store [target_value] of [MONEY_NAME] worth in [storage_area.name] cargo hold."
 
 /datum/objective/loot/proc/loot_listing()
 	//Lists notable loot.
 	if(!cargo_hold || !cargo_hold.total_report)
 		return "Nothing"
-	cargo_hold.total_report.total_value = sortTim(cargo_hold.total_report.total_value, cmp = /proc/cmp_numeric_dsc, associative = TRUE)
+	sortTim(cargo_hold.total_report.total_value, cmp = GLOBAL_PROC_REF(cmp_numeric_dsc), associative = TRUE)
 	var/count = 0
 	var/list/loot_texts = list()
 	for(var/datum/export/E in cargo_hold.total_report.total_value)
-		if(++count > 5)
+		count++
+		if(count > 5)
 			break
 		loot_texts += E.total_printout(cargo_hold.total_report,notes = FALSE)
 	return loot_texts.Join(", ")
@@ -102,7 +105,7 @@
 /datum/team/pirate/roundend_report()
 	var/list/parts = list()
 
-	parts += "<span class='header'>Space Pirates were:</span>"
+	parts += span_header("Space Pirates were:")
 
 	var/all_dead = TRUE
 	for(var/datum/mind/M in members)
@@ -113,7 +116,7 @@
 	parts += "Loot stolen: "
 	var/datum/objective/loot/L = locate() in objectives
 	parts += L.loot_listing()
-	parts += "Total loot value : [L.get_loot_value()]/[L.target_value] credits"
+	parts += "Total loot value : [L.get_loot_value()]/[L.target_value] [MONEY_NAME]"
 
 	if(L.check_completion() && !all_dead)
 		parts += "<span class='greentext big'>The pirate crew was successful!</span>"

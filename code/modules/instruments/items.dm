@@ -4,9 +4,10 @@
 	force = 10
 	max_integrity = 100
 	resistance_flags = FLAMMABLE
-	icon = 'icons/obj/musician.dmi'
+	icon = 'icons/obj/art/musician.dmi'
 	lefthand_file = 'icons/mob/inhands/equipment/instruments_lefthand.dmi'
 	righthand_file = 'icons/mob/inhands/equipment/instruments_righthand.dmi'
+	abstract_type = /obj/item/instrument
 	/// Our song datum.
 	var/datum/song/handheld/song
 	/// Our allowed list of instrument ids. This is nulled on initialize.
@@ -17,46 +18,37 @@
 /obj/item/instrument/Initialize(mapload)
 	. = ..()
 	song = new(src, allowed_instrument_ids, instrument_range)
-	allowed_instrument_ids = null //We don't need this clogging memory after it's used.
+	allowed_instrument_ids = null //We don't need this clogging memory after its used.
 
 /obj/item/instrument/Destroy()
 	QDEL_NULL(song)
 	return ..()
 
-/obj/item/instrument/proc/should_stop_playing(atom/music_player)
+/obj/item/instrument/proc/can_play(atom/music_player)
 	if(!ismob(music_player))
-		return STOP_PLAYING
+		return FALSE
 	var/mob/user = music_player
-	if(user.incapacitated() || !((loc == user) || (isturf(loc) && Adjacent(user)))) // sorry, no more TK playing.
-		return STOP_PLAYING
+	if(user.incapacitated)
+		return FALSE
+	if(!Adjacent(user))
+		return FALSE
+	return TRUE
 
-/obj/item/instrument/suicide_act(mob/user)
+/obj/item/instrument/suicide_act(mob/living/user)
 	user.visible_message(span_suicide("[user] begins to play 'Gloomy Sunday'! It looks like [user.p_theyre()] trying to commit suicide!"))
-	return (BRUTELOSS)
+	return BRUTELOSS
 
-/obj/item/instrument/attack_self(mob/user)
-	if(!ISADVANCEDTOOLUSER(user))
-		to_chat(user, span_warning("You don't have the dexterity to do this!"))
-		return TRUE
-	interact(user)
-
-/obj/item/instrument/interact(mob/user)
-	ui_interact(user)
-
-/obj/item/instrument/ui_interact(mob/living/user)
-	if(!isliving(user) || user.stat != CONSCIOUS || (HAS_TRAIT(user, TRAIT_HANDS_BLOCKED) && !ispAI(user)))
-		return
-
-	user.set_machine(src)
-	song.ui_interact(user)
+/obj/item/instrument/ui_interact(mob/user, datum/tgui/ui)
+	return song.ui_interact(user)
 
 /obj/item/instrument/violin
 	name = "space violin"
 	desc = "A wooden musical instrument with four strings and a bow. \"The devil went down to space, he was looking for an assistant to grief.\""
 	icon_state = "violin"
 	inhand_icon_state = "violin"
-	hitsound = "swing_hit"
+	hitsound = SFX_SWING_HIT
 	allowed_instrument_ids = "violin"
+	custom_materials = list(/datum/material/wood = SHEET_MATERIAL_AMOUNT * 4, /datum/material/iron = SHEET_MATERIAL_AMOUNT)
 
 /obj/item/instrument/violin/golden
 	name = "golden violin"
@@ -64,6 +56,7 @@
 	icon_state = "golden_violin"
 	inhand_icon_state = "golden_violin"
 	resistance_flags = LAVA_PROOF | FIRE_PROOF | ACID_PROOF
+	custom_materials = list(/datum/material/gold = SHEET_MATERIAL_AMOUNT * 4, /datum/material/iron = SHEET_MATERIAL_AMOUNT)
 
 /obj/item/instrument/banjo
 	name = "banjo"
@@ -72,7 +65,7 @@
 	inhand_icon_state = "banjo"
 	attack_verb_continuous = list("scruggs-styles", "hum-diggitys", "shin-digs", "clawhammers")
 	attack_verb_simple = list("scruggs-style", "hum-diggity", "shin-dig", "clawhammer")
-	hitsound = 'sound/weapons/banjoslap.ogg'
+	hitsound = 'sound/items/weapons/banjoslap.ogg'
 	allowed_instrument_ids = "banjo"
 
 /obj/item/instrument/guitar
@@ -82,7 +75,7 @@
 	inhand_icon_state = "guitar"
 	attack_verb_continuous = list("plays metal on", "serenades", "crashes", "smashes")
 	attack_verb_simple = list("play metal on", "serenade", "crash", "smash")
-	hitsound = 'sound/weapons/stringsmash.ogg'
+	hitsound = 'sound/items/weapons/stringsmash.ogg'
 	allowed_instrument_ids = list("guitar","csteelgt","cnylongt", "ccleangt", "cmutedgt")
 
 /obj/item/instrument/eguitar
@@ -93,7 +86,7 @@
 	force = 12
 	attack_verb_continuous = list("plays metal on", "shreds", "crashes", "smashes")
 	attack_verb_simple = list("play metal on", "shred", "crash", "smash")
-	hitsound = 'sound/weapons/stringsmash.ogg'
+	hitsound = 'sound/items/weapons/stringsmash.ogg'
 	allowed_instrument_ids = "eguitar"
 
 /obj/item/instrument/glockenspiel
@@ -125,14 +118,18 @@
 	force = 0
 	attack_verb_continuous = list("plays", "jazzes", "trumpets", "mourns", "doots", "spooks")
 	attack_verb_simple = list("play", "jazz", "trumpet", "mourn", "doot", "spook")
+	var/single_use = FALSE
 
 /obj/item/instrument/trumpet/spectral/Initialize(mapload)
 	. = ..()
-	AddElement(/datum/element/spooky)
+	AddElement(/datum/element/spooky, too_spooky = !single_use, single_use = single_use)
 
-/obj/item/instrument/trumpet/spectral/attack(mob/living/carbon/C, mob/user)
-	playsound (src, 'sound/runtime/instruments/trombone/En4.mid', 100,1,-1)
-	..()
+/obj/item/instrument/trumpet/spectral/attack(mob/living/target_mob, mob/living/user, list/modifiers, list/attack_modifiers)
+	playsound(src, 'sound/runtime/instruments/trombone/En4.mid', 1000, 1, -1)
+	return ..()
+
+/obj/item/instrument/trumpet/spectral/one_doot
+	single_use = TRUE
 
 /obj/item/instrument/saxophone
 	name = "saxophone"
@@ -149,14 +146,18 @@
 	force = 0
 	attack_verb_continuous = list("plays", "jazzes", "saxxes", "mourns", "doots", "spooks")
 	attack_verb_simple = list("play", "jazz", "sax", "mourn", "doot", "spook")
+	var/single_use = FALSE
 
 /obj/item/instrument/saxophone/spectral/Initialize(mapload)
 	. = ..()
-	AddElement(/datum/element/spooky)
+	AddElement(/datum/element/spooky, too_spooky = !single_use, single_use = single_use)
 
-/obj/item/instrument/saxophone/spectral/attack(mob/living/carbon/C, mob/user)
-	playsound (src, 'sound/runtime/instruments/saxophone/En4.mid', 100,1,-1)
-	..()
+/obj/item/instrument/saxophone/spectral/attack(mob/living/target_mob, mob/living/user, list/modifiers, list/attack_modifiers)
+	playsound(src, 'sound/runtime/instruments/trombone/En4.mid', 1000, 1, -1)
+	return ..()
+
+/obj/item/instrument/saxophone/spectral/one_doot
+	single_use = TRUE
 
 /obj/item/instrument/trombone
 	name = "trombone"
@@ -173,14 +174,18 @@
 	force = 0
 	attack_verb_continuous = list("plays", "jazzes", "trombones", "mourns", "doots", "spooks")
 	attack_verb_simple = list("play", "jazz", "trombone", "mourn", "doot", "spook")
+	var/single_use = FALSE
 
 /obj/item/instrument/trombone/spectral/Initialize(mapload)
 	. = ..()
-	AddElement(/datum/element/spooky)
+	AddElement(/datum/element/spooky, too_spooky = !single_use, single_use = single_use)
 
-/obj/item/instrument/trombone/spectral/attack(mob/living/carbon/C, mob/user)
-	playsound (src, 'sound/runtime/instruments/trombone/Cn4.mid', 100,1,-1)
-	..()
+/obj/item/instrument/trombone/spectral/one_doot
+	single_use = TRUE
+
+/obj/item/instrument/trombone/spectral/attack(mob/living/target_mob, mob/living/user, list/modifiers, list/attack_modifiers)
+	playsound(src, 'sound/runtime/instruments/trombone/Cn4.mid', 1000, 1, -1)
+	return ..()
 
 /obj/item/instrument/recorder
 	name = "recorder"
@@ -200,20 +205,37 @@
 	force = 5
 	w_class = WEIGHT_CLASS_SMALL
 	actions_types = list(/datum/action/item_action/instrument)
+	action_slots = ALL
+
+/obj/item/instrument/harmonica/equipped(mob/user, slot, initial = FALSE)
+	. = ..()
+	if(!(slot & slot_flags))
+		return
+	RegisterSignal(user, COMSIG_MOB_SAY, PROC_REF(handle_speech))
+
+/obj/item/instrument/harmonica/dropped(mob/user, silent = FALSE)
+	. = ..()
+	UnregisterSignal(user, COMSIG_MOB_SAY)
 
 /obj/item/instrument/harmonica/proc/handle_speech(datum/source, list/speech_args)
 	SIGNAL_HANDLER
-	if(song.playing && ismob(loc))
-		to_chat(loc, span_warning("You stop playing the harmonica to talk..."))
-		song.playing = FALSE
+	if(!song.playing)
+		return
+	if(!ismob(loc))
+		CRASH("[src] was still registered to listen in on [source] but was not found to be on their mob.")
+	to_chat(loc, span_warning("You stop playing the harmonica to talk..."))
+	song.playing = FALSE
 
-/obj/item/instrument/harmonica/equipped(mob/M, slot)
-	. = ..()
-	RegisterSignal(M, COMSIG_MOB_SAY, .proc/handle_speech)
+/datum/action/item_action/instrument
+	name = "Use Instrument"
+	desc = "Use the instrument specified"
 
-/obj/item/instrument/harmonica/dropped(mob/M)
-	. = ..()
-	UnregisterSignal(M, COMSIG_MOB_SAY)
+/datum/action/item_action/instrument/do_effect(trigger_flags)
+	if(!istype(target, /obj/item/instrument))
+		return FALSE
+	var/obj/item/instrument/instrument = target
+	instrument.interact(usr)
+	return TRUE
 
 /obj/item/instrument/bikehorn
 	name = "gilded bike horn"
@@ -231,34 +253,6 @@
 	throw_range = 15
 	hitsound = 'sound/items/bikehorn.ogg'
 
-/obj/item/choice_beacon/music
-	name = "instrument delivery beacon"
-	desc = "Summon your tool of art."
-	icon_state = "gangtool-red"
-
-/obj/item/choice_beacon/music/generate_display_names()
-	var/static/list/instruments
-	if(!instruments)
-		instruments = list()
-		var/list/templist = list(/obj/item/instrument/violin,
-							/obj/item/instrument/piano_synth,
-							/obj/item/instrument/banjo,
-							/obj/item/instrument/guitar,
-							/obj/item/instrument/eguitar,
-							/obj/item/instrument/glockenspiel,
-							/obj/item/instrument/accordion,
-							/obj/item/instrument/trumpet,
-							/obj/item/instrument/saxophone,
-							/obj/item/instrument/trombone,
-							/obj/item/instrument/recorder,
-							/obj/item/instrument/harmonica,
-							/obj/item/instrument/piano_synth/headphones
-							)
-		for(var/V in templist)
-			var/atom/A = V
-			instruments[initial(A.name)] = A
-	return instruments
-
 /obj/item/instrument/musicalmoth
 	name = "musical moth"
 	desc = "Despite its popularity, this controversial musical toy was eventually banned due to its unethically sampled sounds of moths screaming in agony."
@@ -268,6 +262,6 @@
 	attack_verb_simple = list("flutter", "flap")
 	w_class = WEIGHT_CLASS_TINY
 	force = 0
-	hitsound = 'sound/voice/moth/scream_moth.ogg'
-	custom_price = PAYCHECK_HARD * 2.37
-	custom_premium_price = PAYCHECK_HARD * 2.37
+	hitsound = 'sound/mobs/humanoids/moth/scream_moth.ogg'
+	custom_price = PAYCHECK_COMMAND * 2.37
+	custom_premium_price = PAYCHECK_COMMAND * 2.37

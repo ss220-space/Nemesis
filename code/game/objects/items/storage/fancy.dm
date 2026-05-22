@@ -7,39 +7,44 @@
  * Egg Box
  * Candle Box
  * Cigarette Box
+ * Rolling Paper Pack
  * Cigar Case
  * Heart Shaped Box w/ Chocolates
+ * Coffee condiments display
  */
 
 /obj/item/storage/fancy
 	icon = 'icons/obj/food/containers.dmi'
-	icon_state = "donutbox"
-	base_icon_state = "donutbox"
+	abstract_type = /obj/item/storage/fancy
 	resistance_flags = FLAMMABLE
-	custom_materials = list(/datum/material/cardboard = 2000)
+	custom_materials = list(/datum/material/cardboard = SHEET_MATERIAL_AMOUNT)
 	/// Used by examine to report what this thing is holding.
 	var/contents_tag = "errors"
 	/// What type of thing to fill this storage with.
-	var/spawn_type = null
-	/// Whether the container is open or not
-	var/is_open = FALSE
-	/// What this container folds up into when it's empty.
-	var/obj/fold_result = /obj/item/stack/sheet/cardboard
+	var/spawn_type
+	/// How many of the things to fill this storage with.
+	var/spawn_count = 0
+	/// Whether the container is open, always open, or closed
+	var/open_status = FANCY_CONTAINER_CLOSED
+	/// What material do we get when we fold this box?
+	var/foldable_result = /obj/item/stack/sheet/cardboard
+	/// Whether it supports open and closed state icons.
+	var/has_open_closed_states = TRUE
 
 /obj/item/storage/fancy/PopulateContents()
 	if(!spawn_type)
 		return
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	for(var/i = 1 to STR.max_items)
-		new spawn_type(src)
+	for(var/i = 1 to spawn_count)
+		var/thing_in_box = pick(spawn_type)
+		new thing_in_box(src)
 
 /obj/item/storage/fancy/update_icon_state()
-	icon_state = "[base_icon_state][is_open ? contents.len : null]"
+	icon_state = "[base_icon_state][has_open_closed_states && open_status ? contents.len : null]"
 	return ..()
 
 /obj/item/storage/fancy/examine(mob/user)
 	. = ..()
-	if(!is_open)
+	if(!open_status)
 		return
 	if(length(contents) == 1)
 		. += "There is one [contents_tag] left."
@@ -47,27 +52,36 @@
 		. += "There are [contents.len <= 0 ? "no" : "[contents.len]"] [contents_tag]s left."
 
 /obj/item/storage/fancy/attack_self(mob/user)
-	is_open = !is_open
+	if(open_status == FANCY_CONTAINER_CLOSED)
+		open_status = FANCY_CONTAINER_OPEN
+	else if(open_status == FANCY_CONTAINER_OPEN)
+		open_status = FANCY_CONTAINER_CLOSED
+
 	update_appearance()
 	. = ..()
 	if(contents.len)
 		return
-	new fold_result(user.drop_location())
-	to_chat(user, span_notice("You fold the [src] into [initial(fold_result.name)]."))
-	user.put_in_active_hand(fold_result)
+	if(!foldable_result || (flags_1 & HOLOGRAM_1))
+		return
+	var/obj/item/result = new foldable_result(user.drop_location())
+	balloon_alert(user, "folded")
+	// Gotta delete first, so then the cardboard appears in the same hand
 	qdel(src)
+	user.put_in_hands(result)
 
 /obj/item/storage/fancy/Exited(atom/movable/gone, direction)
 	. = ..()
-	is_open = TRUE
+	if(open_status == FANCY_CONTAINER_CLOSED)
+		open_status = FANCY_CONTAINER_OPEN
 	update_appearance()
 
 /obj/item/storage/fancy/Entered(atom/movable/arrived, atom/old_loc, list/atom/old_locs)
 	. = ..()
-	is_open = TRUE
+	if(open_status == FANCY_CONTAINER_CLOSED)
+		open_status = FANCY_CONTAINER_OPEN
 	update_appearance()
 
-#define DONUT_INBOX_SPRITE_WIDTH 3
+#define DONUT_INBOX_SPRITE_WIDTH 4
 
 /*
  * Donut Box
@@ -77,19 +91,15 @@
 	name = "donut box"
 	desc = "Mmm. Donuts."
 	icon = 'icons/obj/food/donuts.dmi'
-	icon_state = "donutbox_inner"
+	icon_state = "donutbox_open" //composite image used for mapping
 	base_icon_state = "donutbox"
 	spawn_type = /obj/item/food/donut/plain
-	is_open = TRUE
-	appearance_flags = KEEP_TOGETHER
-	custom_premium_price = PAYCHECK_HARD * 1.75
+	spawn_count = 6
+	open_status = TRUE
+	appearance_flags = KEEP_TOGETHER|LONG_GLIDE
+	custom_premium_price = PAYCHECK_COMMAND * 1.75
 	contents_tag = "donut"
-
-/obj/item/storage/fancy/donut_box/ComponentInitialize()
-	. = ..()
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 6
-	STR.set_holdable(list(/obj/item/food/donut))
+	storage_type = /datum/storage/donut_box
 
 /obj/item/storage/fancy/donut_box/PopulateContents()
 	. = ..()
@@ -97,11 +107,11 @@
 
 /obj/item/storage/fancy/donut_box/update_icon_state()
 	. = ..()
-	icon_state = "[base_icon_state][is_open ? "_inner" : null]"
+	icon_state = "[base_icon_state][open_status ? "_inner" : null]"
 
 /obj/item/storage/fancy/donut_box/update_overlays()
 	. = ..()
-	if(!is_open)
+	if(!open_status)
 		return
 
 	var/donuts = 0
@@ -110,7 +120,9 @@
 		if (!istype(donut))
 			continue
 
-		. += image(icon = initial(icon), icon_state = donut.in_box_sprite(), pixel_x = donuts * DONUT_INBOX_SPRITE_WIDTH)
+		var/image/donut_image = image(icon = initial(icon), icon_state = donut.in_box_sprite())
+		donut_image.pixel_w = donuts * DONUT_INBOX_SPRITE_WIDTH
+		. += donut_image
 		donuts += 1
 
 	. += image(icon = initial(icon), icon_state = "[base_icon_state]_top")
@@ -126,18 +138,24 @@
 	inhand_icon_state = "eggbox"
 	icon_state = "eggbox"
 	base_icon_state = "eggbox"
-	lefthand_file = 'icons/mob/inhands/misc/food_lefthand.dmi'
-	righthand_file = 'icons/mob/inhands/misc/food_righthand.dmi'
+	lefthand_file = 'icons/mob/inhands/items/food_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/items/food_righthand.dmi'
 	name = "egg box"
 	desc = "A carton for containing eggs."
 	spawn_type = /obj/item/food/egg
+	spawn_count = 12
 	contents_tag = "egg"
+	storage_type = /datum/storage/egg_box
 
-/obj/item/storage/fancy/egg_box/ComponentInitialize()
-	. = ..()
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 12
-	STR.set_holdable(list(/obj/item/food/egg))
+/*
+ * Fertile Egg Box
+ */
+
+/obj/item/storage/fancy/egg_box/fertile
+	name = "fertile egg box"
+	desc = "Only one thing here is fertile, and it's not the eggs."
+	spawn_type = /obj/item/food/egg/fertile
+	spawn_count = 6
 
 /*
  * Candle Box
@@ -149,32 +167,22 @@
 	icon = 'icons/obj/candle.dmi'
 	icon_state = "candlebox5"
 	base_icon_state = "candlebox"
-	inhand_icon_state = "candlebox5"
+	inhand_icon_state = null
 	worn_icon_state = "cigpack"
 	throwforce = 2
 	slot_flags = ITEM_SLOT_BELT
-	spawn_type = /obj/item/candle
-	is_open = TRUE
+	spawn_type = /obj/item/flashlight/flare/candle
+	spawn_count = 5
+	open_status = FANCY_CONTAINER_ALWAYS_OPEN
 	contents_tag = "candle"
-
-/obj/item/storage/fancy/candle_box/ComponentInitialize()
-	. = ..()
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 5
-
-/obj/item/storage/fancy/candle_box/attack_self(mob/user)
-	if(!contents.len)
-		new fold_result(user.drop_location())
-		to_chat(user, span_notice("You fold the [src] into [initial(fold_result.name)]."))
-		user.put_in_active_hand(fold_result)
-		qdel(src)
+	storage_type = /datum/storage/candle_box
 
 ////////////
 //CIG PACK//
 ////////////
 /obj/item/storage/fancy/cigarettes
 	name = "\improper Space Cigarettes packet"
-	desc = "The most popular brand of cigarettes, sponsors of the Space Olympics. On the back it advertises to be the only brand that can be smoked in the vaccum of space."
+	desc = "The most popular brand of cigarettes, sponsors of the Space Olympics. On the back it advertises to be the only brand that can be smoked in the vacuum of space."
 	icon = 'icons/obj/cigarettes.dmi'
 	icon_state = "cig"
 	inhand_icon_state = "cigpacket"
@@ -183,10 +191,17 @@
 	w_class = WEIGHT_CLASS_TINY
 	throwforce = 0
 	slot_flags = ITEM_SLOT_BELT
-	spawn_type = /obj/item/clothing/mask/cigarette/space_cigarette
-	custom_price = PAYCHECK_MEDIUM
+	spawn_type = /obj/item/cigarette/space_cigarette
+	spawn_count = 6
+	custom_price = PAYCHECK_CREW
 	age_restricted = TRUE
 	contents_tag = "cigarette"
+	storage_type = /datum/storage/cigarette_box
+	drop_sound = SFX_CIG_PACK_DROP
+	pickup_sound = SFX_CIG_PACK_PICKUP
+	throw_drop_sound = SFX_CIG_PACK_THROW_DROP
+	sound_vary = TRUE
+
 	///for cigarette overlay
 	var/candy = FALSE
 	/// Does this cigarette packet come with a coupon attached?
@@ -200,53 +215,70 @@
 	if(contents.len != 0 || !spawn_coupon)
 		return ..()
 
-	to_chat(user, span_notice("You rip the back off \the [src] and get a coupon!"))
+	playsound(src, storage_type.rustle_sound, 50, TRUE)
+
+	balloon_alert(user, "ooh, free coupon")
 	var/obj/item/coupon/attached_coupon = new
 	user.put_in_hands(attached_coupon)
-	attached_coupon.generate(rigged_omen)
+	attached_coupon.generate(rigged_omen ? COUPON_OMEN : null, null, user)
 	attached_coupon = null
 	spawn_coupon = FALSE
 	name = "discarded cigarette packet"
 	desc = "An old cigarette packet with the back torn off, worth less than nothing now."
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 0
-	return
+	atom_storage.max_slots = 0
 
-/obj/item/storage/fancy/cigarettes/ComponentInitialize()
+/obj/item/storage/fancy/cigarettes/Initialize(mapload)
 	. = ..()
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 6
-	STR.set_holdable(list(/obj/item/clothing/mask/cigarette, /obj/item/lighter))
+
+	register_context()
+	if(!spawn_count)
+		update_appearance()
+
+/obj/item/storage/fancy/cigarettes/interact_with_atom(atom/interacting_with, mob/living/user, list/modifiers)
+	. = ..()
+	if(interacting_with != user) // you can quickly put a cigarette in your mouth only
+		return ..()
+	quick_remove_item(/obj/item/cigarette, user, equip_to_mouth = TRUE)
+
+/obj/item/storage/fancy/cigarettes/attack_hand_secondary(mob/user, list/modifiers)
+	. = ..()
+	quick_remove_item(/obj/item/cigarette, user)
+	return SECONDARY_ATTACK_CANCEL_ATTACK_CHAIN
+
+/obj/item/storage/fancy/cigarettes/click_alt(mob/user)
+	var/obj/item/lighter = locate(/obj/item/lighter) in contents
+	if(lighter)
+		quick_remove_item(lighter, user)
+	else
+		quick_remove_item(/obj/item/cigarette, user)
+	return CLICK_ACTION_SUCCESS
+
+/obj/item/storage/fancy/cigarettes/add_context(atom/source, list/context, obj/item/held_item, mob/user)
+	. = ..()
+	if(locate(/obj/item/lighter) in contents)
+		context[SCREENTIP_CONTEXT_ALT_LMB] = "Remove lighter"
+	context[SCREENTIP_CONTEXT_RMB] = "Remove [contents_tag]"
+	return CONTEXTUAL_SCREENTIP_SET
 
 /obj/item/storage/fancy/cigarettes/examine(mob/user)
 	. = ..()
 
-	. += span_notice("Alt-click to extract contents.")
 	if(spawn_coupon)
 		. += span_notice("There's a coupon on the back of the pack! You can tear it off once it's empty.")
-
-/obj/item/storage/fancy/cigarettes/AltClick(mob/user)
-	if(!user.canUseTopic(src, BE_CLOSE, NO_DEXTERITY, FALSE, TRUE))
-		return
-	var/obj/item/clothing/mask/cigarette/W = locate(/obj/item/clothing/mask/cigarette) in contents
-	if(W && contents.len > 0)
-		SEND_SIGNAL(src, COMSIG_TRY_STORAGE_TAKE, W, user)
-		user.put_in_hands(W)
-		contents -= W
-		to_chat(user, span_notice("You take \a [W] out of the pack."))
-	else
-		to_chat(user, span_notice("There are no [contents_tag]s left in the pack."))
 
 /obj/item/storage/fancy/cigarettes/update_icon_state()
 	. = ..()
 	icon_state = "[base_icon_state][contents.len ? null : "_empty"]"
 
+/obj/item/storage/fancy/cigarettes/proc/open_icon_state()
+	return "[icon_state]_open"
+
 /obj/item/storage/fancy/cigarettes/update_overlays()
 	. = ..()
-	if(!is_open || !contents.len)
+	if(!open_status || !contents.len)
 		return
 
-	. += "[icon_state]_open"
+	. += open_icon_state()
 
 	if(!display_cigs)
 		return
@@ -267,72 +299,106 @@
 		. += "[use_icon_state]_[cig_position]"
 		cig_position++
 
-/obj/item/storage/fancy/cigarettes/attack(mob/living/carbon/target, mob/living/carbon/user)
-	if(!istype(target))
-		return
-
-	var/obj/item/clothing/mask/cigarette/cig = locate() in contents
-	if(!cig)
-		to_chat(user, span_notice("There are no [contents_tag]s left in the pack."))
-		return
-	if(target != user || !contents.len || user.wear_mask)
-		return ..()
-
-	SEND_SIGNAL(src, COMSIG_TRY_STORAGE_TAKE, cig, target)
-	target.equip_to_slot_if_possible(cig, ITEM_SLOT_MASK)
-	contents -= cig
-	to_chat(user, span_notice("You take \a [cig] out of the pack."))
-	return
-
+/obj/item/storage/fancy/cigarettes/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/dromedaryco
 	name = "\improper DromedaryCo packet"
 	desc = "A packet of six imported DromedaryCo cancer sticks. A label on the packaging reads, \"Wouldn't a slow death make a change?\""
 	icon_state = "dromedary"
 	base_icon_state = "dromedary"
-	spawn_type = /obj/item/clothing/mask/cigarette/dromedary
+	spawn_type = /obj/item/cigarette/dromedary
+
+/obj/item/storage/fancy/cigarettes/dromedaryco/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_uplift
 	name = "\improper Uplift Smooth packet"
 	desc = "Your favorite brand, now menthol flavored."
 	icon_state = "uplift"
 	base_icon_state = "uplift"
-	spawn_type = /obj/item/clothing/mask/cigarette/uplift
+	spawn_type = /obj/item/cigarette/uplift
+
+/obj/item/storage/fancy/cigarettes/cigpack_uplift/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_robust
 	name = "\improper Robust packet"
 	desc = "Smoked by the robust."
 	icon_state = "robust"
 	base_icon_state = "robust"
-	spawn_type = /obj/item/clothing/mask/cigarette/robust
+	spawn_type = /obj/item/cigarette/robust
+
+/obj/item/storage/fancy/cigarettes/cigpack_robust/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_robustgold
 	name = "\improper Robust Gold packet"
 	desc = "Smoked by the truly robust."
 	icon_state = "robustg"
 	base_icon_state = "robustg"
-	spawn_type = /obj/item/clothing/mask/cigarette/robustgold
+	spawn_type = /obj/item/cigarette/robustgold
+
+/obj/item/storage/fancy/cigarettes/cigpack_robustgold/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
+
+/obj/item/storage/fancy/cigarettes/cigpack_greytide
+	name = "\improper Mainthol Grey packet"
+	desc = "The thin grey line."
+	icon_state = "greytide"
+	base_icon_state = "greytide"
+	spawn_type = /obj/item/cigarette/greytide
+
+/obj/item/storage/fancy/cigarettes/cigpack_greytide/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_carp
 	name = "\improper Carp Classic packet"
 	desc = "Since 2313."
 	icon_state = "carp"
 	base_icon_state = "carp"
-	spawn_type = /obj/item/clothing/mask/cigarette/carp
+	spawn_type = /obj/item/cigarette/carp
+
+/obj/item/storage/fancy/cigarettes/cigpack_carp/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_syndicate
 	name = "cigarette packet"
 	desc = "An obscure brand of cigarettes."
 	icon_state = "syndie"
 	base_icon_state = "syndie"
-	spawn_type = /obj/item/clothing/mask/cigarette/syndicate
+	spawn_type = /obj/item/cigarette/syndicate
+
+/obj/item/storage/fancy/cigarettes/cigpack_syndicate/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_midori
 	name = "\improper Midori Tabako packet"
 	desc = "You can't understand the runes, but the packet smells funny."
 	icon_state = "midori"
 	base_icon_state = "midori"
-	spawn_type = /obj/item/clothing/mask/cigarette/rollie/nicotine
+	spawn_type = /obj/item/cigarette/rollie/nicotine
+
+/obj/item/storage/fancy/cigarettes/cigpack_midori/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_candy
 	name = "\improper Timmy's First Candy Smokes packet"
@@ -340,42 +406,70 @@
 	icon_state = "candy"
 	base_icon_state = "candy"
 	contents_tag = "candy cigarette"
-	spawn_type = /obj/item/clothing/mask/cigarette/candy
+	spawn_type = /obj/item/cigarette/candy
 	candy = TRUE
 	age_restricted = FALSE
 
 /obj/item/storage/fancy/cigarettes/cigpack_candy/Initialize(mapload)
 	. = ..()
 	if(prob(7))
-		spawn_type = /obj/item/clothing/mask/cigarette/candy/nicotine //uh oh!
+		spawn_type = /obj/item/cigarette/candy/nicotine //uh oh!
+
+/obj/item/storage/fancy/cigarettes/cigpack_candy/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_shadyjims
 	name = "\improper Shady Jim's Super Slims packet"
 	desc = "Is your weight slowing you down? Having trouble running away from gravitational singularities? Can't stop stuffing your mouth? Smoke Shady Jim's Super Slims and watch all that fat burn away. Guaranteed results!"
 	icon_state = "shadyjim"
 	base_icon_state = "shadyjim"
-	spawn_type = /obj/item/clothing/mask/cigarette/shadyjims
+	spawn_type = /obj/item/cigarette/shadyjims
+
+/obj/item/storage/fancy/cigarettes/cigpack_shadyjims/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_xeno
 	name = "\improper Xeno Filtered packet"
 	desc = "Loaded with 100% pure slime. And also nicotine."
 	icon_state = "slime"
 	base_icon_state = "slime"
-	spawn_type = /obj/item/clothing/mask/cigarette/xeno
+	spawn_type = /obj/item/cigarette/xeno
+
+/obj/item/storage/fancy/cigarettes/cigpack_xeno/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_cannabis
 	name = "\improper Freak Brothers' Special packet"
 	desc = "A label on the packaging reads, \"Endorsed by Phineas, Freddy and Franklin.\""
 	icon_state = "midori"
 	base_icon_state = "midori"
-	spawn_type = /obj/item/clothing/mask/cigarette/rollie/cannabis
+	spawn_type = /obj/item/cigarette/rollie/cannabis
+
+/obj/item/storage/fancy/cigarettes/cigpack_cannabis/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigpack_mindbreaker
 	name = "\improper Leary's Delight packet"
 	desc = "Banned in over 36 galaxies."
 	icon_state = "shadyjim"
 	base_icon_state = "shadyjim"
-	spawn_type = /obj/item/clothing/mask/cigarette/rollie/mindbreaker
+	spawn_type = /obj/item/cigarette/rollie/mindbreaker
+
+/obj/item/storage/fancy/cigarettes/cigpack_mindbreaker/empty
+	spawn_count = 0
+	spawn_coupon = FALSE
+	open_status = FANCY_CONTAINER_OPEN
+
+/obj/item/storage/fancy/cigarettes/flash_powder
+	spawn_type = /obj/item/cigarette/flash_powder
 
 /obj/item/storage/fancy/rollingpapers
 	name = "rolling paper pack"
@@ -386,23 +480,24 @@
 	base_icon_state = "cig_paper_pack"
 	contents_tag = "rolling paper"
 	spawn_type = /obj/item/rollingpaper
-	custom_price = PAYCHECK_PRISONER
+	spawn_count = 10
+	custom_price = PAYCHECK_LOWER
+	has_open_closed_states = FALSE
+	storage_type = /datum/storage/rolling_paper_pack
 
-/obj/item/storage/fancy/rollingpapers/ComponentInitialize()
+/obj/item/storage/fancy/rollingpapers/Initialize(mapload)
 	. = ..()
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 10
-	STR.set_holdable(list(/obj/item/rollingpaper))
 
-///Overrides to do nothing because fancy boxes are fucking insane.
-/obj/item/storage/fancy/rollingpapers/update_icon_state()
-	SHOULD_CALL_PARENT(FALSE)
-	return
+	if(!spawn_count)
+		update_appearance()
 
 /obj/item/storage/fancy/rollingpapers/update_overlays()
 	. = ..()
 	if(!contents.len)
 		. += "[base_icon_state]_empty"
+
+/obj/item/storage/fancy/rollingpapers/empty
+	spawn_count = 0
 
 /////////////
 //CIGAR BOX//
@@ -416,27 +511,27 @@
 	base_icon_state = "cigarcase"
 	w_class = WEIGHT_CLASS_NORMAL
 	contents_tag = "premium cigar"
-	spawn_type = /obj/item/clothing/mask/cigarette/cigar
+	storage_type = /datum/storage/cigar_box
+	spawn_type = /obj/item/cigarette/cigar/premium
+	spawn_count = 5
 	spawn_coupon = FALSE
 	display_cigs = FALSE
-
-/obj/item/storage/fancy/cigarettes/cigars/ComponentInitialize()
-	. = ..()
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 5
-	STR.set_holdable(list(/obj/item/clothing/mask/cigarette/cigar))
 
 /obj/item/storage/fancy/cigarettes/cigars/update_icon_state()
 	. = ..()
 	//reset any changes the parent call may have made
 	icon_state = base_icon_state
 
+/obj/item/storage/fancy/cigarettes/cigars/empty
+	spawn_count = 0
+	open_status = FANCY_CONTAINER_OPEN
+
 /obj/item/storage/fancy/cigarettes/cigars/update_overlays()
 	. = ..()
-	if(!is_open)
+	if(!open_status)
 		return
 	var/cigar_position = 1 //generate sprites for cigars in the box
-	for(var/obj/item/clothing/mask/cigarette/cigar/smokes in contents)
+	for(var/obj/item/cigarette/cigar/smokes in contents)
 		. += "[smokes.icon_off]_[cigar_position]"
 		cigar_position++
 
@@ -445,14 +540,26 @@
 	desc = "A case of imported Cohiba cigars, renowned for their strong flavor."
 	icon_state = "cohibacase"
 	base_icon_state = "cohibacase"
-	spawn_type = /obj/item/clothing/mask/cigarette/cigar/cohiba
+	spawn_type = /obj/item/cigarette/cigar/cohiba
+
+/obj/item/storage/fancy/cigarettes/cigars/cohiba/empty
+	spawn_count = 0
+	open_status = FANCY_CONTAINER_OPEN
 
 /obj/item/storage/fancy/cigarettes/cigars/havana
 	name = "\improper premium Havanian cigar case"
 	desc = "A case of classy Havanian cigars."
-	icon_state = "cohibacase"
-	base_icon_state = "cohibacase"
-	spawn_type = /obj/item/clothing/mask/cigarette/cigar/havana
+	icon_state = "havanacase"
+	base_icon_state = "havanacase"
+	spawn_type = /obj/item/cigarette/cigar/havana
+
+
+/obj/item/storage/fancy/cigarettes/cigars/havana/open_icon_state()
+	return "cohibacase_open"
+
+/obj/item/storage/fancy/cigarettes/cigars/havana/empty
+	spawn_count = 0
+	open_status = FANCY_CONTAINER_OPEN
 
 /*
  * Heart Shaped Box w/ Chocolates
@@ -465,17 +572,18 @@
 	inhand_icon_state = "chocolatebox"
 	icon_state = "chocolatebox"
 	base_icon_state = "chocolatebox"
-	lefthand_file = 'icons/mob/inhands/misc/food_lefthand.dmi'
-	righthand_file = 'icons/mob/inhands/misc/food_righthand.dmi'
+	lefthand_file = 'icons/mob/inhands/items/food_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/items/food_righthand.dmi'
 	contents_tag = "chocolate"
-	spawn_type = /obj/item/food/tinychocolate
-
-/obj/item/storage/fancy/heart_box/ComponentInitialize()
-	. = ..()
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 8
-	STR.set_holdable(list(/obj/item/food/tinychocolate))
-
+	spawn_type = list(
+		/obj/item/food/bonbon,
+		/obj/item/food/bonbon/chocolate_truffle,
+		/obj/item/food/bonbon/caramel_truffle,
+		/obj/item/food/bonbon/peanut_truffle,
+		/obj/item/food/bonbon/peanut_butter_cup,
+	)
+	spawn_count = 8
+	storage_type = /datum/storage/heart_box
 
 /obj/item/storage/fancy/nugget_box
 	name = "nugget box"
@@ -483,11 +591,138 @@
 	icon = 'icons/obj/food/containers.dmi'
 	icon_state = "nuggetbox"
 	base_icon_state = "nuggetbox"
+	inhand_icon_state = "nuggetbox"
+	lefthand_file = 'icons/mob/inhands/items/food_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/items/food_righthand.dmi'
 	contents_tag = "nugget"
+	w_class = WEIGHT_CLASS_SMALL
 	spawn_type = /obj/item/food/nugget
+	spawn_count = 7
+	storage_type = /datum/storage/nugget_box
 
-/obj/item/storage/fancy/nugget_box/ComponentInitialize()
+/obj/item/storage/fancy/nugget_box/Initialize(mapload)
 	. = ..()
-	var/datum/component/storage/STR = GetComponent(/datum/component/storage)
-	STR.max_items = 6
-	STR.set_holdable(list(/obj/item/food/nugget))
+	// It's a safe place for the Fryish/Fritterish
+	AddElement(/datum/element/fish_safe_storage)
+
+/obj/item/storage/fancy/nugget_box/red
+	name = "red nugget box"
+	icon_state = "rednuggetbox"
+	base_icon_state = "rednuggetbox"
+	inhand_icon_state = "rednuggetbox"
+
+/obj/item/storage/fancy/wing_box
+	name = "red wing box"
+	desc = "A cardboard box used for holding chicken wangs."
+	icon = 'icons/obj/food/containers.dmi'
+	icon_state = "redwingbox5"
+	base_icon_state = "redwingbox"
+	inhand_icon_state = "redwingbox"
+	lefthand_file = 'icons/mob/inhands/items/food_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/items/food_righthand.dmi'
+	contents_tag = "wings"
+	w_class = WEIGHT_CLASS_SMALL
+	spawn_type = /obj/item/food/fried_chicken
+	spawn_count = 5
+	storage_type = /datum/storage/wing_box
+	open_status = FANCY_CONTAINER_ALWAYS_OPEN
+
+/obj/item/storage/fancy/fry_box
+	name = "red fry box"
+	desc = "A cardboard box used for holding fries."
+	icon = 'icons/obj/food/containers.dmi'
+	icon_state = "redfrybox2"
+	base_icon_state = "redfrybox"
+	inhand_icon_state = "redfrybox"
+	lefthand_file = 'icons/mob/inhands/items/food_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/items/food_righthand.dmi'
+	contents_tag = "fries"
+	w_class = WEIGHT_CLASS_SMALL
+	spawn_type = /obj/item/food/fries
+	spawn_count = 2
+	storage_type = /datum/storage/fry_box
+	open_status = FANCY_CONTAINER_ALWAYS_OPEN
+
+/*
+ * Jar of pickles
+ */
+
+/obj/item/storage/fancy/pickles_jar
+	icon = 'icons/obj/food/containers.dmi'
+	icon_state = "pickles"
+	base_icon_state = "pickles"
+	name = "pickles"
+	desc = "A jar for containing pickles."
+	spawn_type = /obj/item/food/pickle
+	spawn_count = 10
+	contents_tag = "pickle"
+	foldable_result = /obj/item/reagent_containers/cup/beaker/large
+	custom_materials = list(/datum/material/glass = SHEET_MATERIAL_AMOUNT * 1.25)
+	open_status = FANCY_CONTAINER_ALWAYS_OPEN
+	has_open_closed_states = FALSE
+	storage_type = /datum/storage/pickles_jar
+
+/obj/item/storage/fancy/pickles_jar/update_icon_state()
+	. = ..()
+	if(!contents.len)
+		icon_state = "[base_icon_state]_empty"
+	else
+		if(contents.len < 5)
+			icon_state = "[base_icon_state]_[contents.len]"
+		else
+			icon_state = base_icon_state
+
+/*
+ * Coffee condiments display
+ */
+
+/obj/item/storage/fancy/coffee_condi_display
+	icon = 'icons/obj/food/containers.dmi'
+	icon_state = "coffee_condi_display"
+	base_icon_state = "coffee_condi_display"
+	name = "coffee condiments display"
+	desc = "A neat small wooden box, holding all your favorite coffee condiments."
+	contents_tag = "coffee condiment"
+	custom_materials = list(/datum/material/wood = SHEET_MATERIAL_AMOUNT/2)
+	resistance_flags = FLAMMABLE
+	foldable_result = /obj/item/stack/sheet/mineral/wood
+	open_status = FANCY_CONTAINER_ALWAYS_OPEN
+	has_open_closed_states = FALSE
+	storage_type = /datum/storage/coffee_condi_display
+
+/obj/item/storage/fancy/coffee_condi_display/update_overlays()
+	. = ..()
+	var/has_sugar = FALSE
+	var/has_sweetener = FALSE
+	var/has_creamer = FALSE
+	var/has_chocolate = FALSE
+
+	for(var/thing in contents)
+		if(istype(thing, /obj/item/reagent_containers/condiment/pack/sugar))
+			has_sugar = TRUE
+		else if(istype(thing, /obj/item/reagent_containers/condiment/pack/astrotame))
+			has_sweetener = TRUE
+		else if(istype(thing, /obj/item/reagent_containers/condiment/creamer))
+			has_creamer = TRUE
+		else if(istype(thing, /obj/item/reagent_containers/condiment/chocolate))
+			has_chocolate = TRUE
+
+	if (has_sugar)
+		. += "condi_display_sugar"
+	if (has_sweetener)
+		. += "condi_display_sweetener"
+	if (has_creamer)
+		. += "condi_display_creamer"
+	if (has_chocolate)
+		. += "condi_display_chocolate"
+
+/obj/item/storage/fancy/coffee_condi_display/PopulateContents()
+	for(var/i in 1 to 4)
+		new /obj/item/reagent_containers/condiment/pack/sugar(src)
+	for(var/i in 1 to 3)
+		new /obj/item/reagent_containers/condiment/pack/astrotame(src)
+	for(var/i in 1 to 4)
+		new /obj/item/reagent_containers/condiment/creamer(src)
+	for(var/i in 1 to 3)
+		new /obj/item/reagent_containers/condiment/chocolate(src)
+	update_appearance()

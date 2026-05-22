@@ -6,26 +6,40 @@
 	layer = ABOVE_WINDOW_LAYER
 	closingLayer = ABOVE_WINDOW_LAYER
 	resistance_flags = ACID_PROOF
+	obj_flags = CAN_BE_HIT | IGNORE_DENSITY | BLOCKS_CONSTRUCTION_DIR
 	var/base_state = "left"
 	max_integrity = 150 //If you change this, consider changing ../door/window/brigdoor/ max_integrity at the bottom of this .dm file
 	integrity_failure = 0
-	armor = list(MELEE = 20, BULLET = 50, LASER = 50, ENERGY = 50, BOMB = 10, BIO = 100, FIRE = 70, ACID = 100)
+	armor_type = /datum/armor/door_window
 	visible = FALSE
 	flags_1 = ON_BORDER_1
 	opacity = FALSE
-	pass_flags_self = PASSGLASS
+	pass_flags_self = PASSGLASS | PASSWINDOW
 	can_atmos_pass = ATMOS_PASS_PROC
 	interaction_flags_machine = INTERACT_MACHINE_WIRES_IF_OPEN | INTERACT_MACHINE_ALLOW_SILICON | INTERACT_MACHINE_OPEN_SILICON | INTERACT_MACHINE_REQUIRES_SILICON | INTERACT_MACHINE_OPEN
-	network_id = NETWORK_DOOR_AIRLOCKS
 	set_dir_on_move = FALSE
+	opens_with_door_remote = TRUE
+	/// Reference to the airlock electronics inside for determining window access.
 	var/obj/item/electronics/airlock/electronics = null
+	/// If the door is considered reinforced. If TRUE, the door will resist twice as much heat (1600 deg C vs 800 deg C).
 	var/reinf = 0
+	/// On deconstruction, how many shards to drop.
 	var/shards = 2
+	/// On deconstruction, how many rods to drop.
 	var/rods = 2
+	/// On deconstruction, how much cable to drop.
 	var/cable = 1
-	var/list/debris = list()
 
-/obj/machinery/door/window/Initialize(mapload, set_dir)
+/datum/armor/door_window
+	melee = 20
+	bullet = 50
+	laser = 50
+	energy = 50
+	bomb = 10
+	fire = 70
+	acid = 100
+
+/obj/machinery/door/window/Initialize(mapload, set_dir, unres_sides)
 	. = ..()
 	flags_1 &= ~PREVENT_CLICK_UNDER_1
 	if(set_dir)
@@ -33,48 +47,107 @@
 	if(LAZYLEN(req_access))
 		icon_state = "[icon_state]"
 		base_state = icon_state
-	for(var/i in 1 to shards)
-		debris += new /obj/item/shard(src)
-	if(rods)
-		debris += new /obj/item/stack/rods(src, rods)
-	if(cable)
-		debris += new /obj/item/stack/cable_coil(src, cable)
 
-	RegisterSignal(src, COMSIG_COMPONENT_NTNET_RECEIVE, .proc/ntnet_receive)
+	if(unres_sides)
+		//remove unres_sides from directions it can't be bumped from
+		switch(dir)
+			if(NORTH,SOUTH)
+				unres_sides &= ~EAST
+				unres_sides &= ~WEST
+			if(EAST,WEST)
+				unres_sides &= ~NORTH
+				unres_sides &= ~SOUTH
+
+	src.unres_sides = unres_sides
+	update_appearance(UPDATE_ICON)
 
 	var/static/list/loc_connections = list(
-		COMSIG_ATOM_EXIT = .proc/on_exit,
+		COMSIG_ATOM_EXIT = PROC_REF(on_exit),
 	)
 
 	AddElement(/datum/element/connect_loc, loc_connections)
 	AddElement(/datum/element/atmos_sensitive, mapload)
 
-/obj/machinery/door/window/ComponentInitialize()
-	. = ..()
-	AddComponent(/datum/component/ntnet_interface)
-
 /obj/machinery/door/window/Destroy()
 	set_density(FALSE)
-	QDEL_LIST(debris)
-	if(atom_integrity == 0)
-		playsound(src, "shatter", 70, TRUE)
 	electronics = null
-	var/turf/floor = get_turf(src)
-	floor.air_update_turf(TRUE, FALSE)
+	air_update_turf(TRUE, FALSE)
 	return ..()
 
 /obj/machinery/door/window/update_icon_state()
 	. = ..()
-	icon_state = "[base_state][density ? null : "open"]"
+	switch(animation)
+		if(DOOR_OPENING_ANIMATION)
+			icon_state = "[base_state]opening"
+		if(DOOR_CLOSING_ANIMATION)
+			icon_state = "[base_state]closing"
+		if(DOOR_DENY_ANIMATION)
+			icon_state = "[base_state]deny"
+		else
+			icon_state = "[base_state][density ? null : "open"]"
+
+	if(hasPower() && unres_sides)
+		set_light(l_range = 2, l_power = 1)
+		return
+
+	set_light(l_range = 0)
+
+/obj/machinery/door/window/animation_length(animation)
+	switch(animation)
+		if(DOOR_OPENING_ANIMATION)
+			return 0.9 SECONDS
+		if(DOOR_CLOSING_ANIMATION)
+			return 0.9 SECONDS
+
+/obj/machinery/door/window/animation_segment_delay(animation)
+	switch(animation)
+		if(DOOR_OPENING_PASSABLE)
+			return 0.7 SECONDS
+		if(DOOR_OPENING_FINISHED)
+			return 0.9 SECONDS
+		if(DOOR_CLOSING_UNPASSABLE)
+			return 0.2 SECONDS
+		if(DOOR_CLOSING_FINISHED)
+			return 0.9 SECONDS
+
+/obj/machinery/door/window/update_overlays()
+	. = ..()
+
+	if(!hasPower() || !unres_sides)
+		return
+
+	switch(dir)
+		if(NORTH,SOUTH)
+			if(unres_sides & NORTH)
+				var/mutable_appearance/side_overlay = mutable_appearance('icons/obj/doors/airlocks/station/overlays.dmi', "unres_1", FLOAT_LAYER, src, O_LIGHTING_VISUAL_PLANE, appearance_flags = RESET_COLOR | KEEP_APART)
+				side_overlay.color = LIGHT_COLOR_DEFAULT
+				side_overlay.pixel_z = dir == NORTH ? 31 : 6
+				. += side_overlay
+			if(unres_sides & SOUTH)
+				var/mutable_appearance/side_overlay = mutable_appearance('icons/obj/doors/airlocks/station/overlays.dmi', "unres_2", FLOAT_LAYER, src, O_LIGHTING_VISUAL_PLANE, appearance_flags = RESET_COLOR | KEEP_APART)
+				side_overlay.color = LIGHT_COLOR_DEFAULT
+				side_overlay.pixel_z = dir == NORTH ? -6 : -31
+				. += side_overlay
+		if(EAST,WEST)
+			if(unres_sides & EAST)
+				var/mutable_appearance/side_overlay = mutable_appearance('icons/obj/doors/airlocks/station/overlays.dmi', "unres_4", FLOAT_LAYER, src, O_LIGHTING_VISUAL_PLANE, appearance_flags = RESET_COLOR | KEEP_APART)
+				side_overlay.color = LIGHT_COLOR_DEFAULT
+				side_overlay.pixel_w = dir == EAST ? 31 : 6
+				. += side_overlay
+			if(unres_sides & WEST)
+				var/mutable_appearance/side_overlay = mutable_appearance('icons/obj/doors/airlocks/station/overlays.dmi', "unres_8", FLOAT_LAYER, src, O_LIGHTING_VISUAL_PLANE, appearance_flags = RESET_COLOR | KEEP_APART)
+				side_overlay.color = LIGHT_COLOR_DEFAULT
+				side_overlay.pixel_w = dir == EAST ? -6 : -31
+				. += side_overlay
 
 /obj/machinery/door/window/proc/open_and_close()
 	if(!open())
 		return
 	autoclose = TRUE
 	if(check_access(null))
-		sleep(50)
+		sleep(8 SECONDS)
 	else //secure doors close faster
-		sleep(20)
+		sleep(5 SECONDS)
 	if(!density && autoclose) //did someone change state while we slept?
 		close()
 
@@ -86,10 +159,13 @@
 			var/obj/vehicle/sealed/mecha/mecha = AM
 			for(var/O in mecha.occupants)
 				var/mob/living/occupant = O
+				if(elevator_mode && elevator_status == LIFT_PLATFORM_UNLOCKED)
+					open()
+					return
 				if(allowed(occupant))
 					open_and_close()
 					return
-			do_animate("deny")
+			run_animation(DOOR_DENY_ANIMATION)
 		return
 	if(!SSticker)
 		return
@@ -101,14 +177,20 @@
 /obj/machinery/door/window/bumpopen(mob/user)
 	if(operating || !density)
 		return
+
 	add_fingerprint(user)
 	if(!requiresID())
 		user = null
 
-	if(allowed(user))
+	if(elevator_mode && elevator_status == LIFT_PLATFORM_UNLOCKED)
+		open()
+
+	else if(allowed(user))
 		open_and_close()
+
 	else
-		do_animate("deny")
+		run_animation(DOOR_DENY_ANIMATION)
+
 	return
 
 /obj/machinery/door/window/CanAllowThrough(atom/movable/mover, border_dir)
@@ -121,10 +203,10 @@
 
 	if(istype(mover, /obj/structure/window))
 		var/obj/structure/window/moved_window = mover
-		return valid_window_location(loc, moved_window.dir, is_fulltile = moved_window.fulltile)
+		return valid_build_direction(loc, moved_window.dir, is_fulltile = moved_window.fulltile)
 
 	if(istype(mover, /obj/structure/windoor_assembly) || istype(mover, /obj/machinery/door/window))
-		return valid_window_location(loc, mover.dir, is_fulltile = FALSE)
+		return valid_build_direction(loc, mover.dir, is_fulltile = FALSE)
 
 	return TRUE
 
@@ -135,8 +217,8 @@
 		return TRUE
 
 //used in the AStar algorithm to determinate if the turf the door is on is passable
-/obj/machinery/door/window/CanAStarPass(obj/item/card/id/ID, to_dir)
-	return !density || (dir != to_dir) || (check_access(ID) && hasPower())
+/obj/machinery/door/window/CanAStarPass(to_dir, datum/can_pass_info/pass_info)
+	return !density || (dir != to_dir) || (check_access_list(pass_info.access) && hasPower() && !pass_info.no_id)
 
 /obj/machinery/door/window/proc/on_exit(datum/source, atom/movable/leaving, direction)
 	SIGNAL_HANDLER
@@ -153,69 +235,129 @@
 		leaving.Bump(src)
 		return COMPONENT_ATOM_BLOCK_EXIT
 
-/obj/machinery/door/window/open(forced=FALSE)
-	if (operating) //doors can still open when emag-disabled
-		return 0
-	if(!forced)
-		if(!hasPower())
-			return 0
-	if(forced < 2)
-		if(obj_flags & EMAGGED)
-			return 0
+/obj/machinery/door/window/open(forced = DEFAULT_DOOR_CHECKS)
+	if(!density)
+		return TRUE
+
+	if(operating) //doors can still open when emag-disabled
+		return FALSE
+
+	if(!try_to_force_door_open(forced))
+		return FALSE
+
 	if(!operating) //in case of emag
 		operating = TRUE
-	do_animate("opening")
+
+	run_animation(DOOR_OPENING_ANIMATION)
 	playsound(src, 'sound/machines/windowdoor.ogg', 100, TRUE)
-	icon_state ="[base_state]open"
-	sleep(10)
+	var/passable_delay = animation_segment_delay(DOOR_OPENING_PASSABLE)
+	sleep(passable_delay)
 	set_density(FALSE)
+	var/open_delay = animation_segment_delay(DOOR_OPENING_FINISHED) - passable_delay
+	sleep(open_delay)
 	air_update_turf(TRUE, FALSE)
-	update_freelook_sight()
 
 	if(operating == 1) //emag again
 		operating = FALSE
-	return 1
 
-/obj/machinery/door/window/close(forced=FALSE)
-	if (operating)
-		return 0
-	if(!forced)
-		if(!hasPower())
-			return 0
-	if(forced < 2)
-		if(obj_flags & EMAGGED)
-			return 0
+	return TRUE
+
+/// Additional checks depending on what we want to happen to this windoor
+/obj/machinery/door/window/try_to_force_door_open(force_type = DEFAULT_DOOR_CHECKS)
+	switch(force_type)
+		if(DEFAULT_DOOR_CHECKS)
+			if(!hasPower() || (obj_flags & EMAGGED))
+				return FALSE
+			return TRUE
+
+		if(FORCING_DOOR_CHECKS)
+			if(obj_flags & EMAGGED)
+				return FALSE
+			return TRUE
+
+		if(BYPASS_DOOR_CHECKS) // Get it open!
+			return TRUE
+
+		else
+			stack_trace("Invalid forced argument '[force_type]' passed to open() on this airlock.")
+
+	// Shit's fucked, let's just check parent real fast.
+	return ..()
+
+/obj/machinery/door/window/close(forced = DEFAULT_DOOR_CHECKS)
+	if(density)
+		return TRUE
+
+	if(operating || !try_to_force_door_shut(forced))
+		return FALSE
+
 	operating = TRUE
-	do_animate("closing")
+	run_animation(DOOR_CLOSING_ANIMATION)
 	playsound(src, 'sound/machines/windowdoor.ogg', 100, TRUE)
-	icon_state = base_state
-
+	var/unpassable_delay = animation_segment_delay(DOOR_CLOSING_UNPASSABLE)
+	sleep(unpassable_delay)
 	set_density(TRUE)
 	air_update_turf(TRUE, TRUE)
-	update_freelook_sight()
-	sleep(10)
+	var/close_delay = animation_segment_delay(DOOR_CLOSING_FINISHED) - unpassable_delay
+	sleep(close_delay)
 
 	operating = FALSE
-	return 1
+	return TRUE
+
+/obj/machinery/door/window/try_to_force_door_shut(force_type = DEFAULT_DOOR_CHECKS)
+	switch(force_type)
+		if(DEFAULT_DOOR_CHECKS)
+			if(!hasPower() || (obj_flags & EMAGGED))
+				return FALSE
+			return TRUE
+
+		if(FORCING_DOOR_CHECKS)
+			if(obj_flags & EMAGGED)
+				return FALSE
+			return TRUE
+
+		if(BYPASS_DOOR_CHECKS) // Get it shut!
+			return TRUE
+
+		else
+			stack_trace("Invalid forced argument '[force_type]' passed to close() on this airlock.")
+
+	// If we got here, shit's fucked, but let's presume parent can bail us out somehow.
+	return ..()
 
 /obj/machinery/door/window/play_attack_sound(damage_amount, damage_type = BRUTE, damage_flag = 0)
 	switch(damage_type)
 		if(BRUTE)
-			playsound(src, 'sound/effects/glasshit.ogg', 90, TRUE)
+			playsound(src, 'sound/effects/glass/glasshit.ogg', 90, TRUE)
 		if(BURN)
-			playsound(src, 'sound/items/welder.ogg', 100, TRUE)
+			playsound(src, 'sound/items/tools/welder.ogg', 100, TRUE)
 
+/obj/machinery/door/window/on_deconstruction(disassembled)
+	if(disassembled)
+		return
 
-/obj/machinery/door/window/deconstruct(disassembled = TRUE)
-	if(!(flags_1 & NODECONSTRUCT_1) && !disassembled)
-		for(var/obj/fragment in debris)
-			fragment.forceMove(get_turf(src))
-			transfer_fingerprints_to(fragment)
-			debris -= fragment
-	qdel(src)
+	playsound(src, SFX_SHATTER, 70, TRUE)
+
+	for(var/i in 1 to shards)
+		drop_debris(new /obj/item/shard(src))
+	if(rods)
+		drop_debris(new /obj/item/stack/rods(src, rods))
+	if(cable)
+		drop_debris(new /obj/item/stack/cable_coil(src, cable))
+
+/obj/machinery/door/window/proc/drop_debris(obj/item/debris)
+	debris.forceMove(loc)
+	transfer_fingerprints_to(debris)
 
 /obj/machinery/door/window/narsie_act()
-	add_atom_colour("#7D1919", FIXED_COLOUR_PRIORITY)
+	add_atom_colour(NARSIE_WINDOW_COLOUR, FIXED_COLOUR_PRIORITY)
+
+/obj/machinery/door/window/rust_heretic_act()
+	add_atom_colour(COLOR_RUSTED_GLASS, FIXED_COLOUR_PRIORITY)
+	AddElement(/datum/element/rust)
+	set_armor(/datum/armor/none)
+	take_damage(get_integrity() * 0.5)
+	modify_max_integrity(initial(max_integrity) * 0.2)
 
 /obj/machinery/door/window/should_atmos_process(datum/gas_mixture/air, exposed_temperature)
 	return (exposed_temperature > T0C + (reinf ? 1600 : 800))
@@ -223,40 +365,48 @@
 /obj/machinery/door/window/atmos_expose(datum/gas_mixture/air, exposed_temperature)
 	take_damage(round(exposed_temperature / 200), BURN, 0, 0)
 
-
-/obj/machinery/door/window/emag_act(mob/user)
+/obj/machinery/door/window/emag_act(mob/user, obj/item/card/emag/emag_card)
 	if(!operating && density && !(obj_flags & EMAGGED))
 		obj_flags |= EMAGGED
 		operating = TRUE
 		flick("[base_state]spark", src)
-		playsound(src, "sparks", 75, TRUE, SHORT_RANGE_SOUND_EXTRARANGE)
-		sleep(6)
-		operating = FALSE
-		desc += "<BR>[span_warning("Its access panel is smoking slightly.")]"
-		open(2)
+		playsound(src, SFX_SPARKS, 75, TRUE, SHORT_RANGE_SOUND_EXTRARANGE)
+		addtimer(CALLBACK(src, PROC_REF(finish_emag_act)), 0.6 SECONDS)
+		return TRUE
+	return FALSE
+
+/// Timer proc, called ~0.6 seconds after [emag_act]. Finishes the emag sequence by breaking the windoor.
+/obj/machinery/door/window/proc/finish_emag_act()
+	operating = FALSE
+	open(BYPASS_DOOR_CHECKS)
+
+/obj/machinery/door/window/examine(mob/user)
+	. = ..()
+	if(obj_flags & EMAGGED)
+		. += span_warning("Its access panel is smoking slightly.")
+	if(!density)
+		if(panel_open)
+			. += span_notice("The [span_boldnotice("airlock electronics")] could be [span_boldnotice("levered")] out.")
+
 
 /obj/machinery/door/window/screwdriver_act(mob/living/user, obj/item/tool)
 	. = ..()
-	if(flags_1 & NODECONSTRUCT_1)
-		return
 	if(density || operating)
 		to_chat(user, span_warning("You need to open the door to access the maintenance panel!"))
 		return
 	add_fingerprint(user)
 	tool.play_tool_sound(src)
-	panel_open = !panel_open
+	toggle_panel_open()
 	to_chat(user, span_notice("You [panel_open ? "open" : "close"] the maintenance panel."))
 	return TRUE
 
 /obj/machinery/door/window/crowbar_act(mob/living/user, obj/item/tool)
 	. = ..()
-	if(flags_1 & NODECONSTRUCT_1)
-		return
 	if(!panel_open || density || operating)
 		return
 	add_fingerprint(user)
-	user.visible_message(span_notice("[user] removes the electronics from the [name]."), \
-	span_notice("You start to remove electronics from the [name]..."))
+	user.visible_message(span_notice("[user] removes the electronics from \the [src]."), \
+	span_notice("You start to remove electronics from \the [src]..."))
 	if(!tool.use_tool(src, user, 40, volume=50))
 		return
 	if(!panel_open || density || operating || !loc)
@@ -301,70 +451,43 @@
 /obj/machinery/door/window/interact(mob/user) //for sillycones
 	try_to_activate_door(user)
 
-/obj/machinery/door/window/try_to_activate_door(mob/user, access_bypass = FALSE)
-	if (..())
+/obj/machinery/door/window/try_to_activate_door(mob/user, access_bypass = FALSE, bumped = FALSE)
+	. = ..()
+	if(.)
 		autoclose = FALSE
 
-/obj/machinery/door/window/try_to_crowbar(obj/item/I, mob/user)
-	if(!hasPower())
+/obj/machinery/door/window/unrestricted_side(mob/opener)
+	if(get_turf(opener) == loc)
+		return REVERSE_DIR(dir) & unres_sides
+	return ..()
+
+/obj/machinery/door/window/try_to_crowbar(obj/item/I, mob/user, forced = FALSE)
+	if(istype(I, /obj/item/crowbar/power))
+		var/obj/item/crowbar/power/power_tool = I
+		if(power_tool.limit_jaws_access && forced)
+			playsound(src.loc, 'sound/machines/buzz/buzz-sigh.ogg', 50, FALSE)
+			user.balloon_alert(user, "cannot pry open!")
+			return
+
+	if(!hasPower() || forced)
 		if(density)
-			open(2)
+			open(BYPASS_DOOR_CHECKS)
 		else
-			close(2)
+			close(BYPASS_DOOR_CHECKS)
 	else
 		to_chat(user, span_warning("The door's motors resist your efforts to force it!"))
-
-/obj/machinery/door/window/do_animate(animation)
-	switch(animation)
-		if("opening")
-			flick("[base_state]opening", src)
-		if("closing")
-			flick("[base_state]closing", src)
-		if("deny")
-			flick("[base_state]deny", src)
-
-/obj/machinery/door/window/check_access_ntnet(datum/netdata/data)
-	return !requiresID() || ..()
-
-/obj/machinery/door/window/proc/ntnet_receive(datum/source, datum/netdata/data)
-	SIGNAL_HANDLER
-
-	// Check if the airlock is powered.
-	if(!hasPower())
-		return
-
-	// Handle received packet.
-	var/command = data.data["data"]
-	var/command_value = data.data["data_secondary"]
-	switch(command)
-		if("open")
-			if(command_value == "on" && !density)
-				return
-
-			if(command_value == "off" && density)
-				return
-
-			if(density)
-				INVOKE_ASYNC(src, .proc/open)
-			else
-				INVOKE_ASYNC(src, .proc/close)
-		if("touch")
-			INVOKE_ASYNC(src, .proc/open_and_close)
 
 /obj/machinery/door/window/rcd_vals(mob/user, obj/item/construction/rcd/the_rcd)
 	switch(the_rcd.mode)
 		if(RCD_DECONSTRUCT)
-			return list("mode" = RCD_DECONSTRUCT, "delay" = 50, "cost" = 32)
+			return list("delay" = 5 SECONDS, "cost" = 32)
 	return FALSE
 
-/obj/machinery/door/window/rcd_act(mob/user, obj/item/construction/rcd/the_rcd, passed_mode)
-	switch(passed_mode)
-		if(RCD_DECONSTRUCT)
-			to_chat(user, span_notice("You deconstruct the windoor."))
-			qdel(src)
-			return TRUE
+/obj/machinery/door/window/rcd_act(mob/user, obj/item/construction/rcd/the_rcd, list/rcd_data)
+	if(rcd_data[RCD_DESIGN_MODE] == RCD_DECONSTRUCT)
+		qdel(src)
+		return TRUE
 	return FALSE
-
 
 /obj/machinery/door/window/brigdoor
 	name = "secure door"
@@ -382,132 +505,67 @@
 
 /obj/machinery/door/window/brigdoor/security/holding
 	name = "holding cell door"
-	req_one_access = list(ACCESS_SEC_DOORS, ACCESS_LAWYER) //love for the lawyer
+	req_one_access = list(ACCESS_SECURITY)
 
-/obj/machinery/door/window/northleft
-	dir = NORTH
+MAPPING_DIRECTIONAL_HELPERS(/obj/machinery/door/window/left, 0)
+MAPPING_DIRECTIONAL_HELPERS(/obj/machinery/door/window/right, 0)
 
-/obj/machinery/door/window/eastleft
-	dir = EAST
-
-/obj/machinery/door/window/westleft
-	dir = WEST
-
-/obj/machinery/door/window/southleft
-	dir = SOUTH
-
-/obj/machinery/door/window/northright
-	dir = NORTH
+/obj/machinery/door/window/right
 	icon_state = "right"
 	base_state = "right"
 
-/obj/machinery/door/window/eastright
-	dir = EAST
-	icon_state = "right"
-	base_state = "right"
+MAPPING_DIRECTIONAL_HELPERS(/obj/machinery/door/window/brigdoor/left, 0)
+MAPPING_DIRECTIONAL_HELPERS(/obj/machinery/door/window/brigdoor/right, 0)
 
-/obj/machinery/door/window/westright
-	dir = WEST
-	icon_state = "right"
-	base_state = "right"
-
-/obj/machinery/door/window/southright
-	dir = SOUTH
-	icon_state = "right"
-	base_state = "right"
-
-/obj/machinery/door/window/brigdoor/northleft
-	dir = NORTH
-
-/obj/machinery/door/window/brigdoor/eastleft
-	dir = EAST
-
-/obj/machinery/door/window/brigdoor/westleft
-	dir = WEST
-
-/obj/machinery/door/window/brigdoor/southleft
-	dir = SOUTH
-
-/obj/machinery/door/window/brigdoor/northright
-	dir = NORTH
+/obj/machinery/door/window/brigdoor/right
 	icon_state = "rightsecure"
 	base_state = "rightsecure"
 
-/obj/machinery/door/window/brigdoor/eastright
-	dir = EAST
+MAPPING_DIRECTIONAL_HELPERS(/obj/machinery/door/window/brigdoor/security/cell/left, 0)
+MAPPING_DIRECTIONAL_HELPERS(/obj/machinery/door/window/brigdoor/security/cell/right, 0)
+
+/obj/machinery/door/window/brigdoor/security/cell/right
 	icon_state = "rightsecure"
 	base_state = "rightsecure"
 
-/obj/machinery/door/window/brigdoor/westright
-	dir = WEST
+MAPPING_DIRECTIONAL_HELPERS(/obj/machinery/door/window/brigdoor/security/holding/left, 0)
+MAPPING_DIRECTIONAL_HELPERS(/obj/machinery/door/window/brigdoor/security/holding/right, 0)
+
+/obj/machinery/door/window/brigdoor/security/holding/right
 	icon_state = "rightsecure"
 	base_state = "rightsecure"
 
-/obj/machinery/door/window/brigdoor/southright
-	dir = SOUTH
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
+/*
+ * Subtype used in unit tests to ensure instant windoor open/close
+*/
+/obj/machinery/door/window/instant
 
-/obj/machinery/door/window/brigdoor/security/cell/northleft
-	dir = NORTH
+/obj/machinery/door/window/instant/open(forced = DEFAULT_DOOR_CHECKS)
+	if(!density || operating || !try_to_force_door_open(forced))
+		return FALSE
 
-/obj/machinery/door/window/brigdoor/security/cell/eastleft
-	dir = EAST
+	operating = TRUE
 
-/obj/machinery/door/window/brigdoor/security/cell/westleft
-	dir = WEST
+	set_density(FALSE)
+	set_opacity(FALSE)
+	air_update_turf(TRUE, FALSE)
 
-/obj/machinery/door/window/brigdoor/security/cell/southleft
-	dir = SOUTH
+	operating = FALSE
+	update_appearance()
 
-/obj/machinery/door/window/brigdoor/security/cell/northright
-	dir = NORTH
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
+	return TRUE
 
-/obj/machinery/door/window/brigdoor/security/cell/eastright
-	dir = EAST
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
+/obj/machinery/door/window/instant/close(forced = DEFAULT_DOOR_CHECKS)
+	if(density || operating || !try_to_force_door_shut(forced))
+		return FALSE
 
-/obj/machinery/door/window/brigdoor/security/cell/westright
-	dir = WEST
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
+	operating = TRUE
 
-/obj/machinery/door/window/brigdoor/security/cell/southright
-	dir = SOUTH
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
+	set_density(TRUE)
+	set_opacity(TRUE)
+	air_update_turf(TRUE, TRUE)
 
-/obj/machinery/door/window/brigdoor/security/holding/northleft
-	dir = NORTH
+	operating = FALSE
+	update_appearance()
 
-/obj/machinery/door/window/brigdoor/security/holding/eastleft
-	dir = EAST
-
-/obj/machinery/door/window/brigdoor/security/holding/westleft
-	dir = WEST
-
-/obj/machinery/door/window/brigdoor/security/holding/southleft
-	dir = SOUTH
-
-/obj/machinery/door/window/brigdoor/security/holding/northright
-	dir = NORTH
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
-
-/obj/machinery/door/window/brigdoor/security/holding/eastright
-	dir = EAST
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
-
-/obj/machinery/door/window/brigdoor/security/holding/westright
-	dir = WEST
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
-
-/obj/machinery/door/window/brigdoor/security/holding/southright
-	dir = SOUTH
-	icon_state = "rightsecure"
-	base_state = "rightsecure"
+	return TRUE

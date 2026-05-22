@@ -1,7 +1,7 @@
 /obj/machinery/power/emitter
 	name = "emitter"
 	desc = "A heavy-duty industrial laser, often used in containment fields and power generation."
-	icon = 'icons/obj/singularity.dmi'
+	icon = 'icons/obj/machines/engine/singularity.dmi'
 	icon_state = "emitter"
 	base_icon_state = "emitter"
 
@@ -11,8 +11,7 @@
 	circuit = /obj/item/circuitboard/machine/emitter
 
 	use_power = NO_POWER_USE
-	idle_power_usage = 10
-	active_power_usage = 300
+	can_change_cable_layer = TRUE
 
 	/// The icon state used by the emitter when it's on.
 	var/icon_state_on = "emitter_+a"
@@ -28,6 +27,10 @@
 	var/maximum_fire_delay = 10 SECONDS
 	///Min delay before firing
 	var/minimum_fire_delay = 2 SECONDS
+	///Modifier to the preceeding two numbers
+	var/fire_rate_mod = 1
+	///Deactivates the "pause every 3 shots" system
+	var/no_shot_counter = FALSE
 	///When was the last shot
 	var/last_shot = 0
 	///Number of shots made (gets reset every few shots)
@@ -41,9 +44,9 @@
 	///What projectile type are we shooting?
 	var/projectile_type = /obj/projectile/beam/emitter/hitscan
 	///What's the projectile sound?
-	var/projectile_sound = 'sound/weapons/emitter.ogg'
+	var/projectile_sound = 'sound/items/weapons/emitter.ogg'
 	///Sparks emitted with every shot
-	var/datum/effect_system/spark_spread/sparks
+	var/datum/effect_system/basic/spark_spread/sparks
 	///Stores the type of gun we are using inside the emitter
 	var/obj/item/gun/energy/gun
 	///List of all the properties of the inserted gun
@@ -58,25 +61,36 @@
 	var/charge = 0
 	///stores the direction and orientation of the last projectile
 	var/last_projectile_params
+	//the disk in the gun
+	var/obj/item/emitter_disk/diskie
 
 /obj/machinery/power/emitter/Initialize(mapload)
 	. = ..()
-	RefreshParts()
-	wires = new /datum/wires/emitter(src)
+	//Add to the early process queue to prioritize power draw
+	SSmachines.processing_early += src
+	set_wires(new /datum/wires/emitter(src))
 	if(welded)
 		if(!anchored)
 			set_anchored(TRUE)
 		connect_to_network()
 
-	sparks = new
+	sparks = new(src, 5, TRUE)
 	sparks.attach(src)
-	sparks.set_up(5, TRUE, src)
-	AddComponent(/datum/component/simple_rotation)
+	AddElement(/datum/element/simple_rotation)
 	AddElement(/datum/element/empprotection, EMP_PROTECT_SELF | EMP_PROTECT_WIRES)
+	AddComponent(/datum/component/usb_port, typecacheof(list(/obj/item/circuit_component/emitter), only_root_path = TRUE))
 
 /obj/machinery/power/emitter/welded/Initialize(mapload)
 	welded = TRUE
 	. = ..()
+
+/obj/machinery/power/emitter/cable_layer_act(mob/living/user, obj/item/tool)
+	if(panel_open)
+		return NONE
+	if(welded)
+		balloon_alert(user, "unweld first!")
+		return ITEM_INTERACT_BLOCKING
+	return ..()
 
 /obj/machinery/power/emitter/set_anchored(anchorvalue)
 	. = ..()
@@ -84,19 +98,20 @@
 		welded = FALSE
 
 /obj/machinery/power/emitter/RefreshParts()
+	. = ..()
 	var/max_fire_delay = 12 SECONDS
 	var/fire_shoot_delay = 12 SECONDS
 	var/min_fire_delay = 2.4 SECONDS
 	var/power_usage = 350
-	for(var/obj/item/stock_parts/micro_laser/laser in component_parts)
-		max_fire_delay -= 2 SECONDS * laser.rating
-		min_fire_delay -= 0.4 SECONDS * laser.rating
-		fire_shoot_delay -= 2 SECONDS * laser.rating
+	for(var/datum/stock_part/micro_laser/laser in component_parts)
+		max_fire_delay -= 2 SECONDS * laser.tier
+		min_fire_delay -= 0.4 SECONDS * laser.tier
+		fire_shoot_delay -= 2 SECONDS * laser.tier
 	maximum_fire_delay = max_fire_delay
 	minimum_fire_delay = min_fire_delay
 	fire_delay = fire_shoot_delay
-	for(var/obj/item/stock_parts/manipulator/manipulator in component_parts)
-		power_usage -= 50 * manipulator.rating
+	for(var/datum/stock_part/servo/servo in component_parts)
+		power_usage -= 50 * servo.tier
 	update_mode_power_usage(ACTIVE_POWER_USE, power_usage)
 
 /obj/machinery/power/emitter/examine(mob/user)
@@ -116,8 +131,8 @@
 	else if(!powered)
 		. += span_notice("Its status display is glowing faintly.")
 	else
-		. += span_notice("Its status display reads: Emitting one beam every <b>[DisplayTimeText(fire_delay)]</b>.")
-		. += span_notice("Power consumption at <b>[display_power(active_power_usage)]</b>.")
+		. += span_notice("Its status display reads: Emitting one beam between <b>[DisplayTimeText(minimum_fire_delay * fire_rate_mod)]</b> and <b>[DisplayTimeText(maximum_fire_delay * fire_rate_mod)]</b>.")
+		. += span_notice("Power consumption at <b>[display_power(active_power_usage, convert = FALSE)]</b>.")
 
 /obj/machinery/power/emitter/should_have_node()
 	return welded
@@ -125,17 +140,31 @@
 /obj/machinery/power/emitter/Destroy()
 	if(SSticker.IsRoundInProgress())
 		var/turf/T = get_turf(src)
-		message_admins("Emitter deleted at [ADMIN_VERBOSEJMP(T)]")
-		log_game("Emitter deleted at [AREACOORD(T)]")
-		investigate_log("<font color='red'>deleted</font> at [AREACOORD(T)]", INVESTIGATE_SINGULO)
+		message_admins("[src] deleted at [ADMIN_VERBOSEJMP(T)].")
+		log_game("[src] deleted at [AREACOORD(T)].")
+		investigate_log("deleted at [AREACOORD(T)].", INVESTIGATE_ENGINE)
 	QDEL_NULL(sparks)
 	return ..()
 
+/obj/machinery/power/emitter/update_overlays()
+	. = ..()
+	if(!active)
+		return
+	var/laser_color = COLOR_VIBRANT_LIME
+	if (!powered)
+		laser_color = COLOR_ORANGE //stank low power orange
+	else if (diskie)
+		laser_color = diskie.laser_color
+	var/mutable_appearance/overlay = mutable_appearance(icon, "emitter_overlay")
+	overlay.color = laser_color
+	. += overlay
+	. += emissive_appearance(icon, "emitter_overlay", src, alpha = src.alpha)
+
 /obj/machinery/power/emitter/update_icon_state()
-	if(!active || !powernet)
+	if(panel_open)
+		icon_state = "[base_icon_state]_open"
+	else
 		icon_state = base_icon_state
-		return ..()
-	icon_state = avail(active_power_usage) ? icon_state_on : icon_state_underpowered
 	return ..()
 
 /obj/machinery/power/emitter/interact(mob/user)
@@ -158,10 +187,11 @@
 		fire_delay = maximum_fire_delay
 
 	to_chat(user, span_notice("You turn [active ? "on" : "off"] [src]."))
-	message_admins("Emitter turned [active ? "ON" : "OFF"] by [ADMIN_LOOKUPFLW(user)] in [ADMIN_VERBOSEJMP(src)]")
-	log_game("Emitter turned [active ? "ON" : "OFF"] by [key_name(user)] in [AREACOORD(src)]")
-	investigate_log("turned [active ? "<font color='green'>ON</font>" : "<font color='red'>OFF</font>"] by [key_name(user)] at [AREACOORD(src)]", INVESTIGATE_SINGULO)
+	message_admins("[src] turned [active ? "ON" : "OFF"] by [ADMIN_LOOKUPFLW(user)] in [ADMIN_VERBOSEJMP(src)]")
+	log_game("[src] turned [active ? "ON" : "OFF"] by [key_name(user)] in [AREACOORD(src)]")
+	investigate_log("turned [active ? "ON" : "OFF"] by [key_name(user)] at [AREACOORD(src)]", INVESTIGATE_ENGINE)
 	update_appearance()
+	SEND_SIGNAL(src, COMSIG_EMITTER_MACHINE_SET_ON, active ? TRUE : FALSE)
 
 /obj/machinery/power/emitter/attack_animal(mob/living/simple_animal/user, list/modifiers)
 	if(ismegafauna(user) && anchored)
@@ -176,30 +206,31 @@
 	togglelock(user)
 	return SECONDARY_ATTACK_CANCEL_ATTACK_CHAIN
 
-/obj/machinery/power/emitter/process(delta_time)
+/obj/machinery/power/emitter/process_early(seconds_per_tick)
+	var/power_usage = active_power_usage * seconds_per_tick
 	if(machine_stat & (BROKEN))
 		return
-	if(!welded || (!powernet && active_power_usage))
+	if(!welded || (!powernet && power_usage))
 		active = FALSE
 		update_appearance()
 		return
 	if(!active)
 		return
-	if(active_power_usage && surplus() < active_power_usage)
+	if(power_usage && surplus() < power_usage)
 		if(powered)
 			powered = FALSE
 			update_appearance()
-			investigate_log("lost power and turned <font color='red'>OFF</font> at [AREACOORD(src)]", INVESTIGATE_SINGULO)
-			log_game("Emitter lost power in [AREACOORD(src)]")
+			investigate_log("lost power and turned OFF at [AREACOORD(src)]", INVESTIGATE_ENGINE)
+			log_game("[src] lost power in [AREACOORD(src)]")
 		return
 
-	add_load(active_power_usage)
+	add_load(power_usage)
 	if(!powered)
 		powered = TRUE
 		update_appearance()
-		investigate_log("regained power and turned <font color='green'>ON</font> at [AREACOORD(src)]", INVESTIGATE_SINGULO)
+		investigate_log("regained power and turned ON at [AREACOORD(src)]", INVESTIGATE_ENGINE)
 	if(charge <= 80)
-		charge += 2.5 * delta_time
+		charge += 2.5 * seconds_per_tick
 	if(!check_delay() || manual == TRUE)
 		return FALSE
 	fire_beam()
@@ -233,12 +264,13 @@
 		projectile.fire(dir2angle(dir))
 	if(!manual)
 		last_shot = world.time
-		if(shot_number < 3)
-			fire_delay = 20
+		if(shot_number < 3 || no_shot_counter)
+			fire_delay = 20 * fire_rate_mod
 			shot_number ++
 		else
-			fire_delay = rand(minimum_fire_delay,maximum_fire_delay)
+			fire_delay = rand(minimum_fire_delay,maximum_fire_delay) * fire_rate_mod
 			shot_number = 0
+	SEND_SIGNAL(src, COMSIG_EMITTER_MACHINE_ON_FIRE)
 	return projectile
 
 /obj/machinery/power/emitter/can_be_unfasten_wrench(mob/user, silent)
@@ -254,10 +286,10 @@
 
 	return ..()
 
-/obj/machinery/power/emitter/wrench_act(mob/living/user, obj/item/item)
+/obj/machinery/power/emitter/wrench_act(mob/living/user, obj/item/tool)
 	. = ..()
-	default_unfasten_wrench(user, item)
-	return TRUE
+	default_unfasten_wrench(user, tool)
+	return ITEM_INTERACT_SUCCESS
 
 /obj/machinery/power/emitter/welder_act(mob/living/user, obj/item/item)
 	..()
@@ -266,9 +298,9 @@
 		return TRUE
 
 	if(welded)
-		if(!item.tool_start_check(user, amount=0))
+		if(!item.tool_start_check(user, amount=1))
 			return TRUE
-		user.visible_message(span_notice("[user.name] starts to cut the [name] free from the floor."), \
+		user.visible_message(span_notice("[user.name] starts to cut \the [src] free from the floor."), \
 			span_notice("You start to cut [src] free from the floor..."), \
 			span_hear("You hear welding."))
 		if(!item.use_tool(src, user, 20, 1, 50))
@@ -282,9 +314,9 @@
 	if(!anchored)
 		to_chat(user, span_warning("[src] needs to be wrenched to the floor!"))
 		return TRUE
-	if(!item.tool_start_check(user, amount=0))
+	if(!item.tool_start_check(user, amount=1))
 		return TRUE
-	user.visible_message(span_notice("[user.name] starts to weld the [name] to the floor."), \
+	user.visible_message(span_notice("[user.name] starts to weld \the [src] to the floor."), \
 		span_notice("You start to weld [src] to the floor..."), \
 		span_hear("You hear welding."))
 	if(!item.use_tool(src, user, 20, 1, 50))
@@ -298,14 +330,12 @@
 /obj/machinery/power/emitter/crowbar_act(mob/living/user, obj/item/item)
 	if(panel_open && gun)
 		return remove_gun(user)
-	default_deconstruction_crowbar(item)
-	return TRUE
+	if(panel_open && diskie)
+		return remove_disk(user)
+	return default_deconstruction_crowbar(user, item)
 
 /obj/machinery/power/emitter/screwdriver_act(mob/living/user, obj/item/item)
-	if(..())
-		return TRUE
-	default_deconstruction_screwdriver(user, "emitter_open", "emitter", item)
-	return TRUE
+	return default_deconstruction_screwdriver(user, item)
 
 /// Attempt to toggle the controls lock of the emitter
 /obj/machinery/power/emitter/proc/togglelock(mob/user)
@@ -321,7 +351,7 @@
 	locked = !locked
 	to_chat(user, span_notice("You [src.locked ? "lock" : "unlock"] the controls."))
 
-/obj/machinery/power/emitter/attackby(obj/item/item, mob/user, params)
+/obj/machinery/power/emitter/attackby(obj/item/item, mob/user, list/modifiers, list/attack_modifiers)
 	if(item.GetID())
 		togglelock(user)
 		return
@@ -330,14 +360,41 @@
 		wires.interact(user)
 		return
 	if(panel_open && !gun && istype(item,/obj/item/gun/energy))
+		if(diskie)
+			to_chat(user, span_warning("Remove the Diode Disk before inserting a gun."))
+			return
 		if(integrate(item,user))
 			return
+	if(panel_open && !gun && istype(item,/obj/item/emitter_disk))
+		var/obj/item/emitter_disk/config_disk = item
+		if(!user.transferItemToLoc(config_disk, src))
+			balloon_alert(user, "stuck in hand!")
+			return
+		if(diskie)
+			user.put_in_hands(diskie)
+			balloon_alert(user, "disks swapped!")
+		else
+			balloon_alert(user, "disk inserted")
+		diskie = config_disk
+		projectile_type = diskie.stored_proj
+		projectile_sound = diskie.stored_sound
+		fire_rate_mod = diskie.fire_rate_mod
+		no_shot_counter = diskie.no_shot_counter
+		playsound(src, 'sound/machines/card_slide.ogg', 50)
+		to_chat(user, span_notice("You update the [src]'s diode configuration with the [config_disk]."))
+		update_appearance()
+		if(diskie.consumable)
+			qdel(diskie)
 	return ..()
+
 
 /obj/machinery/power/emitter/proc/integrate(obj/item/gun/energy/energy_gun, mob/user)
 	if(!istype(energy_gun, /obj/item/gun/energy))
 		return
 	if(!user.transferItemToLoc(energy_gun, src))
+		return
+	if(energy_gun.gun_flags & TURRET_INCOMPATIBLE)
+		user.balloon_alert(user, "[energy_gun] won't fit!")
 		return
 	gun = energy_gun
 	gun_properties = gun.get_turret_properties()
@@ -354,6 +411,20 @@
 	set_projectile()
 	return TRUE
 
+/obj/machinery/power/emitter/proc/remove_disk(mob/user)
+	if(!diskie)
+		return
+	if(diskie.consumed_on_removal)
+		qdel(diskie)
+	else
+		user.put_in_hands(diskie)
+	diskie = null
+	playsound(src, 'sound/machines/card_slide.ogg', 50, TRUE)
+	update_appearance()
+	set_projectile()
+	return TRUE
+
+
 /obj/machinery/power/emitter/proc/set_projectile()
 	if(LAZYLEN(gun_properties))
 		if(mode || !gun_properties["lethal_projectile"])
@@ -365,24 +436,25 @@
 		return
 	projectile_type = initial(projectile_type)
 	projectile_sound = initial(projectile_sound)
+	fire_rate_mod = initial(fire_rate_mod)
+	no_shot_counter = initial(no_shot_counter)
 
-/obj/machinery/power/emitter/emag_act(mob/user)
+/obj/machinery/power/emitter/emag_act(mob/user, obj/item/card/emag/emag_card)
 	if(obj_flags & EMAGGED)
-		return
+		return FALSE
 	locked = FALSE
 	obj_flags |= EMAGGED
-	if(user)
-		user.visible_message(span_warning("[user.name] emags [src]."), span_notice("You short out the lock."))
+	balloon_alert(user, "id lock shorted out")
+	return TRUE
 
 
 /obj/machinery/power/emitter/prototype
 	name = "Prototype Emitter"
-	icon = 'icons/obj/turrets.dmi'
-	icon_state = "proto_emitter"
-	base_icon_state = "proto_emitter"
-	icon_state_on = "proto_emitter_+a"
-	icon_state_underpowered = "proto_emitter_+u"
-	base_icon_state = "proto_emitter"
+	icon = 'icons/obj/weapons/turrets.dmi'
+	icon_state = "protoemitter"
+	base_icon_state = "protoemitter"
+	icon_state_on = "protoemitter_+a"
+	icon_state_underpowered = "protoemitter_+u"
 	can_buckle = TRUE
 	buckle_lying = 0
 	///Sets the view size for the user
@@ -393,7 +465,7 @@
 //BUCKLE HOOKS
 
 /obj/machinery/power/emitter/prototype/unbuckle_mob(mob/living/buckled_mob, force = FALSE, can_fall = TRUE)
-	playsound(src,'sound/mecha/mechmove01.ogg', 50, TRUE)
+	playsound(src,'sound/vehicles/mecha/mechmove01.ogg', 50, TRUE)
 	manual = FALSE
 	for(var/obj/item/item in buckled_mob.held_items)
 		if(istype(item, /obj/item/turret_control))
@@ -407,14 +479,14 @@
 	. = ..()
 
 /obj/machinery/power/emitter/prototype/user_buckle_mob(mob/living/buckled_mob, mob/user, check_loc = TRUE)
-	if(user.incapacitated() || !istype(user))
+	if(user.incapacitated || !istype(user))
 		return
 	for(var/atom/movable/atom in get_turf(src))
 		if(atom.density && (atom != src && atom != buckled_mob))
 			return
 	buckled_mob.forceMove(get_turf(src))
 	..()
-	playsound(src,'sound/mecha/mechmove01.ogg', 50, TRUE)
+	playsound(src, 'sound/vehicles/mecha/mechmove01.ogg', 50, TRUE)
 	buckled_mob.pixel_y = 14
 	layer = 4.1
 	if(buckled_mob.client)
@@ -424,7 +496,7 @@
 	auto.Grant(buckled_mob, src)
 
 /datum/action/innate/proto_emitter
-	check_flags = AB_CHECK_HANDS_BLOCKED | AB_CHECK_IMMOBILE | AB_CHECK_CONSCIOUS
+	check_flags = AB_CHECK_HANDS_BLOCKED | AB_CHECK_CONSCIOUS | AB_CHECK_INCAPACITATED
 	///Stores the emitter the user is currently buckled on
 	var/obj/machinery/power/emitter/prototype/proto_emitter
 	///Stores the mob instance that is buckled to the emitter
@@ -447,7 +519,7 @@
 
 /datum/action/innate/proto_emitter/firing/Activate()
 	if(proto_emitter.manual)
-		playsound(proto_emitter,'sound/mecha/mechmove01.ogg', 50, TRUE)
+		playsound(proto_emitter,'sound/vehicles/mecha/mechmove01.ogg', 50, TRUE)
 		proto_emitter.manual = FALSE
 		name = "Switch to Manual Firing"
 		desc = "The emitter will only fire on your command and at your designated target"
@@ -455,9 +527,9 @@
 		for(var/obj/item/item in buckled_mob.held_items)
 			if(istype(item, /obj/item/turret_control))
 				qdel(item)
-		UpdateButtonIcon()
+		build_all_button_icons()
 		return
-	playsound(proto_emitter,'sound/mecha/mechmove01.ogg', 50, TRUE)
+	playsound(proto_emitter,'sound/vehicles/mecha/mechmove01.ogg', 50, TRUE)
 	name = "Switch to Automatic Firing"
 	desc = "Emitters will switch to periodic firing at your last target"
 	button_icon_state = "mech_zoom_off"
@@ -472,11 +544,12 @@
 		else //Entries in the list should only ever be items or null, so if it's not an item, we can assume it's an empty hand
 			var/obj/item/turret_control/turret_control = new /obj/item/turret_control()
 			buckled_mob.put_in_hands(turret_control)
-	UpdateButtonIcon()
+	build_all_button_icons()
 
 
 /obj/item/turret_control
 	name = "turret controls"
+	icon = 'icons/obj/weapons/hand.dmi'
 	icon_state = "offhand"
 	w_class = WEIGHT_CLASS_HUGE
 	item_flags = ABSTRACT | NOBLUDGEON
@@ -488,10 +561,14 @@
 	. = ..()
 	ADD_TRAIT(src, TRAIT_NODROP, ABSTRACT_ITEM_TRAIT)
 
-/obj/item/turret_control/afterattack(atom/targeted_atom, mob/user, proxflag, clickparams)
-	. = ..()
+/obj/item/turret_control/interact_with_atom(atom/interacting_with, mob/living/user, list/modifiers)
+	if(HAS_TRAIT(interacting_with, TRAIT_COMBAT_MODE_SKIP_INTERACTION))
+		return NONE
+	return ranged_interact_with_atom(interacting_with, user, modifiers)
+
+/obj/item/turret_control/ranged_interact_with_atom(atom/interacting_with, mob/living/user, list/modifiers)
 	var/obj/machinery/power/emitter/emitter = user.buckled
-	emitter.setDir(get_dir(emitter,targeted_atom))
+	emitter.setDir(get_dir(emitter, interacting_with))
 	user.setDir(emitter.dir)
 	switch(emitter.dir)
 		if(NORTH)
@@ -527,14 +604,15 @@
 			user.pixel_x = 8
 			user.pixel_y = -12
 
-	emitter.last_projectile_params = calculate_projectile_angle_and_pixel_offsets(user, null, clickparams)
+	emitter.last_projectile_params = calculate_projectile_angle_and_pixel_offsets(user, null, list2params(modifiers))
 
 	if(emitter.charge >= 10 && world.time > delay)
 		emitter.charge -= 10
 		emitter.fire_beam(user)
 		delay = world.time + 10
 	else if (emitter.charge < 10)
-		playsound(src,'sound/machines/buzz-sigh.ogg', 50, TRUE)
+		playsound(src,'sound/machines/buzz/buzz-sigh.ogg', 50, TRUE)
+	return ITEM_INTERACT_SUCCESS
 
 /obj/machinery/power/emitter/ctf
 	name = "Energy Cannon"
@@ -542,6 +620,70 @@
 	active_power_usage = 0
 	idle_power_usage = 0
 	locked = TRUE
-	req_access_txt = "100"
+	req_access = list("science")
 	welded = TRUE
 	use_power = NO_POWER_USE
+
+/obj/item/emitter_disk
+	name = "\improper Diode Disk: Debugger"
+	desc = "This disk can be used on an emitter with an open panel to reset its projectile. Unless this was handed to you by an admin, you should report this on github."
+	icon = 'icons/obj/devices/floppy_disks.dmi'
+	icon_state = "datadisk6"
+	var/laser_color = COLOR_VIBRANT_LIME
+	var/stored_proj = /obj/projectile/beam/emitter/hitscan
+	var/stored_sound = 'sound/items/weapons/emitter.ogg'
+	var/consumed_on_removal = TRUE
+	var/consumable = TRUE
+	var/fire_rate_mod = 1
+	var/no_shot_counter = FALSE
+
+/obj/item/emitter_disk/stamina
+	name = "\improper Diode Disk: Electrodisruptive"
+	desc = "This disk can be used on an emitter with an open panel to make it shoot lasers which will increase the integrity of supermatter crystals and exhaust living creatures. The disk will be consumed in the process."
+	stored_proj = /obj/projectile/beam/emitter/hitscan/bluelens
+	consumed_on_removal = FALSE
+	consumable = FALSE
+	laser_color = COLOR_TRUE_BLUE
+
+/obj/item/emitter_disk/healing
+	name = "\improper Diode Disk: Bioregenerative"
+	desc = "This disk can be installed into an emitter with an open panel to make it shoot lasers which will heal the physical damages of living creatures."
+	stored_proj = /obj/projectile/beam/emitter/hitscan/bioregen
+	consumed_on_removal = FALSE
+	consumable = FALSE
+	laser_color = COLOR_YELLOW
+
+/obj/item/emitter_disk/incendiary
+	name = "\improper Diode Disk: Conflagratory"
+	desc = "This disk can be used on an emitter with an open panel to make it shoot lasers which will set living creatures ablaze."
+	stored_proj = /obj/projectile/beam/emitter/hitscan/incend
+	consumed_on_removal = FALSE
+	consumable = FALSE
+	laser_color = COLOR_RED_LIGHT
+
+
+/obj/item/emitter_disk/sanity
+	name = "\improper Diode Disk: Psychosiphoning"
+	desc = "This disk can be used on an emitter with an open panel to make it shoot lasers which will depress living creatures and calm supermatter crystals."
+	stored_proj = /obj/projectile/beam/emitter/hitscan/psy
+	consumed_on_removal = FALSE
+	consumable = FALSE
+	laser_color = COLOR_TONGUE_PINK
+
+
+/obj/item/emitter_disk/magnetic
+	name = "\improper Diode Disk: Magnetogenerative"
+	desc = "This disk can be used on an emitter with an open panel to make it shoot lasers which will attract nearby objects."
+	stored_proj = /obj/projectile/beam/emitter/hitscan/magnetic
+	consumed_on_removal = FALSE
+	consumable = FALSE
+	laser_color = COLOR_SILVER
+
+/obj/item/emitter_disk/blast
+	name = "\improper Diode Disk: Hyperconcussive"
+	desc = "This disk, loaded with proprietary syndicate firmware, can be used on an emitter with an open panel to make it shoot beams of concussive force which will cause small explosions."
+	stored_proj = /obj/projectile/beam/emitter/hitscan/blast
+	consumed_on_removal = FALSE
+	consumable = FALSE
+	laser_color = COLOR_SYNDIE_RED //magnetic is already grey
+	fire_rate_mod = 2

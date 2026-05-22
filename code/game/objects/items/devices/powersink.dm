@@ -2,31 +2,31 @@
 #define CLAMPED_OFF 1
 #define OPERATING 2
 
-#define FRACTION_TO_RELEASE 50
+#define FRACTION_TO_RELEASE 25
 #define ALERT 90
-#define MINIMUM_HEAT 10000
+#define MINIMUM_HEAT 20000
 
 // Powersink - used to drain station power
 
 /obj/item/powersink
 	name = "power sink"
 	desc = "A power sink which drains energy from electrical systems and converts it to heat. Ensure short workloads and ample time to cool down if used in high energy systems."
-	icon = 'icons/obj/device.dmi'
+	icon = 'icons/obj/devices/syndie_gadget.dmi'
 	icon_state = "powersink0"
 	inhand_icon_state = "electronic"
-	lefthand_file = 'icons/mob/inhands/misc/devices_lefthand.dmi'
-	righthand_file = 'icons/mob/inhands/misc/devices_righthand.dmi'
+	lefthand_file = 'icons/mob/inhands/items/devices_lefthand.dmi'
+	righthand_file = 'icons/mob/inhands/items/devices_righthand.dmi'
 	w_class = WEIGHT_CLASS_BULKY
-	flags_1 = CONDUCT_1
+	obj_flags = CONDUCTS_ELECTRICITY
 	item_flags = NO_PIXEL_RANDOM_DROP
 	throwforce = 5
 	throw_speed = 1
 	throw_range = 2
-	custom_materials = list(/datum/material/iron=750)
-	var/max_heat = 5e7 // Maximum contained heat before exploding. Not actual temperature.
+	custom_materials = list(/datum/material/iron=SMALL_MATERIAL_AMOUNT* 7.5)
+	var/max_heat = 100 * STANDARD_BATTERY_CHARGE // Maximum contained heat before exploding. Not actual temperature.
 	var/internal_heat = 0 // Contained heat, goes down every tick.
 	var/mode = DISCONNECTED // DISCONNECTED, CLAMPED_OFF, OPERATING
-	var/admins_warned = FALSE // Stop spam, only warn the admins once that we are about to boom.
+	var/warning_given = FALSE //! Stop warning spam, only warn the admins/deadchat once that we are about to boom.
 
 	var/obj/structure/cable/attached
 
@@ -38,7 +38,7 @@
 	. = ..()
 	if(mode)
 		. += "\The [src] is bolted to the floor."
-	if(in_range(user, src) || isobserver(user) && internal_heat > max_heat * 0.5)
+	if((in_range(user, src) || isobserver(user)) && internal_heat > max_heat * 0.5)
 		. += span_danger("[src] is warping the air above it. It must be very hot.")
 
 /obj/item/powersink/set_anchored(anchorvalue)
@@ -123,7 +123,12 @@
 				span_notice("You activate \the [src]."),
 				span_hear("You hear a click."))
 			message_admins("Power sink activated by [ADMIN_LOOKUPFLW(user)] at [ADMIN_VERBOSEJMP(src)]")
-			log_game("Power sink activated by [key_name(user)] at [AREACOORD(src)]")
+			user.log_message("activated a powersink", LOG_GAME)
+			notify_ghosts(
+				"[user.real_name] has activated a power sink!",
+				source = src,
+				header = "Shocking News!",
+			)
 			set_mode(OPERATING)
 
 		if(OPERATING)
@@ -131,6 +136,7 @@
 				"[user] deactivates \the [src]!", \
 				span_notice("You deactivate \the [src]."),
 				span_hear("You hear a click."))
+			user.log_message("deactivated the powersink", LOG_GAME)
 			set_mode(CLAMPED_OFF)
 
 /// Removes internal heat and shares it with the atmosphere.
@@ -143,16 +149,16 @@
 	if(delta_temperature)
 		environment.temperature += delta_temperature
 		air_update_turf(FALSE, FALSE)
-	if(admins_warned && internal_heat < max_heat * 0.75)
-		admins_warned = FALSE
-		message_admins("Power sink at ([x],[y],[z] - <A HREF='?_src_=holder;[HrefToken()];adminplayerobservecoodjump=1;X=[x];Y=[y];Z=[z]'>JMP</a>) has cooled down and will not explode.")
+	if(warning_given && internal_heat < max_heat * 0.75)
+		warning_given = FALSE
+		message_admins("Power sink at ([x],[y],[z] - <A href='byond://?_src_=holder;[HrefToken()];adminplayerobservecoodjump=1;X=[x];Y=[y];Z=[z]'>JMP</a>) has cooled down and will not explode.")
 	if(mode != OPERATING && internal_heat < MINIMUM_HEAT)
 		internal_heat = 0
 		STOP_PROCESSING(SSobj, src)
 
 /// Drains power from the connected powernet, if any.
 /obj/item/powersink/proc/drain_power()
-	var/datum/powernet/PN = attached.powernet
+	var/datum/powernet/powernet = attached.powernet
 	var/drained = 0
 	set_light(5)
 
@@ -161,14 +167,11 @@
 	attached.add_delayedload(drained)
 
 	// If tried to drain more than available on powernet, now look for APCs and drain their cells
-	for(var/obj/machinery/power/terminal/T in PN.nodes)
-		if(istype(T.master, /obj/machinery/power/apc))
-			var/obj/machinery/power/apc/A = T.master
-			if(A.operating && A.cell)
-				A.cell.charge = max(0, A.cell.charge - 50)
-				drained += 50
-				if(A.charging == 2) // If the cell was full
-					A.charging = 1 // It's no longer full
+	for(var/obj/machinery/power/terminal/terminal in powernet.nodes)
+		if(istype(terminal.master, /obj/machinery/power/apc))
+			var/obj/machinery/power/apc/apc = terminal.master
+			if(apc.operating && apc.cell)
+				drained += 0.001 * apc.cell.use(0.1 * STANDARD_BATTERY_CHARGE, force = TRUE)
 	internal_heat += drained
 
 /obj/item/powersink/process()
@@ -183,9 +186,14 @@
 	drain_power()
 
 	if(internal_heat > max_heat * ALERT / 100)
-		if (!admins_warned)
-			admins_warned = TRUE
-			message_admins("Power sink at ([x],[y],[z] - <A HREF='?_src_=holder;[HrefToken()];adminplayerobservecoodjump=1;X=[x];Y=[y];Z=[z]'>JMP</a>) has reached [ALERT]% of max heat. Explosion imminent.")
+		if (!warning_given)
+			warning_given = TRUE
+			message_admins("Power sink at ([x],[y],[z] - <A href='byond://?_src_=holder;[HrefToken()];adminplayerobservecoodjump=1;X=[x];Y=[y];Z=[z]'>JMP</a>) has reached [ALERT]% of max heat. Explosion imminent.")
+			notify_ghosts(
+				"[src] is about to reach critical heat capacity!",
+				source = src,
+				header = "Power Sunk",
+			)
 		playsound(src, 'sound/effects/screech.ogg', 100, TRUE, TRUE)
 
 	if(internal_heat >= max_heat)

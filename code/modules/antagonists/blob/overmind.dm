@@ -4,23 +4,33 @@ GLOBAL_LIST_EMPTY(blob_cores)
 GLOBAL_LIST_EMPTY(overminds)
 GLOBAL_LIST_EMPTY(blob_nodes)
 
+/// Clean up blob references after overmind is destroyed - called asynchronously to avoid blocking Destroy()
+/proc/cleanup_overmind_blobs(mob/eye/blob/dead_overmind)
+	// Clear overmind reference from global blobs
+	for(var/obj/structure/blob/blob_structure as anything in GLOB.blobs)
+		if(blob_structure && blob_structure.overmind == dead_overmind)
+			blob_structure.overmind = null
+			blob_structure.update_appearance() //reset anything that was ours
 
-/mob/camera/blob
+
+/mob/eye/blob
 	name = "Blob Overmind"
 	real_name = "Blob Overmind"
 	desc = "The overmind. It controls the blob."
-	icon = 'icons/mob/cameramob.dmi'
+	icon = 'icons/mob/eyemob.dmi'
 	icon_state = "marker"
 	mouse_opacity = MOUSE_OPACITY_ICON
-	move_on_shuttle = 1
-	see_in_dark = 8
+	move_on_shuttle = TRUE
 	invisibility = INVISIBILITY_OBSERVER
 	layer = FLY_LAYER
 	plane = ABOVE_GAME_PLANE
 	see_invisible = SEE_INVISIBLE_LIVING
 	pass_flags = PASSBLOB
 	faction = list(ROLE_BLOB)
-	lighting_alpha = LIGHTING_PLANE_ALPHA_MOSTLY_INVISIBLE
+	// Vivid blue green, would be cool to make this change with strain
+	lighting_cutoff_red = 0
+	lighting_cutoff_green = 35
+	lighting_cutoff_blue = 20
 	hud_type = /datum/hud/blob_overmind
 	var/obj/structure/blob/special/core/blob_core = null // The blob overmind's core
 	var/blob_points = 0
@@ -51,7 +61,11 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 	/// The list of strains the blob can reroll for.
 	var/list/strain_choices
 
-/mob/camera/blob/Initialize(mapload, starting_points = OVERMIND_STARTING_POINTS)
+	/// Adminbus potential - if this is set to FALSE, the blob won't end the round upon reaching critical mass.
+	var/end_round_on_victory = TRUE
+
+/mob/eye/blob/Initialize(mapload, starting_points = OVERMIND_STARTING_POINTS)
+	ADD_TRAIT(src, TRAIT_BLOB_ALLY, INNATE_TRAIT)
 	validate_location()
 	blob_points = starting_points
 	manualplace_min_time += world.time
@@ -69,8 +83,9 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 	SSshuttle.registerHostileEnvironment(src)
 	. = ..()
 	START_PROCESSING(SSobj, src)
+	GLOB.blob_telepathy_mobs |= src
 
-/mob/camera/blob/proc/validate_location()
+/mob/eye/blob/proc/validate_location()
 	var/turf/T = get_turf(src)
 	if(is_valid_turf(T))
 		return
@@ -83,7 +98,7 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 				break
 	else // no blob starts so look for an alternate
 		for(var/i in 1 to 16)
-			var/turf/picked_safe = find_safe_turf()
+			var/turf/picked_safe = get_safe_random_station_turf_equal_weight()
 			if(is_valid_turf(picked_safe))
 				T = picked_safe
 				break
@@ -92,22 +107,27 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 		CRASH("No blobspawnpoints and blob spawned in nullspace.")
 	forceMove(T)
 
-/mob/camera/blob/proc/set_strain(datum/blobstrain/new_strain)
-	if (ispath(new_strain))
-		var/hadstrain = FALSE
-		if (istype(blobstrain))
-			blobstrain.on_lose()
-			qdel(blobstrain)
-			hadstrain = TRUE
-		blobstrain = new new_strain(src)
-		blobstrain.on_gain()
-		if (hadstrain)
-			to_chat(src, "Your strain is now: <b><font color=\"[blobstrain.color]\">[blobstrain.name]</b></font>!")
-			to_chat(src, "The <b><font color=\"[blobstrain.color]\">[blobstrain.name]</b></font> strain [blobstrain.description]")
-			if(blobstrain.effectdesc)
-				to_chat(src, "The <b><font color=\"[blobstrain.color]\">[blobstrain.name]</b></font> strain [blobstrain.effectdesc]")
+/mob/eye/blob/proc/set_strain(datum/blobstrain/new_strain)
+	if (!ispath(new_strain))
+		return FALSE
 
-/mob/camera/blob/can_z_move(direction, turf/start, turf/destination, z_move_flags = NONE, mob/living/rider)
+	var/had_strain = FALSE
+	if (istype(blobstrain))
+		blobstrain.on_lose()
+		qdel(blobstrain)
+		had_strain = TRUE
+
+	blobstrain = new new_strain(src)
+	blobstrain.on_gain()
+
+	if (had_strain)
+		to_chat(src, span_notice("Your strain is now: <b><font color=\"[blobstrain.color]\">[blobstrain.name]</b></font>!"))
+		to_chat(src, span_notice("The <b><font color=\"[blobstrain.color]\">[blobstrain.name]</b></font> strain [blobstrain.description]"))
+		if(blobstrain.effectdesc)
+			to_chat(src, span_notice("The <b><font color=\"[blobstrain.color]\">[blobstrain.name]</b></font> strain [blobstrain.effectdesc]"))
+	SEND_SIGNAL(src, COMSIG_BLOB_SELECTED_STRAIN, blobstrain)
+
+/mob/eye/blob/can_z_move(direction, turf/start, turf/destination, z_move_flags = NONE, mob/living/rider)
 	if(placed) // The blob can't expand vertically (yet)
 		return FALSE
 	. = ..()
@@ -116,35 +136,37 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 	var/turf/target_turf = .
 	if(!is_valid_turf(target_turf)) // Allows unplaced blobs to travel through station z-levels
 		if(z_move_flags & ZMOVE_FEEDBACK)
-			to_chat(src, "Your destination is invalid. Move somewhere else and try again.")
+			to_chat(src, span_warning("Your destination is invalid. Move somewhere else and try again."))
 		return null
 
-/mob/camera/blob/proc/is_valid_turf(turf/T)
-	var/area/A = get_area(T)
-	if((A && !(A.area_flags & BLOBS_ALLOWED)) || !T || !is_station_level(T.z) || isgroundlessturf(T))
+/mob/eye/blob/proc/is_valid_turf(turf/tile)
+	var/area/area = get_area(tile)
+	if((area && !(area.area_flags & BLOBS_ALLOWED)) || !tile || !is_station_level(tile.z) || isgroundlessturf(tile))
 		return FALSE
 	return TRUE
 
-/mob/camera/blob/process()
+/mob/eye/blob/process()
 	if(!blob_core)
 		if(!placed)
 			if(manualplace_min_time && world.time >= manualplace_min_time)
-				to_chat(src, "<b>[span_big("<font color=\"#EE4000\">You may now place your blob core.</font>")]</b>")
-				to_chat(src, span_big("<font color=\"#EE4000\">You will automatically place your blob core in [DisplayTimeText(autoplace_max_time - world.time)].</font>"))
+				to_chat(src, span_boldnotice("You may now place your blob core."))
+				to_chat(src, span_bolddanger("You will automatically place your blob core in [DisplayTimeText(autoplace_max_time - world.time)]."))
 				manualplace_min_time = 0
 			if(autoplace_max_time && world.time >= autoplace_max_time)
 				place_blob_core(BLOB_RANDOM_PLACEMENT)
 		else
+			// If we get here, it means yes: the blob is kill
+			SSticker.news_report = BLOB_DESTROYED
+
+			// Clear the biohazard emergency display when blob is defeated - async to avoid blocking
+			INVOKE_ASYNC(src, PROC_REF(clear_biohazard_display))
+
 			qdel(src)
 	else if(!victory_in_progress && (blobs_legit.len >= blobwincount))
-		victory_in_progress = TRUE
-		priority_announce("Biohazard has reached critical mass. Station loss is imminent.", "Biohazard Alert")
-		set_security_level("delta")
-		max_blob_points = INFINITY
-		blob_points = INFINITY
-		addtimer(CALLBACK(src, .proc/victory), 450)
+		begin_victory()
+
 	else if(!free_strain_rerolls && (last_reroll_time + BLOB_POWER_REROLL_FREE_TIME<world.time))
-		to_chat(src, "<b>[span_big("<font color=\"#EE4000\">You have gained another free strain re-roll.</font>")]</b>")
+		to_chat(src, span_boldnotice("You have gained another free strain re-roll."))
 		free_strain_rerolls = 1
 
 	if(!victory_in_progress && max_count < blobs_legit.len)
@@ -152,67 +174,104 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 
 	if(announcement_time && (world.time >= announcement_time || blobs_legit.len >= announcement_size) && !has_announced)
 		priority_announce("Confirmed outbreak of level 5 biohazard aboard [station_name()]. All personnel must contain the outbreak.", "Biohazard Alert", ANNOUNCER_OUTBREAK5)
+
+		// Set status displays to biohazard alert
+		send_status_display_biohazard_alert()
+
 		has_announced = TRUE
 
-/mob/camera/blob/proc/victory()
-	sound_to_playing_players('sound/machines/alarm.ogg')
-	sleep(100)
-	for(var/i in GLOB.mob_living_list)
-		var/mob/living/L = i
-		var/turf/T = get_turf(L)
-		if(!T || !is_station_level(T.z))
-			continue
+/// Create a blob spore and link it to us
+/mob/eye/blob/proc/create_spore(turf/spore_turf, spore_type = /mob/living/basic/blob_minion/spore/minion)
+	var/mob/living/basic/blob_minion/spore/spore = new spore_type(spore_turf, blob_borne = TRUE)
+	spore.AddComponent(/datum/component/blob_minion, src)
+	return spore
 
-		if(L in GLOB.overminds || (L.pass_flags & PASSBLOB))
-			continue
+/// Add something to our list of mobs and wait for it to die
+/mob/eye/blob/proc/register_new_minion(mob/living/minion)
+	blob_mobs |= minion
 
-		var/area/Ablob = get_area(T)
+/// Clear biohazard emergency display when blob is defeated
+/mob/eye/blob/proc/clear_biohazard_display()
+	clear_status_display_biohazard()
 
-		if(!(Ablob.area_flags & BLOBS_ALLOWED))
-			continue
+/// Announce the blob's victory! Tell everyone that they're about to explode and/or turn into biomass soup and give the overmind a victory lap.
+/mob/eye/blob/proc/begin_victory()
+	victory_in_progress = TRUE
+	priority_announce("Biohazard has reached critical mass. Station loss is imminent.", "Biohazard Alert")
+	SSsecurity_level.set_level(SEC_LEVEL_DELTA)
 
-		if(!(ROLE_BLOB in L.faction))
-			playsound(L, 'sound/effects/splat.ogg', 50, TRUE)
-			L.death()
-			new/mob/living/simple_animal/hostile/blob/blobspore(T)
-		else
-			L.fully_heal(admin_revive = FALSE)
+	// Set status displays to biohazard alert - critical level
+	send_status_display_biohazard_alert()
+	if(end_round_on_victory) // Assuming they actually *are* about to turn the station into soup...
+		max_blob_points = INFINITY
+		blob_points = INFINITY
+	else
+		to_chat(src, span_blob("You've reached critical mass, but something feels terribly wrong, stopping you from expanding further. All you can do now is fight as long as you can..."))
+	addtimer(CALLBACK(src, PROC_REF(victory)), 45 SECONDS)
 
-		for(var/area/A in GLOB.sortedAreas)
-			if(!(A.type in GLOB.the_station_areas))
-				continue
-			if(!(A.area_flags & BLOBS_ALLOWED))
-				continue
-			A.color = blobstrain.color
-			A.name = "blob"
-			A.icon = 'icons/mob/blob.dmi'
-			A.icon_state = "blob_shield"
-			A.layer = BELOW_MOB_LAYER
-			A.invisibility = 0
-			A.blend_mode = 0
+/// Actually *do* the blob's victory: give them their greentext and, depending on the end_round_on_victory variable, decide if everyone dies or if it's just a jumpscare.
+/mob/eye/blob/proc/victory()
+	// Set victory flags immediately
 	var/datum/antagonist/blob/B = mind.has_antag_datum(/datum/antagonist/blob)
 	if(B)
 		var/datum/objective/blob_takeover/main_objective = locate() in B.objectives
 		if(main_objective)
 			main_objective.completed = TRUE
-	to_chat(world, "<B>[real_name] consumed the station in an unstoppable tide!</B>")
-	SSticker.news_report = BLOB_WIN
-	SSticker.force_ending = 1
 
-/mob/camera/blob/Destroy()
+	if(end_round_on_victory)
+		to_chat(world, span_blobannounce("[real_name] consumed the station in an unstoppable tide!"))
+		SSticker.news_report = BLOB_WIN
+		SSticker.force_ending = FORCE_END_ROUND
+
+		// Handle the heavy victory operations (where everyone dies) asynchronously
+		INVOKE_ASYNC(src, PROC_REF(victory_sequence))
+	else
+		// Is the station going boom? No. But is the station still going to get yelled at? Yes.
+		priority_announce("Experimental, classified, and very expensive emergency countermeasures have been activated to prevent total station loss, \
+			but the initial failure to contain the viral biohazard will be noted on the station's performance report. Expect further penalties.", \
+			"Emergency Biohazard Countermeasure Alert")
+
+/// Kill everyone who's still on the station area and not already part of the blob's faction, and cover every station area with blob icons. Everyone's soup now.
+/mob/eye/blob/proc/victory_sequence()
+	sound_to_playing_players('sound/announcer/alarm/nuke_alarm.ogg', 70)
+	sleep(10 SECONDS)
+	for(var/mob/living/live_guy as anything in GLOB.mob_living_list)
+		var/turf/guy_turf = get_turf(live_guy)
+		if(isnull(guy_turf) || !is_station_level(guy_turf.z))
+			continue
+
+		if((live_guy in GLOB.overminds) || (live_guy.pass_flags & PASSBLOB))
+			continue
+
+		var/area/blob_area = get_area(guy_turf)
+		if(!(blob_area.area_flags & BLOBS_ALLOWED))
+			continue
+
+		if(!live_guy.has_faction(ROLE_BLOB))
+			playsound(live_guy, 'sound/effects/splat.ogg', 50, TRUE)
+			if(live_guy.stat != DEAD)
+				live_guy.investigate_log("has died from blob takeover.", INVESTIGATE_DEATHS)
+			live_guy.death()
+			create_spore(guy_turf, spore_type = /mob/living/basic/blob_minion/spore)
+		else
+			live_guy.fully_heal()
+
+	for(var/area_type in GLOB.the_station_areas)
+		var/area/check_area = GLOB.areas_by_type[area_type]
+		if(!(check_area.area_flags & BLOBS_ALLOWED))
+			continue
+		check_area.color = blobstrain.color
+		check_area.name = "blob"
+		check_area.icon = 'icons/mob/nonhuman-player/blob.dmi'
+		check_area.icon_state = "blob_shield"
+		check_area.layer = BELOW_MOB_LAYER
+		check_area.SetInvisibility(INVISIBILITY_NONE)
+		check_area.blend_mode = 0
+
+/mob/eye/blob/Destroy()
 	QDEL_NULL(blobstrain)
-	for(var/BL in GLOB.blobs)
-		var/obj/structure/blob/B = BL
-		if(B && B.overmind == src)
-			B.overmind = null
-			B.update_appearance() //reset anything that was ours
-	for(var/BLO in blob_mobs)
-		var/mob/living/simple_animal/hostile/blob/BM = BLO
-		if(BM)
-			BM.overmind = null
-			BM.update_icons()
-	for(var/obj/structure/blob/blob_structure as anything in all_blobs)
-		blob_structure.overmind = null
+
+	// Clear references immediately without iterating to avoid blocking
 	all_blobs = null
 	resource_blobs = null
 	factory_blobs = null
@@ -223,36 +282,57 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 
 	SSshuttle.clearHostileEnvironment(src)
 	STOP_PROCESSING(SSobj, src)
+	GLOB.blob_telepathy_mobs -= src
+
+	// Handle blob cleanup asynchronously to avoid blocking Destroy()
+	INVOKE_ASYNC(GLOBAL_PROC, GLOBAL_PROC_REF(cleanup_overmind_blobs), src)
 
 	return ..()
 
-/mob/camera/blob/Login()
+/mob/eye/blob/Login()
 	. = ..()
 	if(!. || !client)
 		return FALSE
-	to_chat(src, span_big("You are the overmind!"))
-	blob_help()
+	to_chat(src, span_blobannounce("You are the overmind!"))
+	if(!placed && autoplace_max_time <= world.time)
+		to_chat(src, span_bolddanger("You will automatically place your blob core in [DisplayTimeText(autoplace_max_time - world.time)]."))
+		to_chat(src, span_bolddanger("You [manualplace_min_time ? "will be able to":"can"] manually place your blob core by pressing the Place Blob Core button in the bottom right corner of the screen."))
 	update_health_hud()
 	add_points(0)
 
-/mob/camera/blob/examine(mob/user)
+/mob/eye/blob/examine(mob/user)
 	. = ..()
 	if(blobstrain)
 		. += "Its strain is <font color=\"[blobstrain.color]\">[blobstrain.name]</font>."
 
-/mob/camera/blob/update_health_hud()
-	if(blob_core)
-		var/current_health = round((blob_core.get_integrity() / blob_core.max_integrity) * 100)
-		hud_used.healths.maptext = MAPTEXT("<div align='center' valign='middle' style='position:relative; top:0px; left:6px'><font color='#82ed00'>[current_health]%</font></div>")
-		for(var/mob/living/simple_animal/hostile/blob/blobbernaut/B in blob_mobs)
-			if(B.hud_used && B.hud_used.blobpwrdisplay)
-				B.hud_used.blobpwrdisplay.maptext = MAPTEXT("<div align='center' valign='middle' style='position:relative; top:0px; left:6px'><font color='#82ed00'>[current_health]%</font></div>")
+/mob/eye/blob/update_health_hud()
+	if(!blob_core)
+		return FALSE
+	var/current_health = round((blob_core.get_integrity() / blob_core.max_integrity) * 100)
+	var/new_maptext = MAPTEXT("<div align='center' valign='middle' style='position:relative; top:0px; left:6px'><font color='#82ed00'>[current_health]%</font></div>")
+	hud_used.screen_objects[HUD_MOB_HEALTH].maptext = new_maptext
+	for(var/mob/living/basic/blob_minion/blobbernaut/blobbernaut in blob_mobs)
+		var/atom/movable/screen/overmind_hud = blobbernaut.hud_used?.screen_objects[HUD_BLOBBERNAUT_OVERMIND]
+		if (overmind_hud)
+			overmind_hud.maptext = new_maptext
 
-/mob/camera/blob/proc/add_points(points)
+/mob/eye/blob/proc/add_points(points)
 	blob_points = clamp(blob_points + points, 0, max_blob_points)
-	hud_used.blobpwrdisplay.maptext = MAPTEXT("<div align='center' valign='middle' style='position:relative; top:0px; left:6px'><font color='#e36600'>[round(blob_points)]</font></div>")
+	hud_used.screen_objects[HUD_BLOB_POWER_DISPLAY].maptext = MAPTEXT("<div align='center' valign='middle' style='position:relative; top:0px; left:6px'><font color='#e36600'>[round(blob_points)]</font></div>")
 
-/mob/camera/blob/say(message, bubble_type, list/spans = list(), sanitize = TRUE, datum/language/language = null, ignore_spam = FALSE, forced = null, filterproof = null)
+/mob/eye/blob/say(
+	message,
+	bubble_type,
+	list/spans = list(),
+	sanitize = TRUE,
+	datum/language/language,
+	ignore_spam = FALSE,
+	forced,
+	filterproof = FALSE,
+	message_range = 7,
+	datum/saymode/saymode,
+	list/message_mods = list(),
+)
 	if (!message)
 		return
 
@@ -260,7 +340,7 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 		if(client.prefs.muted & MUTE_IC)
 			to_chat(src, span_boldwarning("You cannot send IC messages (muted)."))
 			return
-		if (!(ignore_spam || forced) && src.client.handle_spam_prevention(message,MUTE_IC))
+		if (!(ignore_spam || forced) && src.client.handle_spam_prevention(message, MUTE_IC))
 			return
 
 	if (stat)
@@ -268,29 +348,24 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 
 	blob_talk(message)
 
-/mob/camera/blob/proc/blob_talk(message)
+/mob/eye/blob/proc/blob_talk(message)
 
 	message = trim(copytext_char(sanitize(message), 1, MAX_MESSAGE_LEN))
 
 	if (!message)
 		return
 
-	src.log_talk(message, LOG_SAY)
+	var/list/message_mods = list()
+	var/adjusted_message = check_for_custom_say_emote(message, message_mods)
+	log_sayverb_talk(message, message_mods, tag = "blob hivemind telepathy")
+	var/messagepart = generate_messagepart(adjusted_message, message_mods = message_mods)
+	var/rendered = span_big(span_blob("<b>\[Blob Telepathy\] [name](<font color=\"[blobstrain.color]\">[blobstrain.name]</font>)</b> [messagepart]"))
+	relay_to_list_and_observers(rendered, GLOB.blob_telepathy_mobs, src, MESSAGE_TYPE_RADIO)
 
-	var/message_a = say_quote(message)
-	var/rendered = span_big("<font color=\"#EE4000\"><b>\[Blob Telepathy\] [name](<font color=\"[blobstrain.color]\">[blobstrain.name]</font>)</b> [message_a]</font>")
-
-	for(var/mob/M in GLOB.mob_list)
-		if(isovermind(M) || istype(M, /mob/living/simple_animal/hostile/blob))
-			to_chat(M, rendered)
-		if(isobserver(M))
-			var/link = FOLLOW_LINK(M, src)
-			to_chat(M, "[link] [rendered]")
-
-/mob/camera/blob/blob_act(obj/structure/blob/B)
+/mob/eye/blob/blob_act(obj/structure/blob/B)
 	return
 
-/mob/camera/blob/get_status_tab_items()
+/mob/eye/blob/get_status_tab_items()
 	. = ..()
 	if(blob_core)
 		. += "Core Health: [blob_core.get_integrity()]"
@@ -303,7 +378,7 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 			. += "Time Before Manual Placement: [max(round((manualplace_min_time - world.time)*0.1, 0.1), 0)]"
 		. += "Time Before Automatic Placement: [max(round((autoplace_max_time - world.time)*0.1, 0.1), 0)]"
 
-/mob/camera/blob/Move(NewLoc, Dir = 0)
+/mob/eye/blob/Move(NewLoc, Dir = 0)
 	if(placed)
 		var/obj/structure/blob/B = locate() in range(OVERMIND_MAX_CAMERA_STRAY, NewLoc)
 		if(B)
@@ -311,14 +386,14 @@ GLOBAL_LIST_EMPTY(blob_nodes)
 		else
 			return FALSE
 	else
-		var/area/A = get_area(NewLoc)
-		if(isgroundlessturf(NewLoc) || istype(A, /area/shuttle)) //if unplaced, can't go on shuttles or goundless tiles
+		var/area/check_area = get_area(NewLoc)
+		if(isgroundlessturf(NewLoc) || istype(check_area, /area/shuttle)) //if unplaced, can't go on shuttles or groundless tiles
 			return FALSE
 		forceMove(NewLoc)
 		return TRUE
 
-/mob/camera/blob/mind_initialize()
+/mob/eye/blob/mind_initialize()
 	. = ..()
-	var/datum/antagonist/blob/B = mind.has_antag_datum(/datum/antagonist/blob)
-	if(!B)
+	var/datum/antagonist/blob/blob = mind.has_antag_datum(/datum/antagonist/blob)
+	if(!blob)
 		mind.add_antag_datum(/datum/antagonist/blob)

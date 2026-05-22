@@ -6,7 +6,8 @@
 #define AREA_USAGE_STATIC_EQUIP 4
 #define AREA_USAGE_STATIC_LIGHT 5
 #define AREA_USAGE_STATIC_ENVIRON 6
-#define AREA_USAGE_LEN AREA_USAGE_STATIC_ENVIRON // largest idx
+#define AREA_USAGE_APC_CHARGE 7
+#define AREA_USAGE_LEN AREA_USAGE_APC_CHARGE // largest idx
 
 /// Index of the first dynamic usage channel
 #define AREA_USAGE_DYNAMIC_START AREA_USAGE_EQUIP
@@ -21,14 +22,22 @@
 #define DYNAMIC_TO_STATIC_CHANNEL(dyn_channel) (dyn_channel + (AREA_USAGE_STATIC_START - AREA_USAGE_DYNAMIC_START))
 #define STATIC_TO_DYNAMIC_CHANNEL(static_channel) (static_channel - (AREA_USAGE_STATIC_START - AREA_USAGE_DYNAMIC_START))
 
-
 //Power use
+
+/// dont use power
 #define NO_POWER_USE 0
+/// use idle_power_usage i.e. the power needed just to keep the machine on
 #define IDLE_POWER_USE 1
+/// use active_power_usage i.e. the power the machine consumes to perform a specific task
 #define ACTIVE_POWER_USE 2
 
+///Base global power consumption for idling machines
+#define BASE_MACHINE_IDLE_CONSUMPTION (100 WATTS)
+///Base global power consumption for active machines. The unit is ambiguous (joules or watts) depending on the use case for dynamic users.
+#define BASE_MACHINE_ACTIVE_CONSUMPTION (BASE_MACHINE_IDLE_CONSUMPTION * 10)
+
 /// Bitflags for a machine's preferences on when it should start processing. For use with machinery's `processing_flags` var.
-#define START_PROCESSING_ON_INIT (1<<0) /// Indicates the machine will automatically start processing right after it's `Initialize()` is ran.
+#define START_PROCESSING_ON_INIT (1<<0) /// Indicates the machine will automatically start processing right after its `Initialize()` is ran.
 #define START_PROCESSING_MANUALLY (1<<1) /// Machines with this flag will not start processing when it's spawned. Use this if you want to manually control when a machine starts processing.
 
 //bitflags for door switches.
@@ -38,7 +47,19 @@
 #define SHOCK (1<<3)
 #define SAFE (1<<4)
 
+//defines to be used with the door's open()/close() procs in order to discriminate what type of open is being done. The door will never open if it's been physically disabled (i.e. welded, sealed, etc.).
+/// We should go through the door's normal opening procedure, no overrides.
+#define DEFAULT_DOOR_CHECKS 0
+/// We're not going through the door's normal opening procedure, we're forcing it open. Can still fail if it's emagged or something. Costs power.
+#define FORCING_DOOR_CHECKS 1
+/// We are getting this door open if it has not been physically held shut somehow. Play a special sound to signify this level of opening.
+#define BYPASS_DOOR_CHECKS 2
+
+/// Damage dealth to an airlock when prie
+#define AIRLOCK_PRY_DAMAGE 25
+
 //used in design to specify which machine can build it
+//Note: More than one of these can be added to a design but imprinter and lathe designs are incompatible.
 #define IMPRINTER (1<<0) //For circuits. Uses glass/chemicals.
 #define PROTOLATHE (1<<1) //New stuff. Uses various minerals
 #define AUTOLATHE (1<<2) //Prints basic designs without research
@@ -52,70 +73,6 @@
 #define AWAY_IMPRINTER (1<<9)
 /// For wiremod/integrated circuits. Uses various minerals.
 #define COMPONENT_PRINTER (1<<10)
-//Note: More than one of these can be added to a design but imprinter and lathe designs are incompatable.
-
-//Modular computer/NTNet defines
-
-//Modular computer part defines
-#define MC_CPU "CPU"
-#define MC_HDD "HDD"
-#define MC_SDD "SDD"
-#define MC_CARD "CARD"
-#define MC_CARD2 "CARD2"
-#define MC_NET "NET"
-#define MC_PRINT "PRINT"
-#define MC_CELL "CELL"
-#define MC_CHARGE "CHARGE"
-#define MC_AI "AI"
-#define MC_SENSORS "SENSORS"
-#define MC_SIGNALER "SIGNALER"
-
-//NTNet stuff, for modular computers
-									// NTNet module-configuration values. Do not change these. If you need to add another use larger number (5..6..7 etc)
-#define NTNET_SOFTWAREDOWNLOAD 1 // Downloads of software from NTNet
-#define NTNET_PEERTOPEER 2 // P2P transfers of files between devices
-#define NTNET_COMMUNICATION 3 // Communication (messaging)
-#define NTNET_SYSTEMCONTROL 4 // Control of various systems, RCon, air alarm control, etc.
-
-//NTNet transfer speeds, used when downloading/uploading a file/program.
-#define NTNETSPEED_LOWSIGNAL 0.5 // GQ/s transfer speed when the device is wirelessly connected and on Low signal
-#define NTNETSPEED_HIGHSIGNAL 1 // GQ/s transfer speed when the device is wirelessly connected and on High signal
-#define NTNETSPEED_ETHERNET 2 // GQ/s transfer speed when the device is using wired connection
-
-//Caps for NTNet logging. Less than 10 would make logging useless anyway, more than 500 may make the log browser too laggy. Defaults to 100 unless user changes it.
-#define MAX_NTNET_LOGS 300
-#define MIN_NTNET_LOGS 10
-
-//Program bitflags
-#define PROGRAM_ALL (~0)
-#define PROGRAM_CONSOLE (1<<0)
-#define PROGRAM_LAPTOP (1<<1)
-#define PROGRAM_TABLET (1<<2)
-//Program states
-#define PROGRAM_STATE_KILLED 0
-#define PROGRAM_STATE_BACKGROUND 1
-#define PROGRAM_STATE_ACTIVE 2
-//Program categories
-#define PROGRAM_CATEGORY_CREW "Crew"
-#define PROGRAM_CATEGORY_ENGI "Engineering"
-#define PROGRAM_CATEGORY_ROBO "Robotics"
-#define PROGRAM_CATEGORY_SUPL "Supply"
-#define PROGRAM_CATEGORY_MISC "Other"
-
-#define FIREDOOR_OPEN 1
-#define FIREDOOR_CLOSED 2
-
-
-
-// These are used by supermatter and supermatter monitor program, mostly for UI updating purposes. Higher should always be worse!
-#define SUPERMATTER_ERROR -1 // Unknown status, shouldn't happen but just in case.
-#define SUPERMATTER_INACTIVE 0 // No or minimal energy
-#define SUPERMATTER_NORMAL 1 // Normal operation
-#define SUPERMATTER_NOTIFY 2 // Ambient temp > 80% of CRITICAL_TEMPERATURE
-#define SUPERMATTER_WARNING 3 // Ambient temp > CRITICAL_TEMPERATURE OR integrity damaged
-#define SUPERMATTER_DANGER 4 // Integrity < 50%
-#define SUPERMATTER_EMERGENCY 5 // Integrity < 25%
-#define SUPERMATTER_DELAMINATING 6 // Pretty obvious.
 
 #define HYPERTORUS_INACTIVE 0 // No or minimal energy
 #define HYPERTORUS_NOMINAL 1 // Normal operation
@@ -123,26 +80,6 @@
 #define HYPERTORUS_DANGER 3 // Integrity < 50%
 #define HYPERTORUS_EMERGENCY 4 // Integrity < 25%
 #define HYPERTORUS_MELTING 5 // Pretty obvious.
-
-//Nuclear bomb stuff
-#define NUKESTATE_INTACT 5
-#define NUKESTATE_UNSCREWED 4
-#define NUKESTATE_PANEL_REMOVED 3
-#define NUKESTATE_WELDED 2
-#define NUKESTATE_CORE_EXPOSED 1
-#define NUKESTATE_CORE_REMOVED 0
-
-#define NUKEUI_AWAIT_DISK 0
-#define NUKEUI_AWAIT_CODE 1
-#define NUKEUI_AWAIT_TIMER 2
-#define NUKEUI_AWAIT_ARM 3
-#define NUKEUI_TIMING 4
-#define NUKEUI_EXPLODED 5
-
-#define NUKE_OFF_LOCKED 0
-#define NUKE_OFF_UNLOCKED 1
-#define NUKE_ON_TIMING 2
-#define NUKE_ON_EXPLODING 3
 
 #define MACHINE_NOT_ELECTRIFIED 0
 #define MACHINE_ELECTRIFIED_PERMANENT -1
@@ -194,19 +131,38 @@
 //game begins to have a chance to warn sec and med
 #define ORION_GAMER_REPORT_THRESHOLD 2
 
-// Air alarm [/obj/machinery/airalarm/buildstage]
-/// Air alarm missing circuit
-#define AIRALARM_BUILD_NO_CIRCUIT 0
-/// Air alarm has circuit but is missing wires
-#define AIRALARM_BUILD_NO_WIRES 1
-/// Air alarm has all components but isn't completed
-#define AIRALARM_BUILD_COMPLETE 2
+/// What's the minimum duration of a syndie bomb (in seconds)
+#define SYNDIEBOMB_MIN_TIMER_SECONDS 90
 
-///TLV datums wont check limits set to this
-#define TLV_DONT_CHECK -1
-///the gas mixture is within the bounds of both warning and hazard limits
-#define TLV_NO_DANGER 0
-///the gas value is outside the warning limit but within the hazard limit, the air alarm will go into warning mode
-#define TLV_OUTSIDE_WARNING_LIMIT 1
-///the gas is outside the hazard limit, the air alarm will go into hazard mode
-#define TLV_OUTSIDE_HAZARD_LIMIT 2
+// Camera upgrade bitflags.
+#define CAMERA_UPGRADE_XRAY (1<<0)
+#define CAMERA_UPGRADE_EMP_PROOF (1<<1)
+#define CAMERA_UPGRADE_MOTION (1<<2)
+
+/// Max length of a status line in the status display
+#define MAX_STATUS_LINE_LENGTH 40
+
+/// Blank Status Display
+#define SD_BLANK 0
+/// Shows the emergency shuttle timer
+#define SD_EMERGENCY 1
+/// Shows an arbitrary message, user-set
+#define SD_MESSAGE 2
+/// Shows an alert picture (e.g. red alert, radiation, etc.)
+#define SD_PICTURE 3
+/// Shows whoever or whatever is on the green screen in the captain's office
+#define SD_GREENSCREEN 4
+
+// Status display priority levels (higher number = higher priority)
+/// Logo display - lowest priority, just the default NT logo
+#define DISPLAY_PRIORITY_LOGO 0
+/// Manual message from bridge communications console
+#define DISPLAY_PRIORITY_MESSAGE 10
+/// Security alert level (shows for 30 seconds then goes back to normal)
+#define DISPLAY_PRIORITY_ALERT_TEMP 20
+/// Emergency stuff like radiation storms, lockdowns, biohazard alerts
+#define DISPLAY_PRIORITY_EMERGENCY 30
+/// Shuttle countdown - highest priority because people need to know when to evacuate
+#define DISPLAY_PRIORITY_SHUTTLE 40
+/// Emergency alerts that temporarily interrupt even shuttle displays (30 seconds then revert)
+#define DISPLAY_PRIORITY_EMERGENCY_TEMP 50

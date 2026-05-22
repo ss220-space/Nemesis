@@ -2,13 +2,12 @@
 /obj/machinery/plumbing/liquid_pump
 	name = "liquid pump"
 	desc = "Pump up those sweet liquids from under the surface. Uses thermal energy from geysers to power itself." //better than placing 200 cables, because it wasn't fun
-	icon = 'icons/obj/plumbing/plumbers.dmi'
+	icon = 'icons/obj/pipes_n_cables/hydrochem/plumbers.dmi'
 	icon_state = "pump"
 	base_icon_state = "pump"
 	anchored = FALSE
 	density = TRUE
-	idle_power_usage = 10
-	active_power_usage = 1000
+	use_power = NO_POWER_USE
 
 	///units we pump per second
 	var/pump_power = 1
@@ -19,9 +18,9 @@
 	///volume of our internal buffer
 	var/volume = 200
 
-/obj/machinery/plumbing/liquid_pump/Initialize(mapload, bolt, layer)
+/obj/machinery/plumbing/liquid_pump/Initialize(mapload, layer)
 	. = ..()
-	AddComponent(/datum/component/plumbing/simple_supply, bolt, layer)
+	AddComponent(/datum/component/plumbing/simple_supply, layer)
 
 ///please note that the component has a hook in the parent call, wich handles activating and deactivating
 /obj/machinery/plumbing/liquid_pump/default_unfasten_wrench(mob/user, obj/item/I, time = 20)
@@ -31,7 +30,7 @@
 		update_appearance()
 		geyserless = FALSE //we switched state, so lets just set this back aswell
 
-/obj/machinery/plumbing/liquid_pump/process(delta_time)
+/obj/machinery/plumbing/liquid_pump/process(seconds_per_tick)
 	if(!anchored || panel_open || geyserless)
 		return
 
@@ -41,17 +40,17 @@
 			update_appearance()
 		if(!geyser) //we didnt find one, abort
 			geyserless = TRUE
-			visible_message(span_warning("The [name] makes a sad beep!"))
-			playsound(src, 'sound/machines/buzz-sigh.ogg', 50)
+			visible_message(span_warning("\The [src] makes a sad beep!"))
+			playsound(src, 'sound/machines/buzz/buzz-sigh.ogg', 50)
 			return
 
-	pump(delta_time)
+	pump(seconds_per_tick)
 
 ///pump up that sweet geyser nectar
-/obj/machinery/plumbing/liquid_pump/proc/pump(delta_time)
+/obj/machinery/plumbing/liquid_pump/proc/pump(seconds_per_tick)
 	if(!geyser || !geyser.reagents)
 		return
-	geyser.reagents.trans_to(src, pump_power * delta_time)
+	geyser.reagents.trans_to(src, pump_power * seconds_per_tick)
 
 /obj/machinery/plumbing/liquid_pump/update_icon_state()
 	if(geyser)

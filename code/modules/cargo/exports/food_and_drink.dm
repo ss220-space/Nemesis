@@ -10,8 +10,8 @@
 	include_subtypes = TRUE
 	exclude_types = list(/obj/item/food/grown)
 
-/datum/export/food/get_cost(obj/object, allowed_categories, apply_elastic)
-	var/obj/item/food/sold_food = object
-	if(sold_food.food_flags & FOOD_SILVER_SPAWNED)
+/datum/export/food/get_base_cost(obj/item/food/object)
+	if(HAS_TRAIT(object, TRAIT_FOOD_SILVER))
 		return FOOD_PRICE_WORTHLESS
-	return sold_food.venue_value
+
+	return object.venue_value ? object.venue_value : ..()

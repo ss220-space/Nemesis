@@ -29,6 +29,11 @@
 
 /datum/config_entry/flag/everyone_has_maint_access
 
+/datum/config_entry/number/depsec_access_level
+	default = 1
+	min_val = 0
+	max_val = 2
+
 /datum/config_entry/flag/sec_start_brig //makes sec start in brig instead of dept sec posts
 
 /datum/config_entry/flag/force_random_names
@@ -57,20 +62,11 @@
 	integer = FALSE
 	min_val = 0
 
-/// Determines the ideal player count for maximum progression per minute.
-/datum/config_entry/number/traitor_ideal_player_count
-	default = 20
-	min_val = 1
-
 /// Determines how fast traitors scale in general.
 /datum/config_entry/number/traitor_scaling_multiplier
 	default = 1
+	integer = FALSE
 	min_val = 0.01
-
-/// Determines how many potential objectives a traitor can have.
-/datum/config_entry/number/maximum_potential_objectives
-	default = 6
-	min_val = 1
 
 /datum/config_entry/number/changeling_scaling_coeff //how much does the amount of players get divided by to determine changelings
 	default = 6
@@ -101,7 +97,22 @@
 
 /datum/config_entry/flag/protect_assistant_from_antagonist //If assistants can be traitor/cult/other
 
-/datum/config_entry/flag/enforce_human_authority //If non-human species are barred from joining as a head of staff
+/datum/config_entry/string/human_authority //Controls how to enforce human authority
+	default = "DISABLED"
+
+/////////////////////////////////////////////////Outdated human authority settings
+/datum/config_entry/flag/enforce_human_authority
+	deprecated_by = /datum/config_entry/string/human_authority
+
+/datum/config_entry/flag/enforce_human_authority/DeprecationUpdate(value)
+	return value ? HUMAN_AUTHORITY_NON_HUMAN_WHITELIST : HUMAN_AUTHORITY_DISABLED
+
+/datum/config_entry/flag/enforce_human_authority_on_everyone
+	deprecated_by = /datum/config_entry/string/human_authority
+
+/datum/config_entry/flag/enforce_human_authority_on_everyone/DeprecationUpdate(value)
+	return value ? HUMAN_AUTHORITY_ENFORCED : HUMAN_AUTHORITY_DISABLED
+/////////////////////////////////////////////////
 
 /datum/config_entry/flag/allow_latejoin_antagonists // If late-joining players can be traitor/changeling
 
@@ -138,7 +149,13 @@
 
 /datum/config_entry/flag/no_summon_events //Allowed
 
-/datum/config_entry/flag/no_intercept_report //Whether or not to send a communications intercept report roundstart. This may be overridden by gamemodes.
+/// If TRUE, no roundstart report is sent
+/datum/config_entry/flag/no_intercept_report
+	default = FALSE
+
+/// If TRUE, the roundstart report will not contain dynamic information.
+/datum/config_entry/flag/no_dynamic_report
+	default = FALSE
 
 /datum/config_entry/number/arrivals_shuttle_dock_window //Time from when a player late joins on the arrivals shuttle to when the shuttle docks on the station
 	default = 55
@@ -167,6 +184,9 @@
 /datum/config_entry/string/alert_delta
 	default = "Destruction of the station is imminent. All crew are instructed to obey all instructions given by heads of staff. Any violations of these orders can be punished by death. This is not a drill."
 
+/datum/config_entry/flag/roundstart_blue_alert
+	default = TRUE
+
 /datum/config_entry/flag/revival_pod_plants
 
 /datum/config_entry/number/revival_brain_life
@@ -192,9 +212,6 @@
 	default = list( //DEFAULTS
 	/mob/living/simple_animal = 1,
 	/mob/living/silicon/pai = 1,
-	/mob/living/carbon/alien/humanoid/hunter = -1,
-	/mob/living/carbon/alien/humanoid/royal/praetorian = 1,
-	/mob/living/carbon/alien/humanoid/royal/queen = 3
 	)
 
 /datum/config_entry/keyed_list/multiplicative_movespeed/ValidateAndSet()
@@ -253,17 +270,15 @@
 /datum/config_entry/number/outdated_movedelay/alien_delay
 	movedelay_type = /mob/living/carbon/alien
 /datum/config_entry/number/outdated_movedelay/slime_delay
-	movedelay_type = /mob/living/simple_animal/slime
+	movedelay_type = /mob/living/basic/slime
 /datum/config_entry/number/outdated_movedelay/animal_delay
 	movedelay_type = /mob/living/simple_animal
 /////////////////////////////////////////////////
 
-/datum/config_entry/flag/virtual_reality //Will virtual reality be loaded
-
 /datum/config_entry/flag/roundstart_away //Will random away mission be loaded.
 
 /datum/config_entry/number/gateway_delay //How long the gateway takes before it activates. Default is half an hour. Only matters if roundstart_away is enabled.
-	default = 18000
+	default = 30 MINUTES
 	integer = FALSE
 	min_val = 0
 
@@ -272,6 +287,16 @@
 	min_val = 0
 	max_val = 100
 
+///An override to gateway_delay for specific maps or start points
+/datum/config_entry/keyed_list/gateway_delays_by_id
+	default = list(
+		AWAYSTART_BEACH = 5 MINUTES, //Chill RP zone
+		AWAYSTART_MUSEUM = 12 MINUTES, //Chill place with some cool puzzles and effects.
+	)
+	key_mode = KEY_MODE_TEXT
+	value_mode = VALUE_MODE_NUM
+	lowercase_key = FALSE //The macros are written the exact same way as their values, only without the quotation marks.
+
 /datum/config_entry/flag/ghost_interaction
 
 /datum/config_entry/flag/near_death_experience //If carbons can hear ghosts when unconscious and very close to death
@@ -279,16 +304,21 @@
 /datum/config_entry/flag/silent_ai
 /datum/config_entry/flag/silent_borg
 
-/datum/config_entry/flag/sandbox_autoclose // close the sandbox panel after spawning an item, potentially reducing griff
-
 /datum/config_entry/number/default_laws //Controls what laws the AI spawns with.
 	default = 0
 	min_val = 0
-	max_val = 3
+	max_val = 4
+
+/// Controls if Asimov Superiority appears as a perk for humans even if standard Asimov isn't the default AI lawset
+/datum/config_entry/flag/silicon_asimov_superiority_override
 
 /datum/config_entry/number/silicon_max_law_amount
 	default = 12
 	min_val = 0
+
+/datum/config_entry/keyed_list/specified_laws
+	key_mode = KEY_MODE_TEXT
+	value_mode = VALUE_MODE_FLAG
 
 /datum/config_entry/keyed_list/random_laws
 	key_mode = KEY_MODE_TEXT
@@ -309,7 +339,6 @@
 /datum/config_entry/string/overflow_job
 	default = JOB_ASSISTANT
 
-/datum/config_entry/flag/starlight
 /datum/config_entry/flag/grey_assistants
 
 /datum/config_entry/number/lavaland_budget
@@ -329,15 +358,17 @@
 
 /datum/config_entry/flag/allow_random_events // Enables random events mid-round when set
 
-/datum/config_entry/number/events_min_time_mul // Multipliers for random events minimal starting time and minimal players amounts
-	default = 1
-	min_val = 0
-	integer = FALSE
+/datum/config_entry/flag/forbid_station_traits
 
-/datum/config_entry/number/events_min_players_mul
-	default = 1
+/datum/config_entry/number/events_frequency_lower
+	default = 2.5 MINUTES
 	min_val = 0
-	integer = FALSE
+	protection = CONFIG_ENTRY_LOCKED
+
+/datum/config_entry/number/events_frequency_upper
+	default = 7 MINUTES
+	min_val = 0
+	protection = CONFIG_ENTRY_LOCKED
 
 /datum/config_entry/number/mice_roundstart
 	default = 10
@@ -365,10 +396,6 @@
 
 /datum/config_entry/flag/enable_night_shifts
 
-/datum/config_entry/flag/randomize_shift_time
-
-/datum/config_entry/flag/shift_time_realtime
-
 /datum/config_entry/number/monkeycap
 	default = 64
 	min_val = 0
@@ -383,6 +410,8 @@
 
 /datum/config_entry/flag/dynamic_config_enabled
 
+/datum/config_entry/flag/events_config_enabled
+
 /datum/config_entry/string/drone_required_role
 	default = "Silicon"
 
@@ -391,11 +420,111 @@
 	min_val = 0
 	integer = FALSE // It is in hours, but just in case one wants to specify minutes.
 
-/datum/config_entry/flag/sdql_spells
+/// Will drones be restricted from interacting with the Supermatter and Atmospherics area?
+/datum/config_entry/flag/drone_area_interaction_restrict
+	default = TRUE
 
 /datum/config_entry/flag/native_fov
+
+/datum/config_entry/flag/disallow_title_music
 
 /datum/config_entry/number/station_goal_budget
 	default = 1
 	min_val = 0
 	integer = FALSE
+
+/datum/config_entry/flag/disallow_circuit_sounds
+
+/datum/config_entry/flag/tts_no_whisper
+
+/datum/config_entry/string/tts_http_url
+	protection = CONFIG_ENTRY_LOCKED
+
+/datum/config_entry/string/tts_http_token
+	protection = CONFIG_ENTRY_LOCKED|CONFIG_ENTRY_HIDDEN
+
+/datum/config_entry/number/tts_max_concurrent_requests
+	default = 4
+	min_val = 1
+
+/datum/config_entry/str_list/tts_voice_blacklist
+
+/// Maximum timeout for http calls
+/datum/config_entry/number/tts_http_timeout_seconds
+	default = 30
+	min_val = 0
+
+/datum/config_entry/flag/give_tutorials_without_db
+
+/datum/config_entry/string/new_player_alert_role_id
+
+/datum/config_entry/keyed_list/positive_station_traits
+	default = list("0" = 8, "1" = 4, "2" = 2, "3" = 1)
+	key_mode = KEY_MODE_TEXT
+	value_mode = VALUE_MODE_NUM
+
+/datum/config_entry/keyed_list/negative_station_traits
+	default = list("0" = 8, "1" = 4, "2" = 2, "3" = 1)
+	key_mode = KEY_MODE_TEXT
+	value_mode = VALUE_MODE_NUM
+
+/datum/config_entry/keyed_list/neutral_station_traits
+	default = list("0" = 10, "1" = 10, "2" = 3, "2.5" = 1)
+	key_mode = KEY_MODE_TEXT
+	value_mode = VALUE_MODE_NUM
+
+// Configs for the Quirk system
+/// Disables Quirk point balancing for the server and clients.
+/datum/config_entry/flag/disable_quirk_points
+
+/datum/config_entry/flag/disable_quirk_points/ValidateAndSet(str_val)
+	. = ..()
+	if(.)
+		SSquirks.points_enabled = !config_entry_value
+
+/// The maximum amount of positive quirks one character can have at roundstart.
+/datum/config_entry/number/max_positive_quirks
+	default = 6
+	min_val = -1
+
+/datum/config_entry/number/max_positive_quirks/ValidateAndSet(str_val)
+	. = ..()
+	if(.)
+		SSquirks.max_positive_quirks = config_entry_value
+
+/// Freebie quirk points. Can't go negative because we have no way of enforcing a person has a quirk before they join.
+/datum/config_entry/number/default_quirk_points
+	default = 2
+	min_val = 0
+
+/datum/config_entry/number/default_quirk_points/ValidateAndSet(str_val)
+	. = ..()
+	if(.)
+		SSquirks.default_quirk_points = config_entry_value
+
+/// Max personalities you can have at once
+/datum/config_entry/number/max_personalities
+	default = 5
+
+/**
+ * A config that skews with the random spawners weights
+ * If the value is lower than 1, it'll tend to even out the odds
+ * If higher than 1, it'll lean toward common spawns even more.
+ */
+/datum/config_entry/number/random_loot_weight_modifier
+	integer = FALSE
+	default = 1
+	min_val = 0.05
+
+
+//Custom Shuttles
+//Shuttle size limiter
+/datum/config_entry/number/max_shuttle_count
+	default = 6
+
+/datum/config_entry/number/max_shuttle_size
+	default = 250
+
+/datum/config_entry/number/minimum_ascension_time
+	default = 0 // 1 minute
+	min_val = 0

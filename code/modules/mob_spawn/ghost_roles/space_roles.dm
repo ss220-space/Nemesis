@@ -1,57 +1,64 @@
 
 //Ancient cryogenic sleepers. Players become NT crewmen from a hundred year old space station, now on the verge of collapse.
-/obj/effect/mob_spawn/ghost_role/human/oldsec
+/obj/effect/mob_spawn/ghost_role/human/oldstation
 	name = "old cryogenics pod"
-	desc = "A humming cryo pod. You can barely recognise a security uniform underneath the built up ice. The machine is attempting to wake up its occupant."
-	prompt_name = "a security officer"
+	desc = "A humming cryo pod. You can barely recognise a uniform underneath the built up ice. The machine is attempting to wake up its occupant."
+	prompt_name = "an ancient crewman"
 	icon = 'icons/obj/machines/sleeper.dmi'
 	icon_state = "sleeper"
 	mob_species = /datum/species/human
-	you_are_text = "You are a security officer working for Nanotrasen, stationed onboard a state of the art research station."
+	you_are_text = "You are a crewman working for Nanotrasen, stationed onboard a state of the art research station."
 	flavour_text = "You vaguely recall rushing into a cryogenics pod due to an oncoming radiation storm. \
 	The last thing you remember is the station's Artificial Program telling you that you would only be asleep for eight hours. As you open \
 	your eyes, everything seems rusted and broken, a dark feeling swells in your gut as you climb out of your pod."
 	important_text = "Work as a team with your fellow survivors and do not abandon them."
-	outfit = /datum/outfit/oldsec
+	outfit = /datum/outfit/oldeng
 	spawner_job_path = /datum/job/ancient_crew
+	allow_custom_character = GHOSTROLE_TAKE_PREFS_APPEARANCE
 
-/obj/effect/mob_spawn/ghost_role/human/oldsec/Destroy()
-	new/obj/structure/showcase/machinery/oldpod/used(drop_location())
+/obj/effect/mob_spawn/ghost_role/human/oldstation/create(mob/mob_possessor, newname, apply_prefs)
+	. = ..()
+	if(!.)
+		return
+	notify_ghosts(
+		"Someone just woke up on Charlie Station! Why not join them and help out?",
+		source = ., //the spawned mob
+		header = "Join in, help out!",
+		click_interact = TRUE,
+		notify_flags = NOTIFY_CATEGORY_NOFLASH,
+	)
+
+/obj/effect/mob_spawn/ghost_role/human/oldstation/Destroy()
+	new /obj/structure/showcase/machinery/oldpod/used(drop_location())
 	return ..()
+
+
+/obj/effect/mob_spawn/ghost_role/human/oldstation/sec
+	desc = "A humming cryo pod. You can barely recognise a security uniform underneath the built up ice. The machine is attempting to wake up its occupant."
+	prompt_name = "a security officer"
+	you_are_text = "You are a security officer working for Nanotrasen, stationed onboard a state of the art research station."
+	outfit = /datum/outfit/oldsec
 
 /datum/outfit/oldsec
 	name = "Ancient Security"
+	id = /obj/item/card/id/away/old/sec
 	uniform = /obj/item/clothing/under/rank/security/officer
 	shoes = /obj/item/clothing/shoes/jackboots
-	id = /obj/item/card/id/away/old/sec
-	r_pocket = /obj/item/restraints/handcuffs
 	l_pocket = /obj/item/assembly/flash/handheld
+	r_pocket = /obj/item/restraints/handcuffs
 
-/obj/effect/mob_spawn/ghost_role/human/oldeng
-	name = "old cryogenics pod"
+/obj/effect/mob_spawn/ghost_role/human/oldstation/eng
 	desc = "A humming cryo pod. You can barely recognise an engineering uniform underneath the built up ice. The machine is attempting to wake up its occupant."
 	prompt_name = "an engineer"
-	icon = 'icons/obj/machines/sleeper.dmi'
-	icon_state = "sleeper"
-	mob_species = /datum/species/human
 	you_are_text = "You are an engineer working for Nanotrasen, stationed onboard a state of the art research station."
-	flavour_text = "You vaguely recall rushing into a cryogenics pod due to an oncoming radiation storm. The last thing \
-	you remember is the station's Artificial Program telling you that you would only be asleep for eight hours. As you open \
-	your eyes, everything seems rusted and broken, a dark feeling swells in your gut as you climb out of your pod."
-	important_text = "Work as a team with your fellow survivors and do not abandon them."
 	outfit = /datum/outfit/oldeng
-	spawner_job_path = /datum/job/ancient_crew
-
-/obj/effect/mob_spawn/ghost_role/human/oldeng/Destroy()
-	new/obj/structure/showcase/machinery/oldpod/used(drop_location())
-	return ..()
 
 /datum/outfit/oldeng
 	name = "Ancient Engineer"
-	uniform = /obj/item/clothing/under/rank/engineering/engineer
-	shoes = /obj/item/clothing/shoes/workboots
 	id = /obj/item/card/id/away/old/eng
+	uniform = /obj/item/clothing/under/rank/engineering/engineer
 	gloves = /obj/item/clothing/gloves/color/fyellow/old
+	shoes = /obj/item/clothing/shoes/workboots
 	l_pocket = /obj/item/tank/internals/emergency_oxygen
 
 /datum/outfit/oldeng/mod
@@ -61,43 +68,30 @@
 	mask = /obj/item/clothing/mask/breath
 	internals_slot = ITEM_SLOT_SUITSTORE
 
-/obj/effect/mob_spawn/ghost_role/human/oldsci
-	name = "old cryogenics pod"
+/obj/effect/mob_spawn/ghost_role/human/oldstation/sci
 	desc = "A humming cryo pod. You can barely recognise a science uniform underneath the built up ice. The machine is attempting to wake up its occupant."
 	prompt_name = "a scientist"
-	icon = 'icons/obj/machines/sleeper.dmi'
-	icon_state = "sleeper"
-	mob_species = /datum/species/human
 	you_are_text = "You are a scientist working for Nanotrasen, stationed onboard a state of the art research station."
-	flavour_text = "You vaguely recall rushing into a cryogenics pod due to an oncoming radiation storm. \
-	The last thing you remember is the station's Artificial Program telling you that you would only be asleep for eight hours. As you open \
-	your eyes, everything seems rusted and broken, a dark feeling swells in your gut as you climb out of your pod."
-	important_text = "Work as a team with your fellow survivors and do not abandon them."
 	outfit = /datum/outfit/oldsci
-	spawner_job_path = /datum/job/ancient_crew
-
-/obj/effect/mob_spawn/ghost_role/human/oldsci/Destroy()
-	new/obj/structure/showcase/machinery/oldpod/used(drop_location())
-	return ..()
 
 /datum/outfit/oldsci
 	name = "Ancient Scientist"
+	id = /obj/item/card/id/away/old/sci
 	uniform = /obj/item/clothing/under/rank/rnd/scientist
 	shoes = /obj/item/clothing/shoes/laceup
-	id = /obj/item/card/id/away/old/sci
 	l_pocket = /obj/item/stack/medical/bruise_pack
 
 ///asteroid comms agent
 
 /obj/effect/mob_spawn/ghost_role/human/lavaland_syndicate/comms/space
 	you_are_text = "You are a syndicate agent, assigned to a small listening post station situated near your hated enemy's top secret research facility: Space Station 13."
-	flavour_text = "Monitor enemy activity as best you can, and try to keep a low profile. Monitor enemy activity as best you can, and try to keep a low profile. Use the communication equipment to provide support to any field agents, and sow disinformation to throw Nanotrasen off your trail. Do not let the base fall into enemy hands!"
+	flavour_text = "Monitor enemy activity as best you can, and try to keep a low profile. Use the communication equipment to provide support to any field agents, and sow disinformation to throw Nanotrasen off your trail. Do not let the base fall into enemy hands!"
 	important_text = "DO NOT abandon the base."
 
 /obj/effect/mob_spawn/ghost_role/human/lavaland_syndicate/comms/space/Initialize(mapload)
 	. = ..()
-	if(prob(90)) //only has a 10% chance of existing, otherwise it'll just be a NPC syndie.
-		new /mob/living/simple_animal/hostile/syndicate/ranged(get_turf(src))
+	if(prob(85)) //only has a 15% chance of existing, otherwise it'll just be a NPC syndie.
+		new /mob/living/basic/trooper/syndicate/ranged(get_turf(src))
 		return INITIALIZE_HINT_QDEL
 
 ///battlecruiser stuff
@@ -110,11 +104,20 @@
 	prompt_name = "a battlecruiser crewmember"
 	outfit = /datum/outfit/syndicate_empty/battlecruiser
 	spawner_job_path = /datum/job/battlecruiser_crew
+	uses = 4
+	allow_custom_character = ALL
 
 	/// The antag team to apply the player to
 	var/datum/team/antag_team
 	/// The antag datum to give to the player spawned
 	var/antag_datum_to_give = /datum/antagonist/battlecruiser
+
+/obj/effect/mob_spawn/ghost_role/human/syndicate/battlecruiser/allow_spawn(mob/user, silent = FALSE)
+	if(!(user.ckey in antag_team.players_spawned))
+		return TRUE
+	if(!silent)
+		to_chat(user, span_boldwarning("You have already used up your chance to roll as Battlecruiser."))
+	return FALSE
 
 /obj/effect/mob_spawn/ghost_role/human/syndicate/battlecruiser/special(mob/living/spawned_mob, mob/possesser)
 	. = ..()
@@ -122,72 +125,15 @@
 		spawned_mob.mind_initialize()
 	var/datum/mind/mob_mind = spawned_mob.mind
 	mob_mind.add_antag_datum(antag_datum_to_give, antag_team)
-
-/datum/team/battlecruiser
-	name = "Battlecruiser Crew"
-	member_name = "crewmember"
-	/// The central objective of this battlecruiser
-	var/core_objective = /datum/objective/nuclear
-	/// The assigned nuke of this team
-	var/obj/machinery/nuclearbomb/nuke
-
-/datum/team/battlecruiser/proc/update_objectives()
-	if(core_objective)
-		var/datum/objective/objective = new core_objective()
-		objective.team = src
-		objectives += objective
-
-/datum/antagonist/battlecruiser
-	name = "Battlecruiser Crewmember"
-	show_to_ghosts = TRUE
-	roundend_category = "battlecruiser syndicate operatives"
-	suicide_cry = "FOR THE SYNDICATE!!!"
-	antag_hud_name = "battlecruiser_crew"
-	job_rank = ROLE_BATTLECRUISER_CREW
-	var/datum/team/battlecruiser/battlecruiser_team
-
-/datum/antagonist/battlecruiser/get_team()
-	return battlecruiser_team
-
-/datum/antagonist/battlecruiser/greet()
-	owner.current.playsound_local(get_turf(owner.current), 'sound/ambience/antag/ops.ogg',100,0, use_reverb = FALSE)
-	to_chat(owner, span_big("You are a [name]!"))
-	owner.announce_objectives()
-
-/datum/antagonist/battlecruiser/ally
-	name = "Battlecruiser Ally"
-	show_to_ghosts = FALSE
-
-/datum/antagonist/battlecruiser/captain
-	name = "Battlecruiser Captain"
-	antag_hud_name = "battlecruiser_lead"
-	job_rank = ROLE_BATTLECRUISER_CAPTAIN
-
-/datum/antagonist/battlecruiser/create_team(datum/team/battlecruiser/team)
-	if(!team)
-		return
-	if(!istype(team))
-		stack_trace("Wrong team type passed to [type] initialization.")
-	battlecruiser_team = team
-
-/datum/antagonist/battlecruiser/apply_innate_effects(mob/living/mob_override)
-	add_team_hud(mob_override || owner.current, /datum/antagonist/battlecruiser)
-
-/datum/antagonist/battlecruiser/on_gain()
-	if(battlecruiser_team)
-		objectives |= battlecruiser_team.objectives
-		if(battlecruiser_team.nuke)
-			var/obj/machinery/nuclearbomb/nuke = battlecruiser_team.nuke
-			antag_memory += "<B>[nuke] Code</B>: [nuke.r_code]<br>"
-			owner.add_memory(MEMORY_NUKECODE, list(DETAIL_NUKE_CODE = nuke.r_code, DETAIL_PROTAGONIST = owner.current), story_value = STORY_VALUE_AMAZING, memory_flags = MEMORY_FLAG_NOLOCATION | MEMORY_FLAG_NOMOOD | MEMORY_FLAG_NOPERSISTENCE)
-			to_chat(owner, "The nuclear authorization code is: <B>[nuke.r_code]</B>")
-	return ..()
+	antag_team.players_spawned += (spawned_mob.ckey)
 
 /datum/outfit/syndicate_empty/battlecruiser
 	name = "Syndicate Battlecruiser Ship Operative"
-	l_pocket = /obj/item/gun/ballistic/automatic/pistol
-	r_pocket = /obj/item/knife/combat/survival
 	belt = /obj/item/storage/belt/military/assault
+	l_pocket = /obj/item/gun/ballistic/automatic/pistol/clandestine
+	r_pocket = /obj/item/knife/combat/survival
+
+	box = /obj/item/storage/box/survival/syndie
 
 /obj/effect/mob_spawn/ghost_role/human/syndicate/battlecruiser/assault
 	name = "Syndicate Battlecruiser Assault Operative"
@@ -196,17 +142,20 @@
 	important_text = "Work as a team with your fellow operatives and work out a plan of attack. If you are overwhelmed, escape back to your ship!"
 	prompt_name = "a battlecruiser operative"
 	outfit = /datum/outfit/syndicate_empty/battlecruiser/assault
+	uses = 8
 
 /datum/outfit/syndicate_empty/battlecruiser/assault
 	name = "Syndicate Battlecruiser Assault Operative"
 	uniform = /obj/item/clothing/under/syndicate/combat
-	l_pocket = /obj/item/uplink/nuclear
-	r_pocket = /obj/item/modular_computer/tablet/nukeops
-	belt = /obj/item/storage/belt/military
 	suit = /obj/item/clothing/suit/armor/vest
-	suit_store = /obj/item/gun/ballistic/automatic/pistol
-	back = /obj/item/storage/backpack/security
+	suit_store = /obj/item/gun/ballistic/automatic/pistol/clandestine
+	back = /obj/item/storage/backpack
+	belt = /obj/item/storage/belt/military
 	mask = /obj/item/clothing/mask/gas/syndicate
+	l_pocket = /obj/item/uplink/nuclear
+	r_pocket = /obj/item/modular_computer/pda/nukeops
+
+	skillchips = list(/obj/item/skillchip/disk_verifier)
 
 /obj/effect/mob_spawn/ghost_role/human/syndicate/battlecruiser/captain
 	name = "Syndicate Battlecruiser Captain"
@@ -217,17 +166,64 @@
 	outfit = /datum/outfit/syndicate_empty/battlecruiser/assault/captain
 	spawner_job_path = /datum/job/battlecruiser_captain
 	antag_datum_to_give = /datum/antagonist/battlecruiser/captain
+	uses = 1
 
 /datum/outfit/syndicate_empty/battlecruiser/assault/captain
 	name = "Syndicate Battlecruiser Captain"
-	l_pocket = /obj/item/melee/energy/sword/saber/red
-	r_pocket = /obj/item/melee/baton/telescopic
+	id = /obj/item/card/id/advanced/black/syndicate_command/captain_id
+	id_trim = /datum/id_trim/battlecruiser/captain
 	suit = /obj/item/clothing/suit/armor/vest/capcarapace/syndicate
 	suit_store = /obj/item/gun/ballistic/revolver/mateba
 	back = /obj/item/storage/backpack/satchel/leather
-	head = /obj/item/clothing/head/hos/syndicate
-	mask = /obj/item/clothing/mask/cigarette/cigar/havana
 	ears = /obj/item/radio/headset/syndicate/alt/leader
 	glasses = /obj/item/clothing/glasses/thermal/eyepatch
-	id = /obj/item/card/id/advanced/black/syndicate_command/captain_id
-	id_trim = /datum/id_trim/battlecruiser/captain
+	head = /obj/item/clothing/head/hats/hos/cap/syndicate
+	mask = /obj/item/cigarette/cigar/havana
+	l_pocket = /obj/item/melee/energy/sword/saber/red
+	r_pocket = /obj/item/melee/baton/telescopic
+
+//film studio space ruins, actors and such.
+/obj/effect/mob_spawn/ghost_role/human/actor
+	name = "cryogenics pod"
+	desc = "A humming cryo pod. You recognize the person inside as a local celebrity of sort."
+	prompt_name = "a actor"
+	icon = 'icons/obj/machines/sleeper.dmi'
+	icon_state = "sleeper"
+	mob_species = /datum/species/human
+	you_are_text = "You are an actor/actress working for Sophronia Broadcasting Inc., stationed onboard the local TV studio."
+	flavour_text = "You last remember corporate told everyone to go to cryosleep for whatever reason, where did everyone else go?"
+	important_text = "Work as a team with your fellow actors and the director to make entertainment for the masses."
+	outfit = /datum/outfit/actor
+	spawner_job_path = /datum/job/ghost_role
+	allow_custom_character = ALL
+
+/datum/outfit/actor
+	name = "Actor"
+	id = /obj/item/card/id/away/filmstudio
+	id_trim= /datum/id_trim/away/actor
+	ears = /obj/item/radio/headset
+	uniform = /obj/item/clothing/under/suit/charcoal
+	back = /obj/item/storage/backpack/satchel
+	shoes = /obj/item/clothing/shoes/laceup
+	l_pocket = /obj/item/clothing/mask/chameleon
+	r_pocket = /obj/item/card/id/advanced/chameleon
+
+/obj/effect/mob_spawn/ghost_role/human/director
+	name = "cryogenics pod"
+	desc = "A humming cryo pod. You recognize the person inside as a local celebrity of sort."
+	prompt_name = "a director"
+	icon = 'icons/obj/machines/sleeper.dmi'
+	icon_state = "sleeper"
+	mob_species = /datum/species/human
+	you_are_text = "You are a director working for Sophronia Broadcasting Inc., stationed onboard the local TV studio."
+	flavour_text = "You just got hired to direct shows and entertainment for a local tv studio, make do with your team and produce something!"
+	important_text = "Work as a team with your fellow actors and the director to make entertainment for the masses."
+	outfit = /datum/outfit/actor/director
+	spawner_job_path = /datum/job/ghost_role
+	allow_custom_character = ALL
+
+/datum/outfit/actor/director
+	name = "Director"
+	id_trim = /datum/id_trim/away/director
+	uniform = /obj/item/clothing/under/suit/red
+	head = /obj/item/clothing/head/beret/frenchberet

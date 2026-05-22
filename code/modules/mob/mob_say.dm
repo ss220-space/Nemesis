@@ -2,9 +2,7 @@
 
 ///what clients use to speak. when you type a message into the chat bar in say mode, this is the first thing that goes off serverside.
 /mob/verb/say_verb(message as text)
-	set name = "Say"
-	set category = "IC"
-	set instant = TRUE
+	set name = VERB_SAY
 
 	if(GLOB.say_disabled) //This is here to try to identify lag problems
 		to_chat(usr, span_danger("Speech is currently admin-disabled."))
@@ -13,29 +11,32 @@
 	//queue this message because verbs are scheduled to process after SendMaps in the tick and speech is pretty expensive when it happens.
 	//by queuing this for next tick the mc can compensate for its cost instead of having speech delay the start of the next tick
 	if(message)
-		SSspeech_controller.queue_say_for_mob(src, message, SPEECH_CONTROLLER_QUEUE_SAY_VERB)
+		QUEUE_OR_CALL_VERB_FOR(VERB_CALLBACK(src, TYPE_PROC_REF(/atom/movable, say), message), SSspeech_controller)
 
 ///Whisper verb
 /mob/verb/whisper_verb(message as text)
-	set name = "Whisper"
-	set category = "IC"
-	set instant = TRUE
+	set name = VERB_WHISPER
 
 	if(GLOB.say_disabled) //This is here to try to identify lag problems
 		to_chat(usr, span_danger("Speech is currently admin-disabled."))
 		return
 
 	if(message)
-		SSspeech_controller.queue_say_for_mob(src, message, SPEECH_CONTROLLER_QUEUE_WHISPER_VERB)
+		QUEUE_OR_CALL_VERB_FOR(VERB_CALLBACK(src, TYPE_PROC_REF(/mob, whisper), message), SSspeech_controller)
 
-///whisper a message
-/mob/proc/whisper(message, datum/language/language=null)
+/**
+ * Whisper a message.
+ *
+ * Basic level implementation just speaks the message, nothing else.
+ */
+/mob/proc/whisper(message, bubble_type, list/spans = list(), sanitize = TRUE, datum/language/language, ignore_spam = FALSE, forced, filterproof)
+	if(!message)
+		return
 	say(message, language = language)
 
 ///The me emote verb
 /mob/verb/me_verb(message as text)
-	set name = "Me"
-	set category = "IC"
+	set name = VERB_ME
 
 	if(GLOB.say_disabled) //This is here to try to identify lag problems
 		to_chat(usr, span_danger("Speech is currently admin-disabled."))
@@ -43,10 +44,72 @@
 
 	message = trim(copytext_char(sanitize(message), 1, MAX_MESSAGE_LEN))
 
-	SSspeech_controller.queue_say_for_mob(src, message, SPEECH_CONTROLLER_QUEUE_EMOTE_VERB)
+	QUEUE_OR_CALL_VERB_FOR(VERB_CALLBACK(src, TYPE_PROC_REF(/mob, emote), "me", NONE, message, TRUE), SSspeech_controller)
 
-///Speak as a dead person (ghost etc)
-/mob/proc/say_dead(message)
+/mob/try_speak(message, ignore_spam = FALSE, forced = null, filterproof = FALSE)
+	var/list/filter_result
+	var/list/soft_filter_result
+	if(client && !forced && !filterproof)
+		//The filter doesn't act on the sanitized message, but the raw message.
+		filter_result = CAN_BYPASS_FILTER(src) ? null : is_ic_filtered(message)
+		if(!filter_result)
+			soft_filter_result = CAN_BYPASS_FILTER(src) ? null : is_soft_ic_filtered(message)
+
+	if(filter_result && !filterproof)
+		//The filter warning message shows the sanitized message though.
+		to_chat(src, span_warning("That message contained a word prohibited in IC chat! Consider reviewing the server rules."))
+		to_chat(src, span_warning("\"[message]\""))
+		REPORT_CHAT_FILTER_TO_USER(src, filter_result)
+		log_filter("IC", message, filter_result)
+		SSblackbox.record_feedback("tally", "ic_blocked_words", 1, LOWER_TEXT(config.ic_filter_regex.match))
+		return FALSE
+
+	if(soft_filter_result && !filterproof)
+		if(tgui_alert(usr,"Your message contains \"[soft_filter_result[CHAT_FILTER_INDEX_WORD]]\". \"[soft_filter_result[CHAT_FILTER_INDEX_REASON]]\", Are you sure you want to say it?", "Soft Blocked Word", list("Yes", "No")) != "Yes")
+			SSblackbox.record_feedback("tally", "soft_ic_blocked_words", 1, LOWER_TEXT(config.soft_ic_filter_regex.match))
+			log_filter("Soft IC", message, filter_result)
+			return FALSE
+		message_admins("[ADMIN_LOOKUPFLW(usr)] has passed the soft filter for \"[soft_filter_result[CHAT_FILTER_INDEX_WORD]]\" they may be using a disallowed term. Message: \"[html_encode(message)]\"")
+		log_admin_private("[key_name(usr)] has passed the soft filter for \"[soft_filter_result[CHAT_FILTER_INDEX_WORD]]\" they may be using a disallowed term. Message: \"[message]\"")
+		SSblackbox.record_feedback("tally", "passed_soft_ic_blocked_words", 1, LOWER_TEXT(config.soft_ic_filter_regex.match))
+		log_filter("Soft IC (Passed)", message, filter_result)
+
+	if(client && !(ignore_spam || forced))
+		if(client.prefs.muted & MUTE_IC)
+			to_chat(src, span_danger("You cannot speak IC (muted)."))
+			return FALSE
+		if(client.handle_spam_prevention(message, MUTE_IC))
+			return FALSE
+
+	var/sigreturn = SEND_SIGNAL(src, COMSIG_MOB_TRY_SPEECH, message, ignore_spam, forced)
+	if(sigreturn & COMPONENT_IGNORE_CAN_SPEAK)
+		return TRUE
+	if(sigreturn & COMPONENT_CANNOT_SPEAK)
+		return FALSE
+
+	if(!..()) // the can_speak check
+		if(HAS_MIND_TRAIT(src, TRAIT_MIMING))
+			to_chat(src, span_green("Your vow of silence prevents you from speaking!"))
+		else
+			to_chat(src, span_warning("You find yourself unable to speak!"))
+		return FALSE
+
+	return TRUE
+
+/mob/can_speak(allow_mimes = FALSE)
+	if(!allow_mimes && HAS_MIND_TRAIT(src, TRAIT_MIMING))
+		return FALSE
+
+	return ..()
+
+/**
+ * say_dead
+ * allows you to speak as a dead person
+ * Args:
+ * - message: The message you're sending to chat.
+ * - mannequin_controller: If someone else is forcing you to speak, this is the mob doing it.
+ */
+/mob/proc/say_dead(message, mob/mannequin_controller)
 	var/name = real_name
 	var/alt_name = ""
 
@@ -54,7 +117,7 @@
 		to_chat(usr, span_danger("Speech is currently admin-disabled."))
 		return
 
-	var/jb = is_banned_from(ckey, "Deadchat")
+	var/jb = is_banned_from(mannequin_controller?.ckey || ckey, "Deadchat")
 	if(QDELETED(src))
 		return
 
@@ -87,7 +150,7 @@
 		if(name != real_name)
 			alt_name = " (died as [real_name])"
 
-	var/spanned = say_quote(say_emphasis(message))
+	var/spanned = generate_messagepart(message)
 	var/source = "<span class='game'><span class='prefix'>DEAD:</span> <span class='name'>[name]</span>[alt_name]"
 	var/rendered = " <span class='message'>[emoji_parse(spanned)]</span></span>"
 	log_talk(message, LOG_SAY, tag="DEAD")
@@ -96,7 +159,7 @@
 	var/displayed_key = key
 	if(client?.holder?.fakekey)
 		displayed_key = null
-	deadchat_broadcast(rendered, source, follow_target = src, speaker_key = displayed_key)
+	deadchat_broadcast(rendered, source, follow_target = src, speaker_key = displayed_key, original_message = message)
 
 ///Check if this message is an emote
 /mob/proc/check_emote(message, forced)
@@ -115,9 +178,9 @@
 	var/customsaypos = findtext(message, "*")
 	if(!customsaypos)
 		return message
-	if (is_banned_from(ckey, "Emote"))
+	if (!isnull(ckey) && is_banned_from(ckey, "Emote"))
 		return copytext(message, customsaypos + 1)
-	mods[MODE_CUSTOM_SAY_EMOTE] = lowertext(copytext_char(message, 1, customsaypos))
+	mods[MODE_CUSTOM_SAY_EMOTE] = copytext(message, 1, customsaypos)
 	message = copytext(message, customsaypos + 1)
 	if (!message)
 		mods[MODE_CUSTOM_SAY_ERASE_INPUT] = TRUE
@@ -152,7 +215,7 @@
 			if(stat == CONSCIOUS) //necessary indentation so it gets stripped of the semicolon anyway.
 				mods[MODE_HEADSET] = TRUE
 		else if((key in GLOB.department_radio_prefixes) && length(message) > length(key) + 1 && !mods[RADIO_EXTENSION])
-			mods[RADIO_KEY] = lowertext(message[1 + length(key)])
+			mods[RADIO_KEY] = LOWER_TEXT(message[1 + length(key)])
 			mods[RADIO_EXTENSION] = GLOB.department_radio_keys[mods[RADIO_KEY]]
 			chop_to = length(key) + 2
 		else if(key == "," && !mods[LANGUAGE_EXTENSION])
@@ -172,3 +235,5 @@
 		if(!message)
 			return
 	return message
+
+#undef MESSAGE_MODS_LENGTH

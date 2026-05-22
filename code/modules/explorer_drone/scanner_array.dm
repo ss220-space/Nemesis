@@ -14,9 +14,9 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 
 #define MAX_SCAN_DISTANCE 10
 
-#define WIDE_SCAN_COST(BAND, SCAN_POWER) (((BAND*BAND)/(SCAN_POWER))*2*60*10)
-#define BASE_POINT_SCAN_TIME 5 MINUTES
-#define BASE_DEEP_SCAN_TIME 5 MINUTES
+#define WIDE_SCAN_COST(BAND, SCAN_POWER) (min(((BAND*BAND)/(SCAN_POWER))*2*60*10, 10 MINUTES))
+#define BASE_POINT_SCAN_TIME (2 MINUTES)
+#define BASE_DEEP_SCAN_TIME (3 MINUTES)
 
 /// Represents scan in progress, only one globally for now, todo later split per z or allow partial dish swarm usage
 /datum/exoscan
@@ -35,7 +35,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 	var/scan_time = 0
 	switch(scan_type)
 		if(EXOSCAN_WIDE)
-			scan_power = length(GLOB.exoscanner_controller.tracked_dishes)
+			scan_power = GLOB.exoscanner_controller.calculate_scan_power()
 			scan_time = WIDE_SCAN_COST(GLOB.exoscanner_controller.wide_scan_band,scan_power)
 		if(EXOSCAN_POINT)
 			scan_power = GLOB.exoscanner_controller.get_scan_power(target)
@@ -43,7 +43,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 		if(EXOSCAN_DEEP)
 			scan_power = GLOB.exoscanner_controller.get_scan_power(target)
 			scan_time = (BASE_DEEP_SCAN_TIME*target.distance)/scan_power
-	scan_timer = addtimer(CALLBACK(src,.proc/resolve_scan),scan_time,TIMER_STOPPABLE)
+	scan_timer = addtimer(CALLBACK(src, PROC_REF(resolve_scan)),scan_time,TIMER_STOPPABLE)
 
 /// Short description for in progress scan
 /datum/exoscan/proc/ui_description()
@@ -71,12 +71,14 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 	SEND_SIGNAL(src,COMSIG_EXOSCAN_INTERRUPTED)
 	qdel(src)
 
-/datum/exoscan/Destroy(force, ...)
+/datum/exoscan/Destroy(force)
 	. = ..()
 	deltimer(scan_timer)
 
 /obj/machinery/computer/exoscanner_control
-	name = "Scanner Array Control Console"
+	name = "scanner array control console"
+	desc = "Controls scanner arrays to initiate scans for exodrones."
+	circuit = /obj/item/circuitboard/computer/exoscanner_console
 	/// If scan was interrupted show a popup until dismissed.
 	var/failed_popup = FALSE
 	/// Site we're configuring targeted scans for.
@@ -104,7 +106,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 			condition_descriptions += condition.description
 		.["scan_conditions"] = condition_descriptions
 	else
-		.["scan_power"] = scan_power = length(GLOB.exoscanner_controller.tracked_dishes)
+		.["scan_power"] = scan_power = GLOB.exoscanner_controller.calculate_scan_power()
 		.["wide_scan_eta"] = scan_power > 0 ? WIDE_SCAN_COST(GLOB.exoscanner_controller.wide_scan_band,scan_power) : 0
 		.["possible_sites"] = build_exploration_site_ui_data()
 		.["scan_conditions"] = null
@@ -119,7 +121,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 	. = ..()
 	.["all_bands"] = GLOB.exoscanner_bands
 
-/obj/machinery/computer/exoscanner_control/ui_act(action, list/params)
+/obj/machinery/computer/exoscanner_control/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	. = ..()
 	if(.)
 		return
@@ -172,18 +174,15 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 /obj/machinery/computer/exoscanner_control/proc/create_scan(scan_type,target)
 	var/datum/exoscan/scan = GLOB.exoscanner_controller.create_scan(scan_type,target)
 	if(scan)
-		RegisterSignal(scan, COMSIG_EXOSCAN_INTERRUPTED, .proc/scan_failed)
+		RegisterSignal(scan, COMSIG_EXOSCAN_INTERRUPTED, PROC_REF(scan_failed))
+	playsound(src, 'sound/machines/terminal/terminal_processing.ogg', 20, vary = TRUE)
 
 /obj/machinery/computer/exoscanner_control/proc/scan_failed()
 	SIGNAL_HANDLER
 	failed_popup = TRUE
 	SStgui.update_uis(src)
 
-/obj/machinery/computer/exoscanner_control/Initialize(mapload)
-	..()
-	return INITIALIZE_HINT_LATELOAD
-
-/obj/machinery/computer/exoscanner_control/LateInitialize()
+/obj/machinery/computer/exoscanner_control/post_machine_initialize()
 	. = ..()
 	AddComponent(/datum/component/experiment_handler, \
 		allowed_experiments = list(/datum/experiment/exploration_scan), \
@@ -191,17 +190,47 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 		config_flags = EXPERIMENT_CONFIG_ALWAYS_ACTIVE)
 
 /obj/machinery/exoscanner
-	name = "Scanner array"
+	name = "scanner array"
 	icon = 'icons/obj/exploration.dmi'
 	icon_state = "scanner_off"
-	desc = "Sophisticated scanning array. Easily influenced by enviroment."
-	idle_power_usage = 0
-	active_power_usage = 500
+	base_icon_state = "scanner"
+	desc = "A sophisticated scanning array. Easily influenced by its environment."
+	circuit = /obj/item/circuitboard/machine/exoscanner
+	///the scan power of this array to supply to scanner_controller
+	var/scan_power = 1
 
 /obj/machinery/exoscanner/Initialize(mapload)
 	. = ..()
-	RegisterSignal(GLOB.exoscanner_controller,list(COMSIG_EXOSCAN_STARTED,COMSIG_EXOSCAN_FINISHED),.proc/scan_change)
+	RegisterSignals(GLOB.exoscanner_controller,list(COMSIG_EXOSCAN_STARTED,COMSIG_EXOSCAN_FINISHED), PROC_REF(scan_change))
 	update_readiness()
+
+/obj/machinery/exoscanner/RefreshParts()
+	. = ..()
+	var/power = 1
+
+	for(var/datum/stock_part/scanning_module/scanning_module in component_parts)
+		power += (scanning_module.tier - 1) / 12
+	scan_power = power
+	GLOB.exoscanner_controller.update_scan_power()
+
+	// More generous power draw scaling. Sum the total energy ratings of all parts involved, divide by how many parts we have, use that as the multiplier.
+	// Otherwise it'd be hitting 81x power draw at T4 parts, which seems... unintended.
+	var/energy_rating = 0
+	for(var/datum/stock_part/part in component_parts)
+		energy_rating += part.energy_rating()
+
+	for(var/obj/item/stock_parts/part in component_parts)
+		energy_rating += part.energy_rating
+
+	idle_power_usage = initial(idle_power_usage) * (energy_rating/8)
+	active_power_usage = initial(active_power_usage) * (energy_rating/8)
+	update_current_power_usage()
+
+/obj/machinery/exoscanner/screwdriver_act(mob/user, obj/item/tool)
+	return default_deconstruction_screwdriver(user, tool)
+
+/obj/machinery/exoscanner/crowbar_act(mob/user, obj/item/tool)
+	return default_deconstruction_crowbar(user, tool)
 
 /obj/machinery/exoscanner/proc/scan_change()
 	SIGNAL_HANDLER
@@ -216,7 +245,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 	GLOB.exoscanner_controller.deactivate_scanner(src)
 
 /obj/machinery/exoscanner/proc/is_ready()
-	return anchored && is_operational
+	return anchored && is_operational && !panel_open
 
 /obj/machinery/exoscanner/proc/update_readiness()
 	if(is_ready())
@@ -227,18 +256,20 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 
 /obj/machinery/exoscanner/update_icon_state()
 	. = ..()
-	if(is_ready())
+	if(panel_open)
+		icon_state = "[base_icon_state]_open"
+	else if(is_ready())
 		if(GLOB.exoscanner_controller.current_scan)
-			icon_state = "scanner_on"
+			icon_state = "[base_icon_state]_on"
 		else
-			icon_state = "scanner_ready"
+			icon_state = "[base_icon_state]_ready"
 	else
-		icon_state = "scanner_off"
+		icon_state = "[base_icon_state]_off"
 
-/obj/machinery/exoscanner/wrench_act(mob/living/user, obj/item/I)
-	..()
-	default_unfasten_wrench(user, I, 10)
-	return TRUE
+/obj/machinery/exoscanner/wrench_act(mob/living/user, obj/item/tool)
+	. = ..()
+	default_unfasten_wrench(user, tool, time = 1 SECONDS)
+	return ITEM_INTERACT_SUCCESS
 
 /obj/machinery/exoscanner/set_anchored(anchorvalue)
 	. = ..()
@@ -246,6 +277,9 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 
 /obj/machinery/exoscanner/on_set_is_operational(old_value)
 	. = ..()
+	update_readiness()
+
+/obj/machinery/exoscanner/on_set_panel_open(old_value)
 	update_readiness()
 
 ///Helper datum to calculate and store scanning power and track in progress scans
@@ -265,7 +299,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 	if(length(GLOB.exoscanner_controller.tracked_dishes) <= 0 || (target && GLOB.exoscanner_controller.get_scan_power(target) <= 0))
 		return
 	current_scan = new(scan_type,target)
-	RegisterSignal(current_scan,COMSIG_PARENT_QDELETING,.proc/cleanup_current_scan)
+	RegisterSignal(current_scan,COMSIG_QDELETING, PROC_REF(cleanup_current_scan))
 	SEND_SIGNAL(src,COMSIG_EXOSCAN_STARTED,current_scan)
 	return current_scan
 
@@ -303,7 +337,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 /datum/scanner_controller/proc/calculate_scan_power(conditions)
 	. = 0
 	for(var/obj/machinery/exoscanner/dish in tracked_dishes)
-		var/effective_power = 1
+		var/effective_power = dish.scan_power
 		for(var/datum/scan_condition/condition in conditions)
 			effective_power *= condition.check_dish(dish)
 			if(!effective_power) //Don't bother continuing if it's zero
@@ -321,7 +355,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 
 /datum/scan_condition/nebula
 	name = "Nebula"
-	description = "Site is within a unusually dense nebula, to reduce scanner noise position dishes at least 15 tiles apart"
+	description = "Site is within an unusually dense nebula. To reduce scanner noise, position dishes at least 15 tiles apart."
 	var/distance = 15
 
 /datum/scan_condition/nebula/check_dish(obj/machinery/exoscanner/dish)
@@ -332,7 +366,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 
 /datum/scan_condition/pulsar
 	name = "Pulsar"
-	description = "Pulsar near the site requires dishes to be shielded from electomagnetic noise, ensure no other machines are working near the dish."
+	description = "A pulsar near the site requires dishes to be shielded from electomagnetic noise. Ensure no other machines are working near the dish."
 	var/distance = 2
 
 /datum/scan_condition/pulsar/check_dish(obj/machinery/exoscanner/dish)
@@ -343,7 +377,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 
 /datum/scan_condition/asteroid_belt
 	name = "Asteroid Belt"
-	description = "An asteroid belt is obscuring the direct line of sight from the station to the site, ensure the dishes are placed outside of station z level."
+	description = "An asteroid belt is obscuring the direct line of sight from the station to the site. Ensure the dishes are placed outside of the station z level."
 
 /datum/scan_condition/asteroid_belt/check_dish(obj/machinery/exoscanner/dish)
 	var/turf/dish_turf = get_turf(dish)
@@ -351,7 +385,7 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 
 /datum/scan_condition/black_hole
 	name = "Black Hole"
-	description = "Background black hole requires you to focus the scan point precisely, ensure the dishes isolated from rest of the station with at least 6 walls around them."
+	description = "A background black hole requires you to focus the scan point precisely. Ensure the dishes are isolated from rest of the station with at least 6 walls around them."
 
 /datum/scan_condition/black_hole/check_dish(obj/machinery/exoscanner/dish)
 	var/wall_count = 0
@@ -366,3 +400,8 @@ GLOBAL_LIST_INIT(scan_conditions,init_scan_conditions())
 
 /datum/scan_condition/easy/check_dish(obj/machinery/exoscanner/dish)
 	return 2
+
+#undef MAX_SCAN_DISTANCE
+#undef WIDE_SCAN_COST
+#undef BASE_POINT_SCAN_TIME
+#undef BASE_DEEP_SCAN_TIME

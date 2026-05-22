@@ -1,25 +1,17 @@
 #define FEVER_CHANGE "fever"
-
-/*
-//////////////////////////////////////
-
-Fever
-
-	No change to hidden.
-	Increases resistance.
-	Increases stage speed.
-	Little transmittable.
-	Low level.
-
-Bonus
-	Heats up your body.
-
-//////////////////////////////////////
-*/
+/**Fever
+ * No change to stealth
+ * Increases resistance considerably
+ * Increases stage speed considerably
+ * Increases transmissibility
+ * Low level
+ * Bonus: Heats up your body
+ */
 
 /datum/symptom/fever
 	name = "Fever"
 	desc = "The virus causes a febrile response from the host, raising its body temperature."
+	illness = "Burning Desire"
 	stealth = 0
 	resistance = 3
 	stage_speed = 3
@@ -29,11 +21,12 @@ Bonus
 	base_message_chance = 20
 	symptom_delay_min = 10
 	symptom_delay_max = 30
-	var/unsafe = FALSE //over the heat threshold
+	symptom_cure = /datum/reagent/medicine/leporazine
 	threshold_descs = list(
 		"Resistance 5" = "Increases fever intensity, fever can overheat and harm the host.",
 		"Resistance 10" = "Further increases fever intensity.",
 	)
+	var/unsafe = FALSE //over the heat threshold
 
 /datum/symptom/fever/Start(datum/disease/advance/A)
 	. = ..()

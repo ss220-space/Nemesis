@@ -5,25 +5,45 @@
  */
 /mob/living/circuit_drone
 	name = "drone"
-	icon = 'icons/obj/wiremod.dmi'
+	icon = 'icons/obj/science/circuits.dmi'
 	icon_state = "setup_medium_med"
-	living_flags = 0
-	light_system = MOVABLE_LIGHT_DIRECTIONAL
+	maxHealth = 300
+	health = 300
+	mob_biotypes = MOB_ROBOTIC
+	living_flags = NONE
+	light_system = OVERLAY_LIGHT_DIRECTIONAL
 	light_on = FALSE
 
 /mob/living/circuit_drone/Initialize(mapload)
 	. = ..()
 	AddComponent(/datum/component/shell, list(
-		new /obj/item/circuit_component/bot_circuit()
+		new /obj/item/circuit_component/bot_circuit(),
+		new /obj/item/circuit_component/remotecam/drone()
 	), SHELL_CAPACITY_LARGE)
+
+/mob/living/circuit_drone/examine(mob/user)
+	. = ..()
+	if(health < maxHealth)
+		if(health > maxHealth/3)
+			. += "[src]'s parts look loose."
+		else
+			. += "[src]'s parts look very loose!"
+	else
+		. += "[src] is in pristine condition."
 
 /mob/living/circuit_drone/updatehealth()
 	. = ..()
 	if(health < 0)
-		gib(no_brain = TRUE, no_organs = TRUE, no_bodyparts = TRUE)
+		gib()
 
-/mob/living/circuit_drone/spawn_gibs()
-	new /obj/effect/gibspawner/robot(drop_location(), src, get_static_viruses())
+/mob/living/circuit_drone/welder_act(mob/living/user, obj/item/tool)
+	. = ..()
+	if(health == maxHealth)
+		balloon_alert(user, "already at maximum integrity!")
+		return TRUE
+	if(tool.use_tool(src, user, 1 SECONDS, volume = 50))
+		heal_overall_damage(50, 50)
+	return TRUE
 
 /obj/item/circuit_component/bot_circuit
 	display_name = "Drone"
@@ -43,6 +63,21 @@
 
 	/// Delay between each movement
 	var/move_delay = 0.2 SECONDS
+
+/obj/item/circuit_component/bot_circuit/register_shell(atom/movable/shell)
+	. = ..()
+	if(ismob(shell))
+		RegisterSignal(shell, COMSIG_PROCESS_BORGCHARGER_OCCUPANT, PROC_REF(on_borg_charge))
+
+/obj/item/circuit_component/bot_circuit/unregister_shell(atom/movable/shell)
+	UnregisterSignal(shell, COMSIG_PROCESS_BORGCHARGER_OCCUPANT)
+	return ..()
+
+/obj/item/circuit_component/bot_circuit/proc/on_borg_charge(datum/source, datum/callback/charge_cell, seconds_per_tick)
+	SIGNAL_HANDLER
+	if (isnull(parent.cell))
+		return
+	charge_cell.Invoke(parent.cell, seconds_per_tick)
 
 /obj/item/circuit_component/bot_circuit/populate_ports()
 	north = add_input_port("Move North", PORT_TYPE_SIGNAL)
@@ -72,6 +107,11 @@
 		COOLDOWN_START(src, west_delay, move_delay)
 
 	if(!direction)
+		return
+
+	if(ismovable(shell.loc)) //Inside an object, tell it we moved
+		var/atom/loc_atom = shell.loc
+		loc_atom.relaymove(shell, direction)
 		return
 
 	if(shell.Process_Spacemove(direction))

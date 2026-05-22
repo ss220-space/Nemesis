@@ -9,6 +9,12 @@
 #define ALIGNMENT_NEUT "neutral"
 #define ALIGNMENT_EVIL "evil"
 
+///how many lines multiplied by tempo should at least be higher than this. Makes people have to choose a long enough song to get the final effect.
+#define FESTIVAL_SONG_LONG_ENOUGH 170
+
+/// the probability, when not overridden by sects, for a bible's bless effect to trigger on a smack
+#define DEFAULT_SMACK_CHANCE 60
+
 //## which weapons should we use?
 
 // unused but for clarity
@@ -48,3 +54,17 @@
 #define PUNISHMENT_LIGHTNING "lightningbolt"
 ///brands the sinner
 #define PUNISHMENT_BRAND "brand"
+
+/// Failed to bless the target, beat them over the head
+#define BLESSING_FAILED "failed"
+/// Blessed unsuccessfully, no limbs to heal, robotic limbs, etc
+#define BLESSING_IGNORED "ignored"
+/// Blessed successfully by healing or whatever
+#define BLESSING_SUCCESS "success"
+
+///The rite will automatically delete itself by the religious tool calling it after it's invoked.
+#define RITE_AUTO_DELETE (1<<0)
+///The rite can be performed multiple times with a religious tool, so don't delete/null it.
+#define RITE_ALLOW_MULTIPLE_PERFORMS (1<<1)
+///The rite can only be fully performed once, so we'll completely remove it from the rite list afterwards.
+#define RITE_ONE_TIME_USE (1<<2)

@@ -18,10 +18,10 @@
 
 /datum/map_generator_module/river
 	var/river_type = /turf/open/lava/smooth
-	var/river_nodes = 4
+	var/river_nodes = 3 // +1 from mapped-in one near the base
 
 /datum/map_generator_module/river/generate()
 	var/datum/map_generator/lavaland/L = mother
 	if(!istype(L))
 		return
-	spawn_rivers(L.start_z, river_nodes, river_type, min_x = L.min_x, min_y = L.min_y, max_x = L.max_x, max_y = L.max_y)
+	spawn_rivers(L.start_z, river_nodes, river_type, /area/lavaland/surface/outdoors/unexplored, min_x = L.min_x, min_y = L.min_y, max_x = L.max_x, max_y = L.max_y)

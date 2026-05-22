@@ -1,7 +1,7 @@
 //Random seeds; stats, traits, and plant type are randomized for each seed.
 
 /obj/item/seeds/random
-	name = "pack of strange seeds"
+	name = "strange seed pack"
 	desc = "Mysterious seeds as strange as their name implies. Spooky."
 	icon_state = "seed-x"
 	species = "?????"
@@ -11,7 +11,7 @@
 	icon_dead = "xpod-dead"
 	icon_harvest = "xpod-harvest"
 	growthstages = 4
-	custom_premium_price = PAYCHECK_EASY * 2
+	custom_premium_price = PAYCHECK_CREW * 2
 
 /obj/item/seeds/random/Initialize(mapload)
 	. = ..()

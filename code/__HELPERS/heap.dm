@@ -10,7 +10,7 @@
 	L = new()
 	cmp = compare
 
-/datum/heap/Destroy(force, ...)
+/datum/heap/Destroy(force)
 	for(var/i in L) // because this is before the list helpers are loaded
 		qdel(i)
 	L = null
@@ -20,13 +20,13 @@
 	return !length(L)
 
 //insert and place at its position a new node in the heap
-/datum/heap/proc/insert(atom/A)
+/datum/heap/proc/insert(A)
 
 	L.Add(A)
 	swim(length(L))
 
 //removes and returns the first element of the heap
-//(i.e the max or the min dependant on the comparison function)
+//(i.e the max or the min dependent on the comparison function)
 /datum/heap/proc/pop()
 	if(!length(L))
 		return 0
@@ -70,7 +70,7 @@
 		return index * 2
 
 //Replaces a given node so it verify the heap condition
-/datum/heap/proc/resort(atom/A)
+/datum/heap/proc/resort(A)
 	var/index = L.Find(A)
 
 	swim(index)

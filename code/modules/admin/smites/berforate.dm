@@ -41,13 +41,17 @@
 
 	dude.Immobilize(5 SECONDS)
 	for (var/wound_bonus_rep in 1 to repetitions)
-		for (var/_limb in dude.bodyparts)
+		for (var/_limb in dude.get_bodyparts())
 			var/obj/item/bodypart/limb = _limb
 			var/shots_this_limb = 0
 			for (var/_iter_turf in shuffle(open_adj_turfs))
 				var/turf/iter_turf = _iter_turf
-				addtimer(CALLBACK(GLOBAL_PROC, .proc/firing_squad, dude, iter_turf, limb.body_zone, wound_bonuses[wound_bonus_rep], damage), delay_counter)
+				addtimer(CALLBACK(GLOBAL_PROC, GLOBAL_PROC_REF(firing_squad), dude, iter_turf, limb.body_zone, wound_bonuses[wound_bonus_rep], damage), delay_counter)
 				delay_counter += delay_per_shot
 				shots_this_limb += 1
 				if (shots_this_limb > shots_per_limb_per_rep)
 					break
+
+/datum/smite/berforate/divine
+	name = ":B:erforate (Divine)"
+	smite_flags = SMITE_DIVINE

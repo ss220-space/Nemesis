@@ -3,73 +3,88 @@
 //Most of the old brain damage effects have been transferred to the dumbness trauma.
 
 /datum/brain_trauma/mild
+	abstract_type = /datum/brain_trauma/mild
 
 /datum/brain_trauma/mild/hallucinations
 	name = "Hallucinations"
 	desc = "Patient suffers constant hallucinations."
 	scan_desc = "schizophrenia"
-	gain_text = "<span class='warning'>You feel your grip on reality slipping...</span>"
-	lose_text = "<span class='notice'>You feel more grounded.</span>"
+	symptoms = "Experiences frequent hallucinations (either visual or auditory) or delusions \
+		which subside on being administered Mindbreaker Toxin."
+	gain_text = span_warning("You feel your grip on reality slipping...")
+	lose_text = span_notice("You feel more grounded.")
+	/// Whether the hallucinations we give are uncapped, ie all the wacky ones
+	var/uncapped = FALSE
 
-/datum/brain_trauma/mild/hallucinations/on_life(delta_time, times_fired)
-	owner.hallucination = min(owner.hallucination + 10, 50)
-	..()
+/datum/brain_trauma/mild/hallucinations/on_life(seconds_per_tick)
+	if(owner.stat >= UNCONSCIOUS)
+		return
+	if(HAS_TRAIT(owner, TRAIT_RDS_SUPPRESSED))
+		owner.remove_language(/datum/language/aphasia, source = LANGUAGE_APHASIA)
+		owner.adjust_hallucinations(-10 SECONDS * seconds_per_tick)
+		return
+
+	owner.grant_language(/datum/language/aphasia, source = LANGUAGE_APHASIA)
+	owner.adjust_hallucinations_up_to(((uncapped ? 12 SECONDS : 5 SECONDS) * seconds_per_tick), (uncapped ? 240 SECONDS : 60 SECONDS))
 
 /datum/brain_trauma/mild/hallucinations/on_lose()
-	owner.hallucination = 0
-	..()
+	owner.remove_status_effect(/datum/status_effect/hallucination)
+	if(!QDELING(owner))
+		owner.remove_language(/datum/language/aphasia, source = LANGUAGE_APHASIA)
+	return ..()
 
 /datum/brain_trauma/mild/stuttering
 	name = "Stuttering"
 	desc = "Patient can't speak properly."
 	scan_desc = "reduced mouth coordination"
-	gain_text = "<span class='warning'>Speaking clearly is getting harder.</span>"
-	lose_text = "<span class='notice'>You feel in control of your speech.</span>"
+	symptoms = "Has difficulty speaking fluently, often repeating or prolonging sounds or syllables."
+	gain_text = span_warning("Speaking clearly is getting harder.")
+	lose_text = span_notice("You feel in control of your speech.")
 
-/datum/brain_trauma/mild/stuttering/on_life(delta_time, times_fired)
-	owner.stuttering = min(owner.stuttering + 5, 25)
-	..()
+/datum/brain_trauma/mild/stuttering/on_life(seconds_per_tick)
+	owner.adjust_stutter_up_to(5 SECONDS * seconds_per_tick, 50 SECONDS)
 
 /datum/brain_trauma/mild/stuttering/on_lose()
-	owner.stuttering = 0
-	..()
+	owner.remove_status_effect(/datum/status_effect/speech/stutter)
+	return ..()
 
 /datum/brain_trauma/mild/dumbness
 	name = "Dumbness"
 	desc = "Patient has reduced brain activity, making them less intelligent."
+	symptoms = "Exhibits a noticeable decline in cognitive functions, including speech, memory, motorics, and problem-solving abilities."
 	scan_desc = "reduced brain activity"
-	gain_text = "<span class='warning'>You feel dumber.</span>"
-	lose_text = "<span class='notice'>You feel smart again.</span>"
+	gain_text = span_warning("You feel dumber.")
+	lose_text = span_notice("You feel smart again.")
 
 /datum/brain_trauma/mild/dumbness/on_gain()
 	ADD_TRAIT(owner, TRAIT_DUMB, TRAUMA_TRAIT)
-	SEND_SIGNAL(owner, COMSIG_ADD_MOOD_EVENT, "dumb", /datum/mood_event/oblivious)
-	..()
+	owner.add_mood_event("dumb", /datum/mood_event/oblivious)
+	return ..()
 
-/datum/brain_trauma/mild/dumbness/on_life(delta_time, times_fired)
-	owner.derpspeech = min(owner.derpspeech + 5, 25)
-	if(DT_PROB(1.5, delta_time))
+/datum/brain_trauma/mild/dumbness/on_life(seconds_per_tick)
+	owner.adjust_derpspeech_up_to(5 SECONDS * seconds_per_tick, 50 SECONDS)
+	if(SPT_PROB(1.5, seconds_per_tick))
 		owner.emote("drool")
-	else if(owner.stat == CONSCIOUS && DT_PROB(1.5, delta_time))
-		owner.say(pick_list_replacements(BRAIN_DAMAGE_FILE, "brain_damage"), forced = "brain damage")
-	..()
+	else if(owner.stat == CONSCIOUS && SPT_PROB(1.5, seconds_per_tick))
+		owner.say(pick_list_replacements(BRAIN_DAMAGE_FILE, "brain_damage"), forced = "brain damage", filterproof = TRUE)
 
 /datum/brain_trauma/mild/dumbness/on_lose()
 	REMOVE_TRAIT(owner, TRAIT_DUMB, TRAUMA_TRAIT)
-	owner.derpspeech = 0
-	SEND_SIGNAL(owner, COMSIG_CLEAR_MOOD_EVENT, "dumb")
-	..()
+	owner.remove_status_effect(/datum/status_effect/speech/stutter/derpspeech)
+	owner.clear_mood_event("dumb")
+	return ..()
 
 /datum/brain_trauma/mild/speech_impediment
 	name = "Speech Impediment"
 	desc = "Patient is unable to form coherent sentences."
 	scan_desc = "communication disorder"
-	gain_text = "<span class='danger'>You can't seem to form any coherent thoughts!</span>"
-	lose_text = "<span class='danger'>Your mind feels more clear.</span>"
+	symptoms = "Struggles to articulate thoughts into coherent speech, often resulting in jumbled or nonsensical sentences."
+	gain_text = span_danger("You can't seem to form any coherent thoughts!")
+	lose_text = span_danger("Your mind feels more clear.")
 
 /datum/brain_trauma/mild/speech_impediment/on_gain()
 	ADD_TRAIT(owner, TRAIT_UNINTELLIGIBLE_SPEECH, TRAUMA_TRAIT)
-	..()
+	. = ..()
 
 /datum/brain_trauma/mild/speech_impediment/on_lose()
 	REMOVE_TRAIT(owner, TRAIT_UNINTELLIGIBLE_SPEECH, TRAUMA_TRAIT)
@@ -78,22 +93,23 @@
 /datum/brain_trauma/mild/concussion
 	name = "Concussion"
 	desc = "Patient's brain is concussed."
+	symptoms = "Experiences headaches, dizziness, nausea, confusion, and occasional loss of consciousness."
 	scan_desc = "concussion"
-	gain_text = "<span class='warning'>Your head hurts!</span>"
-	lose_text = "<span class='notice'>The pressure inside your head starts fading.</span>"
+	gain_text = span_warning("Your head hurts!")
+	lose_text = span_notice("The pressure inside your head starts fading.")
 
-/datum/brain_trauma/mild/concussion/on_life(delta_time, times_fired)
-	if(DT_PROB(2.5, delta_time))
+/datum/brain_trauma/mild/concussion/on_life(seconds_per_tick)
+	if(SPT_PROB(2.5, seconds_per_tick))
 		switch(rand(1,11))
 			if(1)
-				owner.vomit()
+				owner.vomit(VOMIT_CATEGORY_DEFAULT)
 			if(2,3)
-				owner.dizziness += 10
+				owner.adjust_dizzy(20 SECONDS)
 			if(4,5)
-				owner.add_confusion(10)
-				owner.blur_eyes(10)
+				owner.adjust_confusion(10 SECONDS)
+				owner.set_eye_blur_if_lower(20 SECONDS)
 			if(6 to 9)
-				owner.slurring += 30
+				owner.adjust_slurring(1 MINUTES)
 			if(10)
 				to_chat(owner, span_notice("You forget for a moment what you were doing."))
 				owner.Stun(20)
@@ -107,34 +123,35 @@
 	name = "Anosognosia"
 	desc = "Patient always feels healthy, regardless of their condition."
 	scan_desc = "self-awareness deficit"
-	gain_text = "<span class='notice'>You feel great!</span>"
-	lose_text = "<span class='warning'>You no longer feel perfectly healthy.</span>"
+	symptoms = "Exhibits a lack of awareness or denial of their own medical conditions, \
+		often insisting they are perfectly healthy despite clear evidence to the contrary."
+	gain_text = span_notice("You feel great!")
+	lose_text = span_warning("You no longer feel perfectly healthy.")
 
 /datum/brain_trauma/mild/healthy/on_gain()
-	owner.set_screwyhud(SCREWYHUD_HEALTHY)
-	..()
+	owner.apply_status_effect(/datum/status_effect/grouped/screwy_hud/fake_healthy, type)
+	return ..()
 
-/datum/brain_trauma/mild/healthy/on_life(delta_time, times_fired)
-	owner.set_screwyhud(SCREWYHUD_HEALTHY) //just in case of hallucinations
-	owner.adjustStaminaLoss(-2.5 * delta_time) //no pain, no fatigue
-	..()
+/datum/brain_trauma/mild/healthy/on_life(seconds_per_tick)
+	owner.adjust_stamina_loss(-6 * seconds_per_tick) //no pain, no fatigue
 
 /datum/brain_trauma/mild/healthy/on_lose()
-	owner.set_screwyhud(SCREWYHUD_NONE)
-	..()
+	owner.remove_status_effect(/datum/status_effect/grouped/screwy_hud/fake_healthy, type)
+	return ..()
 
 /datum/brain_trauma/mild/muscle_weakness
 	name = "Muscle Weakness"
 	desc = "Patient experiences occasional bouts of muscle weakness."
 	scan_desc = "weak motor nerve signal"
-	gain_text = "<span class='warning'>Your muscles feel oddly faint.</span>"
-	lose_text = "<span class='notice'>You feel in control of your muscles again.</span>"
+	symptoms = "Experiences sudden episodes of muscle weakness, resulting in weak grip strength, difficulty moving, and occasional falls."
+	gain_text = span_warning("Your muscles feel oddly faint.")
+	lose_text = span_notice("You feel in control of your muscles again.")
 
-/datum/brain_trauma/mild/muscle_weakness/on_life(delta_time, times_fired)
+/datum/brain_trauma/mild/muscle_weakness/on_life(seconds_per_tick)
 	var/fall_chance = 1
-	if(owner.m_intent == MOVE_INTENT_RUN)
+	if(owner.move_intent == MOVE_INTENT_RUN)
 		fall_chance += 2
-	if(DT_PROB(0.5 * fall_chance, delta_time) && owner.body_position == STANDING_UP)
+	if(SPT_PROB(0.5 * fall_chance, seconds_per_tick) && owner.body_position == STANDING_UP)
 		to_chat(owner, span_warning("Your leg gives out!"))
 		owner.Paralyze(35)
 
@@ -142,24 +159,25 @@
 		var/drop_chance = 1
 		var/obj/item/I = owner.get_active_held_item()
 		drop_chance += I.w_class
-		if(DT_PROB(0.5 * drop_chance, delta_time) && owner.dropItemToGround(I))
+		if(SPT_PROB(0.5 * drop_chance, seconds_per_tick) && owner.dropItemToGround(I))
 			to_chat(owner, span_warning("You drop [I]!"))
 
-	else if(DT_PROB(1.5, delta_time))
+	else if(SPT_PROB(1.5, seconds_per_tick))
 		to_chat(owner, span_warning("You feel a sudden weakness in your muscles!"))
-		owner.adjustStaminaLoss(50)
+		owner.adjust_stamina_loss(50)
 	..()
 
 /datum/brain_trauma/mild/muscle_spasms
 	name = "Muscle Spasms"
 	desc = "Patient has occasional muscle spasms, causing them to move unintentionally."
 	scan_desc = "nervous fits"
-	gain_text = "<span class='warning'>Your muscles feel oddly faint.</span>"
-	lose_text = "<span class='notice'>You feel in control of your muscles again.</span>"
+	symptoms = "Experiences involuntary muscle contractions leading to sudden, brief movements or twitches, which can interfere with normal motor functions."
+	gain_text = span_warning("Your muscles feel oddly faint.")
+	lose_text = span_notice("You feel in control of your muscles again.")
 
 /datum/brain_trauma/mild/muscle_spasms/on_gain()
 	owner.apply_status_effect(/datum/status_effect/spasms)
-	..()
+	. = ..()
 
 /datum/brain_trauma/mild/muscle_spasms/on_lose()
 	owner.remove_status_effect(/datum/status_effect/spasms)
@@ -169,17 +187,18 @@
 	name = "Nervous Cough"
 	desc = "Patient feels a constant need to cough."
 	scan_desc = "nervous cough"
-	gain_text = "<span class='warning'>Your throat itches incessantly...</span>"
-	lose_text = "<span class='notice'>Your throat stops itching.</span>"
+	symptoms = "Experiences a persistent, uncontrollable urge to cough, which may disrupt normal activities and social interactions."
+	gain_text = span_warning("Your throat itches incessantly...")
+	lose_text = span_notice("Your throat stops itching.")
 
-/datum/brain_trauma/mild/nervous_cough/on_life(delta_time, times_fired)
-	if(DT_PROB(6, delta_time) && !HAS_TRAIT(owner, TRAIT_SOOTHED_THROAT))
+/datum/brain_trauma/mild/nervous_cough/on_life(seconds_per_tick)
+	if(SPT_PROB(6, seconds_per_tick) && !HAS_TRAIT(owner, TRAIT_SOOTHED_THROAT))
 		if(prob(5))
 			to_chat(owner, span_warning("[pick("You have a coughing fit!", "You can't stop coughing!")]"))
 			owner.Immobilize(20)
 			owner.emote("cough")
-			addtimer(CALLBACK(owner, /mob/.proc/emote, "cough"), 6)
-			addtimer(CALLBACK(owner, /mob/.proc/emote, "cough"), 12)
+			addtimer(CALLBACK(owner, TYPE_PROC_REF(/mob/, emote), "cough"), 0.6 SECONDS)
+			addtimer(CALLBACK(owner, TYPE_PROC_REF(/mob/, emote), "cough"), 1.2 SECONDS)
 		owner.emote("cough")
 	..()
 
@@ -187,10 +206,9 @@
 	name = "Expressive Aphasia"
 	desc = "Patient is affected by partial loss of speech leading to a reduced vocabulary."
 	scan_desc = "inability to form complex sentences"
-	gain_text = "<span class='warning'>You lose your grasp on complex words.</span>"
-	lose_text = "<span class='notice'>You feel your vocabulary returning to normal again.</span>"
-
-	var/static/list/common_words = world.file2list("strings/1000_most_common.txt")
+	symptoms = "Struggles to express thoughts verbally, often substituting complex words with simpler alternatives or nonsensical sounds."
+	gain_text = span_warning("You lose your grasp on complex words.")
+	lose_text = span_notice("You feel your vocabulary returning to normal again.")
 
 /datum/brain_trauma/mild/expressive_aphasia/handle_speech(datum/source, list/speech_args)
 	var/message = speech_args[SPEECH_MESSAGE]
@@ -211,7 +229,7 @@
 				word = copytext(word, 1, suffix_foundon)
 			word = html_decode(word)
 
-			if(lowertext(word) in common_words)
+			if(GLOB.most_common_words_alphabetical[LOWER_TEXT(word)])
 				new_message += word + suffix
 			else
 				if(prob(30) && message_split.len > 2)
@@ -231,14 +249,16 @@
 	name = "Mind Echo"
 	desc = "Patient's language neurons do not terminate properly, causing previous speech patterns to occasionally resurface spontaneously."
 	scan_desc = "looping neural pattern"
-	gain_text = "<span class='warning'>You feel a faint echo of your thoughts...</span>"
-	lose_text = "<span class='notice'>The faint echo fades away.</span>"
+	symptoms = "Experiences involuntary repetition of previously heard or spoken phrases, leading to persistent moments of déjà vu in both hearing and speech."
+	gain_text = span_warning("You feel a faint echo of your thoughts...")
+	lose_text = span_notice("The faint echo fades away.")
 	var/list/hear_dejavu = list()
 	var/list/speak_dejavu = list()
 
 /datum/brain_trauma/mild/mind_echo/handle_hearing(datum/source, list/hearing_args)
-	if(owner == hearing_args[HEARING_SPEAKER])
+	if(HAS_TRAIT(owner, TRAIT_DEAF) || owner == hearing_args[HEARING_SPEAKER])
 		return
+
 	if(hear_dejavu.len >= 5)
 		if(prob(25))
 			var/deja_vu = pick_n_take(hear_dejavu)
@@ -264,3 +284,59 @@
 			speak_dejavu += speech_args[SPEECH_MESSAGE]
 	else
 		speak_dejavu += speech_args[SPEECH_MESSAGE]
+
+/datum/brain_trauma/mild/color_blindness
+	name = "Achromatopsia"
+	desc = "Patient's occipital lobe is unable to recognize and interpret color, rendering the patient completely colorblind."
+	scan_desc = "colorblindness"
+	symptoms = "Exhibits a complete inability to perceive colors, seeing the world in shades of gray, black, and white."
+	gain_text = span_warning("The world around you seems to lose its color.")
+	lose_text = span_notice("The world feels bright and colorful again.")
+
+/datum/brain_trauma/mild/color_blindness/on_gain()
+	owner.add_client_colour(/datum/client_colour/monochrome, TRAUMA_TRAIT)
+	return ..()
+
+/datum/brain_trauma/mild/color_blindness/on_lose(silent)
+	owner.remove_client_colour(TRAUMA_TRAIT)
+	return ..()
+
+/datum/brain_trauma/mild/possessive
+	name = "Possessive"
+	desc = "Patient is extremely possessive of their belongings."
+	scan_desc = "possessiveness"
+	symptoms = "Exhibits an overwhelming need to keep personal belongings close, \
+		often resulting in an intense grip on held items that persists even when forced to let go."
+	gain_text = span_warning("You start to worry about your belongings.")
+	lose_text = span_notice("You worry less about your belongings.")
+
+/datum/brain_trauma/mild/possessive/on_lose(silent)
+	. = ..()
+	for(var/obj/item/thing in owner.held_items)
+		clear_trait(thing)
+
+/datum/brain_trauma/mild/possessive/on_life(seconds_per_tick)
+	if(!SPT_PROB(5, seconds_per_tick))
+		return
+
+	var/obj/item/my_thing = pick(owner.held_items) // can pick null, that's fine
+	if(isnull(my_thing) || HAS_TRAIT(my_thing, TRAIT_NODROP) || (my_thing.item_flags & (HAND_ITEM|ABSTRACT)))
+		return
+
+	ADD_TRAIT(my_thing, TRAIT_NODROP, TRAUMA_TRAIT)
+	RegisterSignals(my_thing, list(COMSIG_ITEM_DROPPED, COMSIG_MOVABLE_MOVED), PROC_REF(clear_trait))
+	to_chat(owner, span_warning("You feel a need to keep [my_thing] close..."))
+	addtimer(CALLBACK(src, PROC_REF(relax), my_thing), rand(30 SECONDS, 3 MINUTES), TIMER_DELETE_ME)
+
+/datum/brain_trauma/mild/possessive/proc/relax(obj/item/my_thing)
+	if(QDELETED(my_thing))
+		return
+	if(HAS_TRAIT_FROM_ONLY(my_thing, TRAIT_NODROP, TRAUMA_TRAIT)) // in case something else adds nodrop, somehow?
+		to_chat(owner, span_notice("You feel more comfortable letting go of [my_thing]."))
+	clear_trait(my_thing)
+
+/datum/brain_trauma/mild/possessive/proc/clear_trait(obj/item/my_thing, ...)
+	SIGNAL_HANDLER
+
+	REMOVE_TRAIT(my_thing, TRAIT_NODROP, TRAUMA_TRAIT)
+	UnregisterSignal(my_thing, list(COMSIG_ITEM_DROPPED, COMSIG_MOVABLE_MOVED))

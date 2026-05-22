@@ -24,6 +24,9 @@
 	/// If the configuration is loaded
 	var/loaded = FALSE
 
+	/// If a reload is in progress
+	var/reload_in_progress = FALSE
+
 	/// A regex that matches words blocked IC
 	var/static/regex/ic_filter_regex
 
@@ -60,13 +63,27 @@
 	/// An assoc list of words that are soft blocked both IC and OOC to their reasons
 	var/static/list/soft_shared_filter_reasons
 
+	/// A list of configuration errors that occurred during load
+	var/static/list/configuration_errors
+
 /datum/controller/configuration/proc/admin_reload()
-	if(IsAdminAdvancedProcCall())
+	if(IsAdminAdvancedProcCall() || !PreConfigReload())
 		return
+
 	log_admin("[key_name_admin(usr)] has forcefully reloaded the configuration from disk.")
 	message_admins("[key_name_admin(usr)] has forcefully reloaded the configuration from disk.")
 	full_wipe()
 	Load(world.params[OVERRIDE_CONFIG_DIRECTORY_PARAMETER])
+
+/datum/controller/configuration/proc/PreConfigReload()
+	if(reload_in_progress)
+		to_chat(usr, span_warning("Another user is already reloading the config!"))
+		return FALSE
+
+	reload_in_progress = TRUE
+	world.TgsTriggerEvent("tg-PreConfigReload", wait_for_completion = TRUE)
+	reload_in_progress = FALSE
+	return TRUE
 
 /datum/controller/configuration/proc/Load(_directory)
 	if(IsAdminAdvancedProcCall()) //If admin proccall is detected down the line it will horribly break everything.
@@ -75,6 +92,7 @@
 		directory = _directory
 	if(entries)
 		CRASH("/datum/controller/configuration/Load() called more than once!")
+	configuration_errors ||= list()
 	InitEntries()
 	if(fexists("[directory]/config.txt") && LoadEntries("config.txt") <= 1)
 		var/list/legacy_configs = list("game_options.txt", "dbconfig.txt", "comms.txt")
@@ -84,15 +102,27 @@
 				for(var/J in legacy_configs)
 					LoadEntries(J)
 				break
+	if (fexists("[directory]/dev_overrides.txt"))
+		LoadEntries("dev_overrides.txt")
+	if (fexists("[directory]/ezdb.txt"))
+		LoadEntries("ezdb.txt")
 	loadmaplist(CONFIG_MAPS_FILE)
 	LoadMOTD()
 	LoadPolicy()
 	LoadChatFilter()
+	if(CONFIG_GET(flag/load_jobs_from_txt))
+		validate_job_config()
+		if(SSjob.initialized) // in case we're reloading from disk after initialization, wanna make sure the changes update in the ongoing shift
+			SSjob.load_jobs_from_config()
+
+	if(CONFIG_GET(flag/usewhitelist))
+		load_whitelist()
 
 	loaded = TRUE
 
 	if (Master)
 		Master.OnConfigLoad()
+	process_config_errors()
 
 /datum/controller/configuration/proc/full_wipe()
 	if(IsAdminAdvancedProcCall())
@@ -103,6 +133,7 @@
 	QDEL_LIST_ASSOC_VAL(maplist)
 	maplist = null
 	QDEL_NULL(defaultmap)
+	configuration_errors?.Cut()
 
 /datum/controller/configuration/Destroy()
 	full_wipe()
@@ -110,21 +141,29 @@
 
 	return ..()
 
+/datum/controller/configuration/proc/log_config_error(error_message)
+	configuration_errors += error_message
+	log_config(error_message)
+
+/datum/controller/configuration/proc/process_config_errors()
+	if(!CONFIG_GET(flag/config_errors_runtime))
+		return
+	for(var/error_message in configuration_errors)
+		stack_trace(error_message)
+
 /datum/controller/configuration/proc/InitEntries()
 	var/list/_entries = list()
 	entries = _entries
 	var/list/_entries_by_type = list()
 	entries_by_type = _entries_by_type
 
-	for(var/I in typesof(/datum/config_entry)) //typesof is faster in this case
+	for(var/I in valid_subtypesof(/datum/config_entry)) //typesof is faster in this case
 		var/datum/config_entry/E = I
-		if(initial(E.abstract_type) == I)
-			continue
 		E = new I
 		var/esname = E.name
 		var/datum/config_entry/test = _entries[esname]
 		if(test)
-			log_config("Error: [test.type] has the same name as [E.type]: [esname]! Not initializing [E.type]!")
+			log_config_error("Error: [test.type] has the same name as [E.type]: [esname]! Not initializing [E.type]!")
 			qdel(E)
 			continue
 		_entries[esname] = E
@@ -138,9 +177,28 @@
 	if(IsAdminAdvancedProcCall())
 		return
 
-	var/filename_to_test = world.system_type == MS_WINDOWS ? lowertext(filename) : filename
+	var/list/separate_levels = splittext(filename, "/")
+	// allows for inheriting our folder from the thing that included us
+	var/subfolder = ""
+	// do we have an actual directory or is this just one file
+	if(length(separate_levels) > 1)
+		var/actual_filename = separate_levels[length(separate_levels)]
+		// We need to sanitize out .. to ensure filename_to_test doesn't accidentially an infinte loop here
+		// Need filename in absolute form
+		var/list/parsed_folder_bits = list()
+		// look at just the relative directory referenced
+		for(var/entry in separate_levels - actual_filename)
+			if(entry == ".." && length(parsed_folder_bits))
+				parsed_folder_bits.Cut(length(parsed_folder_bits), 0)
+			else
+				parsed_folder_bits += entry
+		if(length(parsed_folder_bits))
+			subfolder = "[parsed_folder_bits.Join("/")]/"
+		filename = "[subfolder][actual_filename]"
+
+	var/filename_to_test = world.system_type == MS_WINDOWS ? LOWER_TEXT(filename) : filename
 	if(filename_to_test in stack)
-		log_config("Warning: Config recursion detected ([english_list(stack)]), breaking!")
+		log_config_error("Warning: Config recursion detected ([english_list(stack)]), breaking!")
 		return
 	stack = stack + filename_to_test
 
@@ -165,27 +223,27 @@
 		var/value = null
 
 		if(pos)
-			entry = lowertext(copytext(L, 1, pos))
+			entry = LOWER_TEXT(copytext(L, 1, pos))
 			value = copytext(L, pos + length(L[pos]))
 		else
-			entry = lowertext(L)
+			entry = LOWER_TEXT(L)
 
 		if(!entry)
 			continue
 
 		if(entry == "$include")
 			if(!value)
-				log_config("Warning: Invalid $include directive: [value]")
+				log_config_error("Warning: Invalid $include directive: [value]")
 			else
-				LoadEntries(value, stack)
+				LoadEntries("[subfolder][value]", stack)
 				++.
 			continue
 
 		// Reset directive, used for setting a config value back to defaults. Useful for string list config types
 		if (entry == "$reset")
-			var/datum/config_entry/resetee = _entries[lowertext(value)]
+			var/datum/config_entry/resetee = _entries[LOWER_TEXT(value)]
 			if (!value || !resetee)
-				log_config("Warning: invalid $reset directive: [value]")
+				log_config_error("Warning: invalid $reset directive: [value]")
 				continue
 			resetee.set_default()
 			log_config("Reset configured value for [value] to original defaults")
@@ -215,10 +273,12 @@
 
 		var/validated = E.ValidateAndSet(value)
 		if(!validated)
-			log_config("Failed to validate setting \"[value]\" for [entry]")
+			var/log_message = "Failed to validate setting \"[value]\" for [entry]"
+			log_config(log_message)
+			stack_trace(log_message)
 		else
-			if(E.modified && !E.dupes_allowed)
-				log_config("Duplicate setting for [entry] ([value], [E.resident_file]) detected! Using latest.")
+			if(E.modified && !E.dupes_allowed && E.resident_file == filename)
+				log_config_error("Duplicate setting for [entry] ([value], [E.resident_file]) detected! Using latest.")
 
 		E.resident_file = filename
 
@@ -290,7 +350,7 @@ Value is raw html.
 
 Possible keywords :
 Job titles / Assigned roles (ghost spawners for example) : Assistant , Captain , Ash Walker
-Mob types : /mob/living/simple_animal/hostile/carp
+Mob types : /mob/living/basic/carp
 Antagonist types : /datum/antagonist/highlander
 Species types : /datum/species/lizard
 special keywords defined in _DEFINES/admin.dm
@@ -305,12 +365,13 @@ Example config:
 */
 /datum/controller/configuration/proc/LoadPolicy()
 	policy = list()
-	var/rawpolicy = file2text("[directory]/policy.json")
+	var/json_path = CONFIG_GET(string/policy_json_path)
+	var/rawpolicy = file2text("[directory]/[json_path]")
 	if(rawpolicy)
 		var/parsed = safe_json_decode(rawpolicy)
 		if(!parsed)
-			log_config("JSON parsing failure for policy.json")
-			DelayedMessageAdmins("JSON parsing failure for policy.json")
+			log_config("JSON parsing failure for policy.json {[json_path]}")
+			DelayedMessageAdmins("JSON parsing failure for policy.json {[json_path]}")
 		else
 			policy = parsed
 
@@ -335,10 +396,10 @@ Example config:
 		var/data = null
 
 		if(pos)
-			command = lowertext(copytext(t, 1, pos))
+			command = LOWER_TEXT(copytext(t, 1, pos))
 			data = copytext(t, pos + length(t[pos]))
 		else
-			command = lowertext(t)
+			command = LOWER_TEXT(t)
 
 		if(!command)
 			continue
@@ -370,6 +431,12 @@ Example config:
 				currentmap = null
 			if ("disabled")
 				currentmap = null
+			if("feedbacklink")
+				if(currentmap.map_name == SSmapping.current_map.map_name)
+					SSmapping.current_map.feedback_link = data
+			if("webmap_url")
+				if(currentmap.map_name == SSmapping.current_map.map_name)
+					SSmapping.current_map.mapping_url = data
 			else
 				log_config("Unknown command in map vote config: '[command]'")
 
@@ -379,13 +446,13 @@ Example config:
 		return
 
 	log_config("Loading config file word_filter.toml...")
-
-	var/list/word_filter = rustg_read_toml_file("[directory]/word_filter.toml")
-	if (!islist(word_filter))
-		var/message = "The word filter configuration did not output a list, contact someone with configuration access to make sure it's setup properly."
+	var/list/result = rustg_raw_read_toml_file("[directory]/word_filter.toml")
+	if(!result["success"])
+		var/message = "The word filter is not configured correctly! [result["content"]]"
 		log_config(message)
 		DelayedMessageAdmins(message)
 		return
+	var/list/word_filter = json_decode(result["content"])
 
 	ic_filter_reasons = try_extract_from_word_filter(word_filter, "ic")
 	ic_outside_pda_filter_reasons = try_extract_from_word_filter(word_filter, "ic_outside_pda")
@@ -442,7 +509,7 @@ Example config:
 	var/list/formatted_banned_words = list()
 
 	for (var/banned_word in banned_words)
-		formatted_banned_words[lowertext(banned_word)] = banned_words[banned_word]
+		formatted_banned_words[LOWER_TEXT(banned_word)] = banned_words[banned_word]
 	return formatted_banned_words
 
 /datum/controller/configuration/proc/compile_filter_regex(list/banned_words)
@@ -468,6 +535,31 @@ Example config:
 	var/regex_filter = whitespace_split != "" ? "([whitespace_split]|[word_bounds])" : word_bounds
 	return regex(regex_filter, "i")
 
+/// Check to ensure that the jobconfig is valid/in-date.
+/datum/controller/configuration/proc/validate_job_config()
+	var/config_toml = "[directory]/jobconfig.toml"
+	var/config_txt = "[directory]/jobs.txt"
+	var/message = "Notify Server Operators: "
+	log_config("Validating config file jobconfig.toml...")
+
+	if(!fexists(file(config_toml)))
+		SSjob.legacy_mode = TRUE
+		message += "jobconfig.toml not found, falling back to legacy mode (using jobs.txt). To suppress this warning, generate a jobconfig.toml by running the verb 'Generate Job Configuration' in the Server tab.\n\
+			From there, you can then add it to the /config folder of your server to have it take effect for future rounds."
+
+		if(!fexists(file(config_txt)))
+			message += "\n\nFailed to set up legacy mode, jobs.txt not found! Codebase defaults will be used. If you do not wish to use this system, please disable it by commenting out the LOAD_JOBS_FROM_TXT config flag."
+
+		log_config(message)
+		DelayedMessageAdmins(span_notice(message))
+		return
+
+	var/list/result = rustg_raw_read_toml_file(config_toml)
+	if(!result["success"])
+		message += "The job config (jobconfig.toml) is not configured correctly! [result["content"]]"
+		log_config(message)
+		DelayedMessageAdmins(span_notice(message))
+
 //Message admins when you can.
 /datum/controller/configuration/proc/DelayedMessageAdmins(text)
-	addtimer(CALLBACK(GLOBAL_PROC, /proc/message_admins, text), 0)
+	addtimer(CALLBACK(GLOBAL_PROC, GLOBAL_PROC_REF(message_admins), text), 0)

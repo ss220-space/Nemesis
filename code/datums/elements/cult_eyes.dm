@@ -1,10 +1,9 @@
-/**
+/***
  * # Cult eyes element
  *
  * Applies and removes the glowing cult eyes
  */
 /datum/element/cult_eyes
-	element_flags = ELEMENT_DETACH
 
 /datum/element/cult_eyes/Attach(datum/target, initial_delay = 20 SECONDS)
 	. = ..()
@@ -12,23 +11,26 @@
 		return ELEMENT_INCOMPATIBLE
 
 	// Register signals for mob transformation to prevent premature halo removal
-	RegisterSignal(target, list(COMSIG_CHANGELING_TRANSFORM, COMSIG_MONKEY_HUMANIZE, COMSIG_HUMAN_MONKEYIZE), .proc/set_eyes)
-	addtimer(CALLBACK(src, .proc/set_eyes, target), initial_delay)
+	RegisterSignals(target, list(COMSIG_CHANGELING_TRANSFORM, COMSIG_MONKEY_HUMANIZE, COMSIG_HUMAN_MONKEYIZE), PROC_REF(set_eyes))
+	addtimer(CALLBACK(src, PROC_REF(set_eyes), target), initial_delay)
 
 /**
  * Cult eye setter proc
- *
- * Changes the eye color, and adds the glowing eye trait to the mob.
+ * * Changes the eye color, and adds the glowing eye trait to the mob.
  */
 /datum/element/cult_eyes/proc/set_eyes(mob/living/target)
 	SIGNAL_HANDLER
 
+	if(!IS_CULTIST(target))
+		target.RemoveElement(/datum/element/cult_eyes)
+		return
+
 	ADD_TRAIT(target, TRAIT_UNNATURAL_RED_GLOWY_EYES, CULT_TRAIT)
-	if (ishuman(target))
-		var/mob/living/carbon/human/human_parent = target
-		human_parent.eye_color = BLOODCULT_EYE
-		human_parent.dna.update_ui_block(DNA_EYE_COLOR_BLOCK)
-		human_parent.update_body()
+	if (!ishuman(target))
+		return
+	var/mob/living/carbon/human/human_parent = target
+	human_parent.add_eye_color(BLOODCULT_EYE, EYE_COLOR_CULT_PRIORITY)
+	human_parent.update_eyes()
 
 /**
  * Detach proc
@@ -39,8 +41,7 @@
 	REMOVE_TRAIT(target, TRAIT_UNNATURAL_RED_GLOWY_EYES, CULT_TRAIT)
 	if (ishuman(target))
 		var/mob/living/carbon/human/human_parent = target
-		human_parent.eye_color = initial(human_parent.eye_color)
-		human_parent.dna.update_ui_block(DNA_EYE_COLOR_BLOCK)
-		human_parent.update_body()
+		human_parent.remove_eye_color(EYE_COLOR_CULT_PRIORITY)
+		human_parent.update_eyes()
 	UnregisterSignal(target, list(COMSIG_CHANGELING_TRANSFORM, COMSIG_HUMAN_MONKEYIZE, COMSIG_MONKEY_HUMANIZE))
 	return ..()

@@ -5,9 +5,8 @@
 	icon_state = "tube-construct-stage1"
 	anchored = TRUE
 	layer = WALL_OBJ_LAYER
-	plane = GAME_PLANE_UPPER
 	max_integrity = 200
-	armor = list(MELEE = 50, BULLET = 10, LASER = 10, ENERGY = 0, BOMB = 0, BIO = 0, FIRE = 80, ACID = 50)
+	armor_type = /datum/armor/structure_light_construct
 
 	///Light construction stage (LIGHT_CONSTRUCT_EMPTY, LIGHT_CONSTRUCT_WIRED, LIGHT_CONSTRUCT_CLOSED)
 	var/stage = LIGHT_CONSTRUCT_EMPTY
@@ -18,18 +17,31 @@
 	///Reference for light object
 	var/obj/machinery/light/new_light = null
 	///Reference for the internal cell
-	var/obj/item/stock_parts/cell/cell
+	var/obj/item/stock_parts/power_store/cell
 	///Can we support a cell?
 	var/cell_connectors = TRUE
 
-/obj/structure/light_construct/Initialize(mapload, ndir, building)
+/datum/armor/structure_light_construct
+	melee = 50
+	bullet = 10
+	laser = 10
+	fire = 80
+	acid = 50
+
+/obj/structure/light_construct/Initialize(mapload)
 	. = ..()
-	if(building)
-		setDir(ndir)
+	if(mapload && !find_and_mount_on_atom(mark_for_late_init = TRUE))
+		return INITIALIZE_HINT_LATELOAD
+
+/obj/structure/light_construct/LateInitialize()
+	find_and_mount_on_atom(late_init = TRUE)
 
 /obj/structure/light_construct/Destroy()
 	QDEL_NULL(cell)
 	return ..()
+
+/obj/structure/light_construct/get_turfs_to_mount_on()
+	return list(get_step(src, dir))
 
 /obj/structure/light_construct/get_cell()
 	return cell
@@ -38,16 +50,16 @@
 	. = ..()
 	switch(stage)
 		if(LIGHT_CONSTRUCT_EMPTY)
-			. += "It's an empty frame."
+			. += span_notice("It's an empty frame with no wires.")
 		if(LIGHT_CONSTRUCT_WIRED)
-			. += "It's wired."
+			. += span_notice("It is wired, but the bolts are not screwed in.")
 		if(LIGHT_CONSTRUCT_CLOSED)
-			. += "The casing is closed."
+			. += span_notice("The casing is closed.")
 	if(cell_connectors)
 		if(cell)
-			. += "You see [cell] inside the casing."
+			. += span_notice("You see [cell] inside the casing.")
 		else
-			. += "The casing has no power cell for backup power."
+			. += span_notice("The casing has no power cell for backup power.")
 	else
 		. += span_danger("This casing doesn't support power cells for backup power.")
 
@@ -56,7 +68,6 @@
 		return
 	user.visible_message(span_notice("[user] removes [cell] from [src]!"), span_notice("You remove [cell]."))
 	user.put_in_hands(cell)
-	cell.update_appearance()
 	cell = null
 	add_fingerprint(user)
 
@@ -64,14 +75,14 @@
 	if(!cell)
 		return
 	to_chat(user, span_notice("You telekinetically remove [cell]."))
-	var/obj/item/stock_parts/cell/cell_reference = cell
+	var/obj/item/stock_parts/power_store/cell_reference = cell
 	cell = null
 	cell_reference.forceMove(drop_location())
 	return cell_reference.attack_tk(user)
 
-/obj/structure/light_construct/attackby(obj/item/tool, mob/user, params)
+/obj/structure/light_construct/attackby(obj/item/tool, mob/user, list/modifiers, list/attack_modifiers)
 	add_fingerprint(user)
-	if(istype(tool, /obj/item/stock_parts/cell))
+	if(istype(tool, /obj/item/stock_parts/power_store/cell))
 		if(!cell_connectors)
 			to_chat(user, span_warning("This [name] can't support a power cell!"))
 			return
@@ -101,11 +112,10 @@
 					return
 				to_chat(user, span_notice("You begin deconstructing [src]..."))
 				if (tool.use_tool(src, user, 30, volume=50))
-					new /obj/item/stack/sheet/iron(drop_location(), sheets_refunded)
 					user.visible_message(span_notice("[user.name] deconstructs [src]."), \
 						span_notice("You deconstruct [src]."), span_hear("You hear a ratchet."))
 					playsound(src, 'sound/items/deconstruct.ogg', 75, TRUE)
-					qdel(src)
+					deconstruct()
 				return
 
 			if(istype(tool, /obj/item/stack/cable_coil))
@@ -138,10 +148,13 @@
 				tool.play_tool_sound(src, 75)
 				switch(fixture_type)
 					if("tube")
-						new_light = new /obj/machinery/light/built(loc)
+						new_light = new /obj/machinery/light/empty(loc)
 					if("bulb")
-						new_light = new /obj/machinery/light/small/built(loc)
+						new_light = new /obj/machinery/light/small/empty(loc)
+					if("floor")
+						new_light = new /obj/machinery/light/floor/empty(loc)
 				new_light.setDir(dir)
+				new_light.find_and_mount_on_atom()
 				transfer_fingerprints_to(new_light)
 				if(!QDELETED(cell))
 					new_light.cell = cell
@@ -153,15 +166,27 @@
 
 /obj/structure/light_construct/blob_act(obj/structure/blob/attacking_blob)
 	if(attacking_blob && attacking_blob.loc == loc)
-		qdel(src)
+		deconstruct(FALSE)
 
-/obj/structure/light_construct/deconstruct(disassembled = TRUE)
-	if(!(flags_1 & NODECONSTRUCT_1))
-		new /obj/item/stack/sheet/iron(loc, sheets_refunded)
-	qdel(src)
+/obj/structure/light_construct/atom_deconstruct(disassembled)
+	new /obj/item/stack/sheet/iron(loc, sheets_refunded)
+	if(stage == LIGHT_CONSTRUCT_WIRED)
+		new /obj/item/stack/cable_coil(drop_location(), 1, "red")
 
 /obj/structure/light_construct/small
 	name = "small light fixture frame"
 	icon_state = "bulb-construct-stage1"
 	fixture_type = "bulb"
 	sheets_refunded = 1
+
+/obj/structure/light_construct/floor
+	name = "floor light fixture frame"
+	icon_state = "floor-construct-stage1"
+	fixture_type = "floor"
+	sheets_refunded = 1
+
+/obj/structure/light_construct/floor/get_turfs_to_mount_on()
+	return list(get_turf(src))
+
+/obj/structure/light_construct/floor/is_mountable_turf(turf/target)
+	return !isgroundlessturf(target)

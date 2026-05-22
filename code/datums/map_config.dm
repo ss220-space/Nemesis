@@ -1,7 +1,7 @@
-//used for holding information about unique properties of maps
-//feed it json files that match the datum layout
-//defaults to box
-//  -Cyberboss
+//This file is used to contain unique properties of every map, and how we wish to alter them on a per-map basis.
+//Use JSON files that match the datum layout and you should be set from there.
+//Right now, we default to MetaStation to ensure something does indeed load by default.
+//  -san7890 (with regards to Cyberboss)
 
 /datum/map_config
 	// Metadata
@@ -13,26 +13,61 @@
 	var/voteweight = 1
 	var/votable = FALSE
 
+	///A URL linking to a place for people to send feedback about this map.
+	var/feedback_link
+
+	/// The URL given by config directing you to the webmap.
+	var/mapping_url
+
 	// Config actually from the JSON - should default to Meta
-	var/map_name = "Meta Station"
+	var/map_name = "MetaStation"
 	var/map_path = "map_files/MetaStation"
 	var/map_file = "MetaStation.dmm"
 
 	var/traits = null
-	var/space_ruin_levels = 7
-	var/space_empty_levels = 1
+	var/space_ruin_levels = DEFAULT_SPACE_RUIN_LEVELS
+	var/space_empty_levels = DEFAULT_SPACE_EMPTY_LEVELS
 
-	var/minetype = "lavaland"
+	/// Boolean that tells us if this is a planetary station. (like IceBoxStation)
+	var/planetary = FALSE
+	/// How many z's to generate around a planetary station
+	var/wilderness_levels = 0
+	/// Directory to the wilderness area we can spawn in
+	var/wilderness_directory
+	/// Index of map names (inside wilderness_directory) with the amount to spawn. ("ice_planes" = 1) for one ice spawn
+	var/list/maps_to_spawn = list()
+
+	///The type of mining Z-level that should be loaded.
+	var/minetype = MINETYPE_LAVALAND
+	///If no minetype is set, this will be the blacklist file used
+	var/blacklist_file
 
 	var/allow_custom_shuttles = TRUE
 	var/shuttles = list(
 		"cargo" = "cargo_box",
 		"ferry" = "ferry_fancy",
-		"whiteship" = "whiteship_box",
-		"emergency" = "emergency_box")
+		"whiteship" = "whiteship_meta",
+		"emergency" = "emergency_meta",
+	)
 
 	/// Dictionary of job sub-typepath to template changes dictionary
 	var/job_changes = list()
+	/// List of additional areas that count as a part of the library
+	var/library_areas = list()
+	/// Boolean - if TRUE, the "Up" and "Down" traits are automatically distributed to the map's z-levels. If FALSE; they're set via JSON.
+	var/height_autosetup = TRUE
+
+	/// Boolean - if TRUE, players spawn with grappling hooks in their bags
+	var/give_players_hooks = FALSE
+
+	/// List of unit tests that are skipped when running this map
+	var/list/skipped_tests
+
+	/// Boolean that tells SSmapping to load all away missions in the codebase.
+	var/load_all_away_missions = FALSE
+
+	/// Number of additional weakpoints to spawn for SSminor_mapping
+	var/bonus_weakpoints = 0
 
 /**
  * Proc that simply loads the default map config, which should always be functional.
@@ -51,7 +86,7 @@
  * Returns the config for the map to load.
  */
 /proc/load_map_config(filename = null, directory = null, error_if_missing = TRUE)
-	var/datum/map_config/config = load_default_map_config()
+	var/datum/map_config/configuring_map = load_default_map_config()
 
 	if(filename) // If none is specified, then go to look for next_map.json, for map rotation purposes.
 
@@ -59,7 +94,7 @@
 		if(directory)
 			if(!(directory in MAP_DIRECTORY_WHITELIST))
 				log_world("map directory not in whitelist: [directory] for map [filename]")
-				return config
+				return configuring_map
 		else
 			directory = MAP_DIRECTORY_MAPS
 
@@ -68,10 +103,10 @@
 		filename = PATH_TO_NEXT_MAP_JSON
 
 
-	if (!config.LoadConfig(filename, error_if_missing))
-		qdel(config)
+	if (!configuring_map.LoadConfig(filename, error_if_missing))
+		qdel(configuring_map)
 		return load_default_map_config()
-	return config
+	return configuring_map
 
 
 #define CHECK_EXISTS(X) if(!istext(json[X])) { log_world("[##X] missing from json!"); return; }
@@ -164,8 +199,31 @@
 		log_world("map_config space_empty_levels is not a number!")
 		return
 
+	temp = json["wilderness_levels"]
+	if (isnum(temp))
+		wilderness_levels = temp
+	else if (!isnull(temp))
+		log_world("map_config wilderness_levels is not a number!")
+		return
+
 	if ("minetype" in json)
 		minetype = json["minetype"]
+
+	if ("planetary" in json)
+		planetary = json["planetary"]
+
+	if ("blacklist_file" in json)
+		blacklist_file = json["blacklist_file"]
+
+	if ("load_all_away_missions" in json)
+		load_all_away_missions = json["load_all_away_missions"]
+
+	if ("give_players_hooks" in json)
+		give_players_hooks = json["give_players_hooks"]
+
+	if ("bonus_weakpoints" in json)
+		bonus_weakpoints = json["bonus_weakpoints"]
+
 
 	allow_custom_shuttles = json["allow_custom_shuttles"] != FALSE
 
@@ -175,8 +233,43 @@
 			return
 		job_changes = json["job_changes"]
 
+	if("library_areas" in json)
+		if(!islist(json["library_areas"]))
+			log_world("map_config \"library_areas\" field is missing or invalid!")
+			return
+		for(var/path_as_text in json["library_areas"])
+			var/path = text2path(path_as_text)
+			if(!ispath(path, /area))
+				stack_trace("Invalid path in mapping config for additional library areas: \[[path_as_text]\]")
+				continue
+			library_areas += path
+
+	if ("height_autosetup" in json)
+		height_autosetup = json["height_autosetup"]
+
+	var/list/wilderness = json["wilderness"]
+	// If we got wilderness levels, fetch them from the config
+	if (islist(wilderness))
+		wilderness_directory = wilderness["directory"]
+		wilderness.Remove("directory")
+
+		// Just pick and take based on weight
+		for(var/i in 1 to wilderness_levels)
+			maps_to_spawn += pick_weight_take(wilderness)
+		shuffle(maps_to_spawn)
+
+#ifdef UNIT_TESTS
+	// Check for unit tests to skip, no reason to check these if we're not running tests
+	for(var/path_as_text in json["ignored_unit_tests"])
+		var/path_real = text2path(path_as_text)
+		if(!ispath(path_real, /datum/unit_test))
+			stack_trace("Invalid path in mapping config for ignored unit tests: \[[path_as_text]\]")
+			continue
+		LAZYADD(skipped_tests, path_real)
+#endif
+
 	defaulted = FALSE
-	return TRUE
+	return json
 #undef CHECK_EXISTS
 
 /datum/map_config/proc/GetFullMapPaths()

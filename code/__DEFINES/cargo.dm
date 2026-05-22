@@ -1,33 +1,9 @@
-#define STYLE_STANDARD 1
-#define STYLE_BLUESPACE 2
-#define STYLE_CENTCOM 3
-#define STYLE_SYNDICATE 4
-#define STYLE_BLUE 5
-#define STYLE_CULT 6
-#define STYLE_MISSILE 7
-#define STYLE_RED_MISSILE 8
-#define STYLE_BOX 9
-#define STYLE_HONK 10
-#define STYLE_FRUIT 11
-#define STYLE_INVISIBLE 12
-#define STYLE_GONDOLA 13
-#define STYLE_SEETHROUGH 14
-
-#define POD_SHAPE 1
-#define POD_BASE 2
-#define POD_DOOR 3
-#define POD_DECAL 4
-#define POD_GLOW 5
-#define POD_RUBBLE_TYPE 6
-#define POD_NAME 7
-#define POD_DESC 8
-
 #define RUBBLE_NONE 1
 #define RUBBLE_NORMAL 2
 #define RUBBLE_WIDE 3
 #define RUBBLE_THIN 4
 
-#define POD_SHAPE_NORML 1
+#define POD_SHAPE_NORMAL 1
 #define POD_SHAPE_OTHER 2
 
 #define POD_TRANSIT "1"
@@ -37,24 +13,85 @@
 
 #define SUPPLYPOD_X_OFFSET -16
 
+///DO NOT GO ANY LOWER THAN X1.4 the "CARGO_CRATE_VALUE" value if using regular crates, or infinite profit will be possible! This is also unit tested against.
+#define CARGO_MINIMUM_COST CARGO_CRATE_VALUE * 1.4
+
 /// The baseline unit for cargo crates. Adjusting this will change the cost of all in-game shuttles, crate export values, bounty rewards, and all supply pack import values, as they use this as their unit of measurement.
 #define CARGO_CRATE_VALUE 200
 
-GLOBAL_LIST_EMPTY(supplypod_loading_bays)
+/// The highest amount of orders you can have of one thing at any one time
+#define CARGO_MAX_ORDER 50
 
-GLOBAL_LIST_INIT(podstyles, list(\
-	list(POD_SHAPE_NORML, "pod",         TRUE, "default", "yellow",   RUBBLE_NORMAL, "supply pod",     "A Nanotrasen supply drop pod."),\
-	list(POD_SHAPE_NORML, "advpod",      TRUE, "bluespace", "blue",     RUBBLE_NORMAL, "bluespace supply pod" ,     "A Nanotrasen Bluespace supply pod. Teleports back to CentCom after delivery."),\
-	list(POD_SHAPE_NORML, "advpod",      TRUE, "centcom", "blue",     RUBBLE_NORMAL, "\improper CentCom supply pod", "A Nanotrasen supply pod, this one has been marked with Central Command's designations. Teleports back to CentCom after delivery."),\
-	list(POD_SHAPE_NORML, "darkpod",     TRUE, "syndicate", "red",      RUBBLE_NORMAL, "blood-red supply pod", "An intimidating supply pod, covered in the blood-red markings of the Syndicate. It's probably best to stand back from this."),\
-	list(POD_SHAPE_NORML, "darkpod",     TRUE, "deathsquad", "blue",     RUBBLE_NORMAL, "\improper Deathsquad drop pod",     "A Nanotrasen drop pod. This one has been marked the markings of Nanotrasen's elite strike team."),\
-	list(POD_SHAPE_NORML, "pod",         TRUE, "cultist", "red",      RUBBLE_NORMAL, "bloody supply pod",     "A Nanotrasen supply pod covered in scratch-marks, blood, and strange runes."),\
-	list(POD_SHAPE_OTHER, "missile",     FALSE, FALSE, FALSE,   RUBBLE_THIN,     "cruise missile", "A big ass missile that didn't seem to fully detonate. It was likely launched from some far-off deep space missile silo. There appears to be an auxillery payload hatch on the side, though manually opening it is likely impossible."),\
-	list(POD_SHAPE_OTHER, "smissile",    FALSE, FALSE,         FALSE,   RUBBLE_THIN,     "\improper Syndicate cruise missile", "A big ass, blood-red missile that didn't seem to fully detonate. It was likely launched from some deep space Syndicate missile silo. There appears to be an auxillery payload hatch on the side, though manually opening it is likely impossible."),\
-	list(POD_SHAPE_OTHER, "box",         TRUE, FALSE,            FALSE,   RUBBLE_WIDE, "\improper Aussec supply crate", "An incredibly sturdy supply crate, designed to withstand orbital re-entry. Has 'Aussec Armory - 2532' engraved on the side."),\
-	list(POD_SHAPE_NORML, "clownpod",    TRUE, "clown", "green",    RUBBLE_NORMAL, "\improper HONK pod",     "A brightly-colored supply pod. It likely originated from the Clown Federation."),\
-	list(POD_SHAPE_OTHER, "orange",      TRUE, FALSE, FALSE,   RUBBLE_NONE,     "\improper Orange", "An angry orange."),\
-	list(POD_SHAPE_OTHER, FALSE,         FALSE,    FALSE,            FALSE,   RUBBLE_NONE,     "\improper S.T.E.A.L.T.H. pod MKVII", "A supply pod that, under normal circumstances, is completely invisible to conventional methods of detection. How are you even seeing this?"),\
-	list(POD_SHAPE_OTHER, "gondola",     FALSE, FALSE, FALSE,   RUBBLE_NONE,     "gondola",     "The silent walker. This one seems to be part of a delivery agency."),\
-	list(POD_SHAPE_OTHER, FALSE,         FALSE,    FALSE,            FALSE,   RUBBLE_NONE,         FALSE,      FALSE,      "rl_click", "give_po")\
-))
+/// Returned by /obj/docking_port/mobile/supply/proc/get_order_count to signify us going over the order limit
+#define OVER_ORDER_LIMIT "GO AWAY"
+
+/// Universal Scanner mode for export scanning.
+#define SCAN_EXPORTS 1
+/// Universal Scanner mode for using the sales tagger.
+#define SCAN_SALES_TAG 2
+/// Universal Scanner mode for using the price tagger.
+#define SCAN_PRICE_TAG 3
+
+// Defines for use with `export_item_and_contents()`, aka the export code that sells the items.
+/// Default export define, these are things that are sold to centcom.
+#define EXPORT_MARKET_STATION "supply"
+/// Export market for pirates.
+#define EXPORT_MARKET_PIRACY "piracy"
+
+///Used by coupons to define that they're cursed
+#define COUPON_OMEN "omen"
+
+// Supply pack flags determining ordering properties
+/// Order is literally never visible, presumably it's an abstract type or something
+#define ORDER_INVISIBLE (1 << 0)
+/// Only orderable on emagged consoles
+#define ORDER_EMAG_ONLY (1 << 1)
+/// Only orderable on consoles with doctored boards
+#define ORDER_CONTRABAND (1 << 2)
+/// Can only be ordered privately, can use discount coupons, and arrives in a bag instead of a crate
+#define ORDER_GOODY (1 << 3)
+/// Can only be ordered via the express order console
+#define ORDER_POD_ONLY (1 << 4)
+/// Can only be ordered if the following flag is also enabled, for conditionally provided options
+#define ORDER_SPECIAL (1 << 5)
+/// If present then a special order can be ordered
+#define ORDER_SPECIAL_ENABLED (1 << 6)
+/// Unavailable to departmental order consoles even if it is in an appropriate category
+#define ORDER_NOT_DEPARTMENTAL (1 << 7)
+/// This will notify admins when it is purchased
+#define ORDER_DANGEROUS (1 << 8)
+/// This is set when something is created by an admin to make sure its contents is also marked as such
+#define ORDER_ADMIN_SPAWNED (1 << 9)
+
+///Discount categories for coupons. This one is for anything that isn't discountable.
+#define SUPPLY_PACK_NOT_DISCOUNTABLE null
+///Discount category for the standard stuff, mostly goodies.
+#define SUPPLY_PACK_STD_DISCOUNTABLE "standard_discount"
+///Discount category for stuff that's mostly niche and/or that might be useful.
+#define SUPPLY_PACK_UNCOMMON_DISCOUNTABLE "uncommon_discount"
+///Discount category for the silly, overpriced, joke content, sometimes useful or plain bad.
+#define SUPPLY_PACK_RARE_DISCOUNTABLE "rare_discount"
+
+///Standard export define for not selling the item.
+#define EXPORT_NOT_SOLD 0
+///Sell the item
+#define EXPORT_SOLD 1
+///Sell the item, but for the love of god, don't delete it, we're handling it in a fancier way.
+#define EXPORT_SOLD_DONT_DELETE 2
+
+
+//At 320 it's 7.5 minutes, at 1400 it's 12.44 minutes,  at 3000 (around gun crates) it's 15.5 minutes, at 8000 (hat crate) 20 minutes, at 9000 (expensive atmos cans) it's 20.58 minutes, and at the 20k crate it's 24.76 minutes.
+/// Multiplies the logarithmic value calculating the free crate cooldown
+#define DEPARTMENTAL_ORDER_COOLDOWN_COEFFICIENT 60
+/// Used for the power of the logarithmic value for the free crate cooldown
+#define DEPARTMENTAL_ORDER_COOLDOWN_EXPONENT 2.2
+
+//At 320 it's 475 credits, at 1400 it's 669 credits,  at 3000 (around gun crates) its 778, at 8000 (hat crate) it's 925 credits, at 9000 (expensive atmos cans) it's 943 credits, and at the 20k crate it's 1070 credits.
+
+/// Multiplies the logarithmic value calculating the free crate delivery reward
+#define DEPARTMENTAL_ORDER_REWARD_COEFFICIENT 120
+/// Used for the power of the logarithmic value for the free crate delivery reward
+#define DEPARTMENTAL_ORDER_REWARD_EXPONENT 1.5
+
+/// How many global bounties are spawned at minimum when refreshing the list?
+#define CIV_BOUNTY_BASELINE 5

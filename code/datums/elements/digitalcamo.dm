@@ -1,5 +1,5 @@
 /datum/element/digitalcamo
-	element_flags = ELEMENT_DETACH
+	element_flags = ELEMENT_DETACH_ON_HOST_DESTROY
 	var/list/attached_mobs = list()
 
 /datum/element/digitalcamo/New()
@@ -10,8 +10,8 @@
 	. = ..()
 	if(!isliving(target) || (target in attached_mobs))
 		return ELEMENT_INCOMPATIBLE
-	RegisterSignal(target, COMSIG_PARENT_EXAMINE, .proc/on_examine)
-	RegisterSignal(target, COMSIG_LIVING_CAN_TRACK, .proc/can_track)
+	RegisterSignal(target, COMSIG_ATOM_EXAMINE, PROC_REF(on_examine))
+	RegisterSignal(target, COMSIG_LIVING_CAN_TRACK, PROC_REF(can_track))
 	var/image/img = image(loc = target)
 	img.override = TRUE
 	attached_mobs[target] = img
@@ -19,7 +19,7 @@
 
 /datum/element/digitalcamo/Detach(datum/target)
 	. = ..()
-	UnregisterSignal(target, list(COMSIG_PARENT_EXAMINE, COMSIG_LIVING_CAN_TRACK))
+	UnregisterSignal(target, list(COMSIG_ATOM_EXAMINE, COMSIG_LIVING_CAN_TRACK))
 	for(var/mob/living/silicon/ai/AI in GLOB.player_list)
 		AI.client.images -= attached_mobs[target]
 	attached_mobs -= target
@@ -27,24 +27,22 @@
 
 /datum/element/digitalcamo/proc/HideFromAIHuds(mob/living/target)
 	for(var/mob/living/silicon/ai/AI in GLOB.ai_list)
-		var/datum/atom_hud/M = GLOB.huds[AI.med_hud]
-		M.hide_single_atomhud_from(AI,target)
-		var/datum/atom_hud/S = GLOB.huds[AI.sec_hud]
-		S.hide_single_atomhud_from(AI,target)
+		for (var/hud_trait in AI.silicon_huds)
+			var/datum/atom_hud/silicon_hud = GLOB.huds[GLOB.trait_to_hud[hud_trait]]
+			silicon_hud.hide_single_atomhud_from(AI,target)
 
 /datum/element/digitalcamo/proc/UnhideFromAIHuds(mob/living/target)
 	for(var/mob/living/silicon/ai/AI in GLOB.ai_list)
-		var/datum/atom_hud/M = GLOB.huds[AI.med_hud]
-		M.unhide_single_atomhud_from(AI,target)
-		var/datum/atom_hud/S = GLOB.huds[AI.sec_hud]
-		S.unhide_single_atomhud_from(AI,target)
+		for (var/hud_trait in AI.silicon_huds)
+			var/datum/atom_hud/silicon_hud = GLOB.huds[GLOB.trait_to_hud[hud_trait]]
+			silicon_hud.unhide_single_atomhud_from(AI,target)
 
-/datum/element/digitalcamo/proc/on_examine(datum/source, mob/M)
+/datum/element/digitalcamo/proc/on_examine(datum/source, mob/M, list/examine_list)
 	SIGNAL_HANDLER
 
-	to_chat(M, span_warning("[source.p_their()] skin seems to be shifting like something is moving below it."))
+	examine_list += span_warning("[source.p_their()] skin seems to be shifting like something is moving below it.")
 
-/datum/element/digitalcamo/proc/can_track(datum/source)
+/datum/element/digitalcamo/proc/can_track(datum/source, mob/user)
 	SIGNAL_HANDLER
 
 	return COMPONENT_CANT_TRACK

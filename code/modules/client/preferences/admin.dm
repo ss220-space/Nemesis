@@ -50,3 +50,39 @@
 		return FALSE
 
 	return is_admin(preferences.parent)
+
+/// When enabled, prevents any and all ghost role pop-ups WHILE ADMINNED.
+/datum/preference/toggle/ghost_roles_as_admin
+	category = PREFERENCE_CATEGORY_GAME_PREFERENCES
+	savefile_key = "ghost_roles_as_admin"
+	savefile_identifier = PREFERENCE_PLAYER
+
+/datum/preference/toggle/ghost_roles_as_admin/is_accessible(datum/preferences/preferences)
+	if (!..(preferences))
+		return FALSE
+
+	return is_admin(preferences.parent)
+
+/datum/preference/toggle/comms_notification
+	category = PREFERENCE_CATEGORY_GAME_PREFERENCES
+	savefile_key = "comms_notification"
+	savefile_identifier = PREFERENCE_PLAYER
+
+/datum/preference/toggle/comms_notification/is_accessible(datum/preferences/preferences)
+	if (!..(preferences))
+		return FALSE
+
+	return is_admin(preferences.parent)
+
+/datum/preference/toggle/auto_deadmin_on_ready_or_latejoin
+	category = PREFERENCE_CATEGORY_GAME_PREFERENCES
+	savefile_key = "auto_deadmin_on_ready_or_latejoin"
+	savefile_identifier = PREFERENCE_PLAYER
+
+/datum/preference/toggle/auto_deadmin_on_ready_or_latejoin/is_accessible(datum/preferences/preferences)
+	if (!..(preferences))
+		return FALSE
+	if (preferences.toggles & DEADMIN_ALWAYS) //No reason to show if they're deadminning always, because deadmin always also deadmins on ready / latejoin
+		return FALSE
+
+	return is_admin(preferences.parent)

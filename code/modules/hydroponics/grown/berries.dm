@@ -1,6 +1,6 @@
 // Berries
 /obj/item/seeds/berry
-	name = "pack of berry seeds"
+	name = "berry seed pack"
 	desc = "These seeds grow into berry bushes."
 	icon_state = "seed-berry"
 	species = "berry"
@@ -11,7 +11,7 @@
 	production = 5
 	yield = 2
 	instability = 30
-	growing_icon = 'icons/obj/hydroponics/growing_fruits.dmi'
+	growing_icon = 'icons/obj/service/hydroponics/growing_fruits.dmi'
 	icon_grow = "berry-grow" // Uses one growth icons set for all the subtypes
 	icon_dead = "berry-dead" // Same for the dead icon
 	genes = list(/datum/plant_gene/trait/repeated_harvest)
@@ -25,13 +25,15 @@
 	icon_state = "berrypile"
 	gender = PLURAL
 	foodtypes = FRUIT
-	juice_results = list(/datum/reagent/consumable/berryjuice = 0)
 	tastes = list("berry" = 1)
 	distill_reagent = /datum/reagent/consumable/ethanol/gin
 
+/obj/item/food/grown/berries/juice_typepath()
+	return /datum/reagent/consumable/berryjuice
+
 // Poison Berries
 /obj/item/seeds/berry/poison
-	name = "pack of poison-berry seeds"
+	name = "poison-berry seed pack"
 	desc = "These seeds grow into poison-berry bushes."
 	icon_state = "seed-poisonberry"
 	species = "poisonberry"
@@ -48,14 +50,16 @@
 	icon_state = "poisonberrypile"
 	bite_consumption_mod = 3
 	foodtypes = FRUIT | TOXIC
-	juice_results = list(/datum/reagent/consumable/poisonberryjuice = 0)
 	tastes = list("poison-berry" = 1)
 	distill_reagent = null
 	wine_power = 35
 
+/obj/item/food/grown/berries/poison/juice_typepath()
+	return /datum/reagent/consumable/poisonberryjuice
+
 // Death Berries
 /obj/item/seeds/berry/death
-	name = "pack of death-berry seeds"
+	name = "death-berry seed pack"
 	desc = "These seeds grow into death berries."
 	icon_state = "seed-deathberry"
 	species = "deathberry"
@@ -64,8 +68,10 @@
 	lifespan = 30
 	potency = 50
 	mutatelist = null
+	genes = list(/datum/plant_gene/trait/repeated_harvest, /datum/plant_gene/trait/tox_resistance)
 	reagents_add = list(/datum/reagent/toxin/coniine = 0.08, /datum/reagent/toxin/staminatoxin = 0.1, /datum/reagent/consumable/nutriment/vitamin = 0.04, /datum/reagent/consumable/nutriment = 0.1)
 	rarity = 30
+	graft_gene = /datum/plant_gene/trait/tox_resistance
 
 /obj/item/food/grown/berries/death
 	seed = /obj/item/seeds/berry/death
@@ -78,9 +84,12 @@
 	distill_reagent = null
 	wine_power = 50
 
+/obj/item/food/grown/berries/death/juice_typepath()
+	return /datum/reagent/consumable/poisonberryjuice
+
 // Glow Berries
 /obj/item/seeds/berry/glow
-	name = "pack of glow-berry seeds"
+	name = "glow-berry seed pack"
 	desc = "These seeds grow into glow-berry bushes."
 	icon_state = "seed-glowberry"
 	species = "glowberry"
@@ -91,7 +100,7 @@
 	mutatelist = null
 	genes = list(/datum/plant_gene/trait/glow/white, /datum/plant_gene/trait/repeated_harvest)
 	reagents_add = list(/datum/reagent/uranium = 0.25, /datum/reagent/iodine = 0.2, /datum/reagent/consumable/nutriment/vitamin = 0.04, /datum/reagent/consumable/nutriment = 0.1)
-	rarity = 20
+	rarity = PLANT_MODERATELY_RARE
 	graft_gene = /datum/plant_gene/trait/glow/white
 
 /obj/item/food/grown/berries/glow
@@ -107,7 +116,7 @@
 
 // Grapes
 /obj/item/seeds/grape
-	name = "pack of grape seeds"
+	name = "grape seed pack"
 	desc = "These seeds grow into grape vines."
 	icon_state = "seed-grapes"
 	species = "grape"
@@ -119,7 +128,7 @@
 	production = 5
 	yield = 4
 	growthstages = 2
-	growing_icon = 'icons/obj/hydroponics/growing_fruits.dmi'
+	growing_icon = 'icons/obj/service/hydroponics/growing_fruits.dmi'
 	icon_grow = "grape-grow"
 	icon_dead = "grape-dead"
 	genes = list(/datum/plant_gene/trait/repeated_harvest)
@@ -133,16 +142,18 @@
 	icon_state = "grapes"
 	bite_consumption_mod = 2
 	foodtypes = FRUIT
-	juice_results = list(/datum/reagent/consumable/grapejuice = 0)
 	tastes = list("grape" = 1)
 	distill_reagent = /datum/reagent/consumable/ethanol/wine
+
+/obj/item/food/grown/grapes/juice_typepath()
+	return /datum/reagent/consumable/grapejuice
 
 /obj/item/food/grown/grapes/make_dryable()
 	AddElement(/datum/element/dryable, /obj/item/food/no_raisin/healthy)
 
 // Green Grapes
 /obj/item/seeds/grape/green
-	name = "pack of green grape seeds"
+	name = "green grape seed pack"
 	desc = "These seeds grow into green-grape vines."
 	icon_state = "seed-greengrapes"
 	species = "greengrape"
@@ -161,7 +172,7 @@
 
 // Toechtauese Berries
 /obj/item/seeds/toechtauese
-	name = "pack of töchtaüse berry seeds"
+	name = "töchtaüse berry seed pack"
 	desc = "These seeds grow into töchtaüse bushes."
 	icon_state = "seed-toechtauese"
 	species = "toechtauese"
@@ -172,11 +183,11 @@
 	production = 5
 	yield = 2
 	instability = 30
-	growing_icon = 'icons/obj/hydroponics/growing_fruits.dmi'
+	growing_icon = 'icons/obj/service/hydroponics/growing_fruits.dmi'
 	icon_grow = "toechtauese-grow"
 	icon_dead = "toechtauese-dead"
 	genes = list(/datum/plant_gene/trait/repeated_harvest)
-	reagents_add = list(/datum/reagent/consumable/toechtauese_juice = 0.1, /datum/reagent/toxin/itching_powder = 0.04)
+	reagents_add = list(/datum/reagent/toxin/itching_powder = 0.04, /datum/reagent/consumable/nutriment = 0.1)
 
 /obj/item/food/grown/toechtauese
 	seed = /obj/item/seeds/toechtauese
@@ -184,7 +195,39 @@
 	desc = "A branch with töchtaüse berries on it. They're a favourite on the Mothic Fleet, but not in this form."
 	icon_state = "toechtauese_branch"
 	foodtypes = FRUIT
-	grind_results = list(/datum/reagent/consumable/toechtauese_juice = 0, /datum/reagent/toxin/itching_powder = 0)
-	juice_results = list(/datum/reagent/consumable/toechtauese_juice = 0, /datum/reagent/toxin/itching_powder = 0)
 	tastes = list("fiery itchy pain" = 1)
 	distill_reagent = /datum/reagent/toxin/itching_powder
+
+/obj/item/food/grown/toechtauese/juice_typepath()
+	return /datum/reagent/consumable/toechtauese_juice
+
+/obj/item/seeds/lanternfruit
+	name = "lanternfruit seed pack"
+	desc = "These seeds grow into lanternfruit pods."
+	icon_state = "seed-lanternfruit"
+	species = "lanternfruit"
+	plantname = "Lanternfruit Pod"
+	product = /obj/item/food/grown/lanternfruit
+	lifespan = 35
+	endurance = 35
+	maturation = 5
+	production = 5
+	growthstages = 3
+	instability = 15
+	growing_icon = 'icons/obj/service/hydroponics/growing_fruits.dmi'
+	icon_grow = "lanternfruit-grow"
+	icon_dead = "lanternfruit-dead"
+	icon_harvest = "lanternfruit-harvest"
+	genes = list(/datum/plant_gene/trait/glow/yellow)
+	mutatelist = null
+	reagents_add = list(/datum/reagent/consumable/nutriment = 0.07, /datum/reagent/sulfur = 0.07, /datum/reagent/consumable/sugar = 0.07, /datum/reagent/consumable/liquidelectricity = 0.07)
+	graft_gene = /datum/plant_gene/trait/glow/yellow
+
+/obj/item/food/grown/lanternfruit
+	seed = /obj/item/seeds/lanternfruit
+	name = "lanternfruits"
+	desc = "A softly glowing fruit with a handle-shaped stem, an Ethereal favorite!"
+	icon_state = "lanternfruit"
+	foodtypes = FRUIT
+	tastes = list("tv static" = 1, "sour pear" = 1, "grapefruit" = 1)
+	distill_reagent = /datum/reagent/consumable/ethanol/wine_voltaic

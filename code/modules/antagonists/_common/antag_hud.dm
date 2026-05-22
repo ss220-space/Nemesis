@@ -4,9 +4,13 @@ GLOBAL_LIST_EMPTY_TYPED(has_antagonist_huds, /datum/atom_hud/alternate_appearanc
 /// An alternate appearance that will only show if you have the antag datum
 /datum/atom_hud/alternate_appearance/basic/has_antagonist
 	var/antag_datum_type
+	/// Optionally, a weakref to antag team
+	var/datum/weakref/team_ref
 
-/datum/atom_hud/alternate_appearance/basic/has_antagonist/New(key, image/I, antag_datum_type)
-	src.antag_datum_type = antag_datum_type
+/datum/atom_hud/alternate_appearance/basic/has_antagonist/New(key, image/I, antag_datum_type, datum/weakref/team)
+	if(antag_datum_type)
+		src.antag_datum_type = antag_datum_type
+	src.team_ref = team
 	GLOB.has_antagonist_huds += src
 	return ..(key, I, NONE)
 
@@ -15,6 +19,11 @@ GLOBAL_LIST_EMPTY_TYPED(has_antagonist_huds, /datum/atom_hud/alternate_appearanc
 	return ..()
 
 /datum/atom_hud/alternate_appearance/basic/has_antagonist/mobShouldSee(mob/M)
+	if(add_ghost_version && isobserver(M))
+		return FALSE // use the ghost version instead
+	var/datum/team/antag_team = team_ref?.resolve()
+	if(!isnull(antag_team))
+		return !!(M.mind in antag_team.members)
 	return !!M.mind?.has_antag_datum(antag_datum_type)
 
 /// An alternate appearance that will show all the antagonists this mob has
@@ -31,10 +40,10 @@ GLOBAL_LIST_EMPTY_TYPED(has_antagonist_huds, /datum/atom_hud/alternate_appearanc
 
 	var/image/first_antagonist = get_antag_image(1) || image(icon('icons/blanks/32x32.dmi', "nothing"), mind.current)
 
-	RegisterSignal(
+	RegisterSignals(
 		mind,
 		list(COMSIG_ANTAGONIST_GAINED, COMSIG_ANTAGONIST_REMOVED),
-		.proc/update_antag_hud_images
+		PROC_REF(update_antag_hud_images)
 	)
 
 	check_processing()
@@ -52,7 +61,7 @@ GLOBAL_LIST_EMPTY_TYPED(has_antagonist_huds, /datum/atom_hud/alternate_appearanc
 /datum/atom_hud/alternate_appearance/basic/antagonist_hud/mobShouldSee(mob/mob)
 	return Master.current_runlevel >= RUNLEVEL_POSTGAME || (mob.client?.combo_hud_enabled && !isnull(mob.client?.holder))
 
-/datum/atom_hud/alternate_appearance/basic/antagonist_hud/process(delta_time)
+/datum/atom_hud/alternate_appearance/basic/antagonist_hud/process(seconds_per_tick)
 	index += 1
 	update_icon()
 
@@ -73,7 +82,7 @@ GLOBAL_LIST_EMPTY_TYPED(has_antagonist_huds, /datum/atom_hud/alternate_appearanc
 	for (var/datum/antagonist/antagonist as anything in mind?.antag_datums)
 		if (isnull(antagonist.antag_hud_name))
 			continue
-		final_antag_hud_images += image(antagonist.hud_icon, mind.current, antagonist.antag_hud_name)
+		final_antag_hud_images += antagonist.hud_image_on(mind.current)
 
 	return final_antag_hud_images
 

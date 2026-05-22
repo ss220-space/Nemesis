@@ -10,18 +10,40 @@
 /proc/cmp_text_dsc(a,b)
 	return sorttext(a,b)
 
+/proc/cmp_embed_text_asc(a,b)
+	if(isdatum(a))
+		a = REF(a)
+	if(isdatum(b))
+		b = REF(b)
+	return sorttext("[b]", "[a]")
+
+/proc/cmp_embed_text_dsc(a,b)
+	if(isdatum(a))
+		a = REF(a)
+	if(isdatum(b))
+		b = REF(b)
+	return sorttext("[a]", "[b]")
+
+/proc/cmp_list_len_asc(list/a, list/b)
+	return length(a) - length(b)
+
+/proc/cmp_list_len_dsc(list/a, list/b)
+	return length(b) - length(a)
+
 /proc/cmp_name_asc(atom/a, atom/b)
 	return sorttext(b.name, a.name)
 
 /proc/cmp_name_dsc(atom/a, atom/b)
 	return sorttext(a.name, b.name)
 
-GLOBAL_VAR_INIT(cmp_field, "name")
-/proc/cmp_records_asc(datum/data/record/a, datum/data/record/b)
-	return sorttext(b.fields[GLOB.cmp_field], a.fields[GLOB.cmp_field])
+/proc/cmp_init_name_asc(atom/a, atom/b)
+	return sorttext(initial(b.name), initial(a.name))
 
-/proc/cmp_records_dsc(datum/data/record/a, datum/data/record/b)
-	return sorttext(a.fields[GLOB.cmp_field], b.fields[GLOB.cmp_field])
+/proc/cmp_records_asc(datum/record/a, datum/record/b)
+	return sorttext(b.name, a.name)
+
+/proc/cmp_records_dsc(datum/record/a, datum/record/b)
+	return sorttext(a.name, b.name)
 
 // Datum cmp with vars is always slower than a specialist cmp proc, use your judgement.
 /proc/cmp_datum_numeric_asc(datum/a, datum/b, variable)
@@ -42,8 +64,17 @@ GLOBAL_VAR_INIT(cmp_field, "name")
 /proc/cmp_ckey_dsc(client/a, client/b)
 	return sorttext(a.ckey, b.ckey)
 
+/proc/cmp_playtime_asc(client/a, client/b)
+	return cmp_numeric_asc(a.get_exp_living(TRUE), b.get_exp_living(TRUE))
+
+/proc/cmp_playtime_dsc(client/a, client/b)
+	return cmp_numeric_asc(a.get_exp_living(TRUE), b.get_exp_living(TRUE))
+
 /proc/cmp_subsystem_init(datum/controller/subsystem/a, datum/controller/subsystem/b)
-	return initial(b.init_order) - initial(a.init_order) //uses initial() so it can be used on types
+	return a.init_order - b.init_order
+
+/proc/cmp_subsystem_init_stage(datum/controller/subsystem/a, datum/controller/subsystem/b)
+	return initial(a.init_stage) - initial(b.init_stage)
 
 /proc/cmp_subsystem_display(datum/controller/subsystem/a, datum/controller/subsystem/b)
 	return sorttext(b.name, a.name)
@@ -93,8 +124,8 @@ GLOBAL_VAR_INIT(cmp_field, "name")
 	return A.totalResistance() - B.totalResistance()
 
 /proc/cmp_quirk_asc(datum/quirk/A, datum/quirk/B)
-	var/a_sign = SIGN(initial(A.value) * -1)
-	var/b_sign = SIGN(initial(B.value) * -1)
+	var/a_sign = sign(initial(A.value) * -1)
+	var/b_sign = sign(initial(B.value) * -1)
 
 	// Neutral traits go last.
 	if(a_sign == 0)
@@ -122,17 +153,15 @@ GLOBAL_VAR_INIT(cmp_field, "name")
 /proc/cmp_typepaths_asc(A, B)
 	return sorttext("[B]","[A]")
 
-/proc/cmp_pdaname_asc(obj/item/pda/A, obj/item/pda/B)
-	return sorttext(B.owner, A.owner)
-
-/proc/cmp_pdajob_asc(obj/item/pda/A, obj/item/pda/B)
-	return sorttext(B.ownjob, A.ownjob)
-
 /proc/cmp_num_string_asc(A, B)
 	return text2num(A) - text2num(B)
 
 /proc/cmp_mob_realname_dsc(mob/A,mob/B)
 	return sorttext(A.real_name,B.real_name)
+
+/// Orders bodyparts by their body_part value, ascending.
+/proc/cmp_bodypart_by_body_part_asc(obj/item/bodypart/limb_one, obj/item/bodypart/limb_two)
+	return limb_one::body_part - limb_two::body_part
 
 /// Orders by integrated circuit weight
 /proc/cmp_port_order_asc(datum/port/compare1, datum/port/compare2)
@@ -157,3 +186,55 @@ GLOBAL_VAR_INIT(cmp_field, "name")
 	rhs = ispath(B, /datum/reagent) ? 0 : 1
 
 	return lhs - rhs
+
+/// Orders heretic knowledge by priority
+/proc/cmp_heretic_knowledge(datum/heretic_knowledge/knowledge_a, datum/heretic_knowledge/knowledge_b)
+	return initial(knowledge_b.priority) - initial(knowledge_a.priority)
+
+/// Passed a list of assoc lists, sorts them by the list's "name" keys.
+/proc/cmp_assoc_list_name(list/A, list/B)
+	return sorttext(B["name"], A["name"])
+
+/// Orders mobs by health
+/proc/cmp_mob_health(mob/living/mob_a, mob/living/mob_b)
+	return mob_b.health - mob_a.health
+
+/proc/cmp_deathmatch_mods(datum/deathmatch_modifier/a, datum/deathmatch_modifier/b)
+	return sorttext(b.name, a.name)
+
+/**
+ * Orders fish types following this order (freshwater -> saltwater -> anadromous -> sulphuric water -> any water -> air)
+ * If both share the same required fluid type, they'll be ordered by name instead.
+ */
+/proc/cmp_fish_fluid(obj/item/fish/a, obj/item/fish/b)
+	var/static/list/fluids_priority = list(
+		AQUARIUM_FLUID_FRESHWATER,
+		AQUARIUM_FLUID_SALTWATER,
+		AQUARIUM_FLUID_ANADROMOUS,
+		AQUARIUM_FLUID_SULPHWATEVER,
+		AQUARIUM_FLUID_ANY_WATER,
+		AQUARIUM_FLUID_AIR,
+	)
+	var/position_a = fluids_priority.Find(initial(a.required_fluid_type))
+	var/position_b = fluids_priority.Find(initial(b.required_fluid_type))
+	return cmp_numeric_asc(position_a, position_b) || cmp_text_asc(initial(b.name), initial(a.name))
+
+/// Orders vending products by their price
+/proc/cmp_vending_prices(datum/data/vending_product/a, datum/data/vending_product/b)
+	return b.price - a.price
+
+/proc/cmp_item_vending_prices(obj/item/a, obj/item/b)
+	return b.custom_price - a.custom_price
+
+///Sorts stock parts based on tier
+/proc/cmp_rped_sort(obj/item/first_item, obj/item/second_item)
+	///even though stacks aren't stock parts, get_part_rating() is defined on the item level (see /obj/item/proc/get_part_rating()) and defaults to returning 0.
+	return second_item.get_part_rating() - first_item.get_part_rating()
+
+/// Orders cameras by their `c_tag` ascending
+/proc/cmp_camera_ctag_asc(obj/machinery/camera/a, obj/machinery/camera/b)
+	return sorttext(b.c_tag, a.c_tag)
+
+/// Sorts client colors based on their priority
+/proc/cmp_client_colours(datum/client_colour/first_color, datum/client_colour/second_color)
+	return second_color.priority - first_color.priority

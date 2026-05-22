@@ -9,10 +9,51 @@
  * Misc
  */
 
+// Generic listoflist safe add and removal macros:
+///If value is a list, wrap it in a list so it can be used with list add/remove operations
+#define LIST_VALUE_WRAP_LISTS(value) (islist(value) ? list(value) : value)
+///Add an untyped item to a list, taking care to handle list items by wrapping them in a list to remove the footgun
+#define UNTYPED_LIST_ADD(list, item) (list += LIST_VALUE_WRAP_LISTS(item))
+///Remove an untyped item to a list, taking care to handle list items by wrapping them in a list to remove the footgun
+#define UNTYPED_LIST_REMOVE(list, item) (list -= LIST_VALUE_WRAP_LISTS(item))
+
+/*
+ * ## Lazylists
+ *
+ * * What is a lazylist?
+ *
+ * True to its name a lazylist is a lazy instantiated list.
+ * It is a list that is only created when necessary (when it has elements) and is null when empty.
+ *
+ * * Why use a lazylist?
+ *
+ * Lazylists save memory - an empty list that is never used takes up more memory than just `null`.
+ *
+ * * When to use a lazylist?
+ *
+ * Lazylists are best used on hot types when making lists that are not always used.
+ *
+ * For example, if you were adding a list to all atoms that tracks the names of people who touched it,
+ * you would want to use a lazylist because most atoms will never be touched by anyone.
+ *
+ * * How do I use a lazylist?
+ *
+ * A lazylist is just a list you defined as `null` rather than `list()`.
+ * Then, you use the LAZY* macros to interact with it, which are essentially null-safe ways to interact with a list.
+ *
+ * Note that you probably should not be using these macros if your list is not a lazylist.
+ * This will obfuscate the code and make it a bit harder to read and debug.
+ *
+ * Generally speaking you shouldn't be checking if your lazylist is `null` yourself, the macros will do that for you.
+ * Remember that LAZYLEN (and by extension, length) will return 0 if the list is null.
+ */
+
 ///Initialize the lazylist
 #define LAZYINITLIST(L) if (!L) { L = list(); }
 ///If the provided list is empty, set it to null
 #define UNSETEMPTY(L) if (L && !length(L)) L = null
+///If the provided key -> list is empty, remove it from the list
+#define ASSOC_UNSETEMPTY(L, K) if (!length(L[K])) L -= K;
 ///Like LAZYCOPY - copies an input list if the list has entries, If it doesn't the assigned list is nulled
 #define LAZYLISTDUPLICATE(L) (L ? L.Copy() : null )
 ///Remove an item from the list, set the list to null if empty
@@ -22,14 +63,14 @@
 ///Add an item to the list if not already present, if the list is null it will initialize it
 #define LAZYOR(L, I) if(!L) { L = list(); } L |= I;
 ///Returns the key of the submitted item in the list
-#define LAZYFIND(L, V) (L ? L.Find(V) : 0)
+#define LAZYFIND(L, V) (L?.Find(V))
 ///returns L[I] if L exists and I is a valid index of L, runtimes if L is not a list
 #define LAZYACCESS(L, I) (L ? (isnum(I) ? (I > 0 && I <= length(L) ? L[I] : null) : L[I]) : null)
 ///Sets the item K to the value V, if the list is null it will initialize it
 #define LAZYSET(L, K, V) if(!L) { L = list(); } L[K] = V;
 ///Sets the length of a lazylist
 #define LAZYSETLEN(L, V) if (!L) { L = list(); } L.len = V;
-///Returns the lenght of the list
+///Returns the length of the list
 #define LAZYLEN(L) length(L)
 ///Sets a list to null
 #define LAZYNULL(L) L = null
@@ -38,25 +79,47 @@
 ///This is used to add onto lazy assoc list when the value you're adding is a /list/. This one has extra safety over lazyaddassoc because the value could be null (and thus cant be used to += objects)
 #define LAZYADDASSOCLIST(L, K, V) if(!L) { L = list(); } L[K] += list(V);
 ///Removes the value V from the item K, if the item K is empty will remove it from the list, if the list is empty will set the list to null
-#define LAZYREMOVEASSOC(L, K, V) if(L) { if(L[K]) { L[K] -= V; if(!length(L[K])) L -= K; } if(!length(L)) L = null; }
+#define LAZYREMOVEASSOC(L, K, V) if(L?[K]) { L[K] -= V; if(!length(L[K])) L -= K; if(!length(L)) L = null; }
 ///Accesses an associative list, returns null if nothing is found
-#define LAZYACCESSASSOC(L, I, K) L ? L[I] ? L[I][K] ? L[I][K] : null : null : null
+#define LAZYACCESSASSOC(L, I, K) L?[I]?[K]
 ///Qdel every item in the list before setting the list to null
 #define QDEL_LAZYLIST(L) for(var/I in L) qdel(I); L = null;
 //These methods don't null the list
 ///Use LAZYLISTDUPLICATE instead if you want it to null with no entries
-#define LAZYCOPY(L) (L ? L.Copy() : list() )
+#define LAZYCOPY(L) (L?.Copy() || list())
 /// Consider LAZYNULL instead
-#define LAZYCLEARLIST(L) if(L) L.Cut()
+#define LAZYCLEARLIST(L) L?.Cut()
 ///Returns the list if it's actually a valid list, otherwise will initialize it
 #define SANITIZE_LIST(L) ( islist(L) ? L : list() )
-#define reverseList(L) reverse_range(L.Copy())
-
 /// Performs an insertion on the given lazy list with the given key and value. If the value already exists, a new one will not be made.
 #define LAZYORASSOCLIST(lazy_list, key, value) \
 	LAZYINITLIST(lazy_list); \
 	LAZYINITLIST(lazy_list[key]); \
 	lazy_list[key] |= value;
+/// Calls Insert on the lazy list if it exists, otherwise initializes it with the value
+#define LAZYINSERT(lazylist, index, value) \
+	if (!lazylist) { \
+		lazylist = list(value); \
+	} else if (index == 0 && index > length(lazylist)) { \
+		lazylist += value; \
+	} else { \
+		lazylist.Insert(index, value); \
+	}
+
+///Ensures the length of a list is at least I, prefilling it with V if needed. if V is a proc call, it is repeated for each new index so that list() can just make a new list for each item.
+#define LISTASSERTLEN(L, I, V...) \
+	if (length(L) < I) { \
+		var/_OLD_LENGTH = length(L); \
+		L.len = I; \
+		/* Convert the optional argument to a if check */ \
+		for (var/_USELESS_VAR in list(V)) { \
+			for (var/_INDEX_TO_ASSIGN_TO in _OLD_LENGTH+1 to I) { \
+				L[_INDEX_TO_ASSIGN_TO] = V; \
+			} \
+		} \
+	}
+
+#define reverseList(L) reverse_range(L.Copy())
 
 /// Passed into BINARY_INSERT to compare keys
 #define COMPARE_KEY __BIN_LIST[__BIN_MID]
@@ -134,6 +197,8 @@
 	} while(FALSE)
 
 #define SORT_FIRST_INDEX(list) (list[1])
+#define SORT_PRIORITY_INDEX(list) (list["priority"])
+#define SORT_COMPARE_DIRECTLY(thing) (thing)
 #define SORT_VAR_NO_TYPE(varname) var/varname
 /****
 	* Even more custom binary search sorted insert, using defines instead of vars
@@ -192,6 +257,13 @@
 
 			return "[output][and_text][input[index]]"
 
+///Returns a list of atom types in plain english as a string of each type name
+/proc/type_english_list(list/input, nothing_text = "nothing", and_text = " and ", comma_text = ", ", final_comma_text = "" )
+	var/list/english_input = list()
+	for(var/atom/type as anything in input)
+		english_input += "[initial(type.name)]"
+	return english_list(english_input, nothing_text, and_text, comma_text, final_comma_text)
+
 /**
  * Checks for specific types in a list.
  *
@@ -203,7 +275,7 @@
  * Arguments:
  * - [type_to_check][/datum]: An instance to check.
  * - [list_to_check][/list]: A list of typepaths to check the type_to_check against.
- * - zebra: Whether to use the value of the mathing type in the list instead of just returning true when a match is found.
+ * - zebra: Whether to use the value of the matching type in the list instead of just returning true when a match is found.
  */
 /proc/is_type_in_list(datum/type_to_check, list/list_to_check, zebra = FALSE)
 	if(!LAZYLEN(list_to_check) || !type_to_check)
@@ -361,9 +433,18 @@
  * Returns TRUE if the list had nulls, FALSE otherwise
 **/
 /proc/list_clear_nulls(list/list_to_clear)
+	return (list_to_clear.RemoveAll(null) > 0)
+
+
+/**
+ * Removes any empty weakrefs from the list
+ * Returns TRUE if the list had empty refs, FALSE otherwise
+**/
+/proc/list_clear_empty_weakrefs(list/list_to_clear)
 	var/start_len = list_to_clear.len
-	var/list/new_list = new(start_len)
-	list_to_clear -= new_list
+	for(var/datum/weakref/entry in list_to_clear)
+		if(!entry.resolve())
+			list_to_clear -= entry
 	return list_to_clear.len < start_len
 
 /*
@@ -376,9 +457,9 @@
 		return
 	var/list/result = new
 	if(skiprep)
-		for(var/e in first)
-			if(!(e in result) && !(e in second))
-				result += e
+		for(var/entry in first)
+			if(!(entry in result) && !(entry in second))
+				UNTYPED_LIST_ADD(result, entry)
 	else
 		result = first - second
 	return result
@@ -409,20 +490,131 @@
  * You should only pass integers in.
  */
 /proc/pick_weight(list/list_to_pick)
+	if(length(list_to_pick) == 0)
+		return null
+
 	var/total = 0
-	var/item
-	for(item in list_to_pick)
+	for(var/item in list_to_pick)
 		if(!list_to_pick[item])
 			list_to_pick[item] = 0
 		total += list_to_pick[item]
 
-	total = rand(0, total)
-	for(item in list_to_pick)
-		total -= list_to_pick[item]
-		if(total <= 0 && list_to_pick[item])
+	total = rand(1, total)
+	for(var/item in list_to_pick)
+		var/item_weight = list_to_pick[item]
+		if(item_weight == 0)
+			continue
+
+		total -= item_weight
+		if(total <= 0)
 			return item
 
 	return null
+
+/**
+ * Like pick_weight, but allowing for nested lists.
+ *
+ * For example, given the following list:
+ * list(A = 1, list(B = 1, C = 1))
+ * A would have a 50% chance of being picked,
+ * and list(B, C) would have a 50% chance of being picked.
+ * If list(B, C) was picked, B and C would then each have a 50% chance of being picked.
+ * So the final probabilities would be 50% for A, 25% for B, and 25% for C.
+ *
+ * Weights should be integers. Entries without weights are assigned weight 1 (so unweighted lists can be used as well)
+ */
+/proc/pick_weight_recursive(list/list_to_pick)
+	var/result = pick_weight(fill_with_ones(list_to_pick))
+	while(islist(result))
+		result = pick_weight(fill_with_ones(result))
+	return result
+
+/**
+* Like pick_weight, but decreases the value of the picked element by 1
+ * For example, given the following list:
+ * A = 6, B = 3, C = 1, D = 0
+ * A would have a 60% chance of being picked, after which it would decrease by one and the new list would be
+ * A = 5, B = 3, C = 1, D = 0
+ * Tt would then have a 55.55...% to be picked, rinse and repeat
+*/
+/proc/pick_weight_take(list/list_to_pick)
+	. = pick_weight(list_to_pick)
+	list_to_pick[.]--
+
+/**
+* Picks n items from a list. The same index will not be chosen more than once.
+* e.g. pick_n(list_of_stuff, 10) would return a list of 10 items from the list, chosen randomly.
+*/
+/proc/pick_n(list/list_to_pick, n)
+	var/list_to_pick_length
+	if(islist(list_to_pick))
+		list_to_pick_length = length(list_to_pick)
+
+	if(!list_to_pick_length || n <= 0)
+		return list()
+
+	/// length of our list_to_pick
+	n = min(n, list_to_pick_length)
+
+	// Shuffle and slice the first n indices
+	var/list/copy_to_shuffle = list_to_pick.Copy()
+	shuffle_inplace(copy_to_shuffle)
+
+	return copy_to_shuffle.Copy(1, n + 1)
+
+/**
+ * Given a list, return a copy where values without defined weights are given weight 1.
+ * For example, fill_with_ones(list(A, B=2, C)) = list(A=1, B=2, C=1)
+ * Useful for weighted random choices (loot tables, syllables in languages, etc.)
+ */
+/proc/fill_with_ones(list/list_to_pad)
+	if (!islist(list_to_pad))
+		return list_to_pad
+
+	var/list/final_list = list()
+
+	for (var/key in list_to_pad)
+		if (list_to_pad[key])
+			final_list[key] = list_to_pad[key]
+		else
+			final_list[key] = 1
+
+	return final_list
+
+/// Takes a weighted list (see above) and expands it into raw entries
+/// This eats more memory, but saves time when actually picking from it
+/proc/expand_weights(list/list_to_pick)
+	var/list/values = list()
+	for(var/item in list_to_pick)
+		var/value = list_to_pick[item]
+		if(!value)
+			continue
+		values += value
+
+	var/gcf = greatest_common_factor(values)
+
+	var/list/output = list()
+	for(var/item in list_to_pick)
+		var/value = list_to_pick[item]
+		if(!value)
+			continue
+		for(var/i in 1 to value / gcf)
+			UNTYPED_LIST_ADD(output, item)
+	return output
+
+/// Takes a list of numbers as input, returns the highest value that is cleanly divides them all
+/// Note: this implementation is expensive as heck for large numbers, I only use it because most of my usecase
+/// Is < 10 ints
+/proc/greatest_common_factor(list/values)
+	var/smallest = min(arglist(values))
+	for(var/i in smallest to 1 step -1)
+		var/safe = TRUE
+		for(var/entry in values)
+			if(entry % i != 0)
+				safe = FALSE
+				break
+		if(safe)
+			return i
 
 /// Pick a random element from the list and remove it from the list.
 /proc/pick_n_take(list/list_to_pick)
@@ -486,7 +678,7 @@
 
 	return inserted_list
 
-///same as shuffle, but returns nothing and acts on list in place
+///same as shuffle, but acts on list in place, and returns same list
 /proc/shuffle_inplace(list/inserted_list)
 	if(!inserted_list)
 		return
@@ -494,11 +686,13 @@
 	for(var/i in 1 to inserted_list.len - 1)
 		inserted_list.Swap(i, rand(i, inserted_list.len))
 
+	return inserted_list
+
 ///Return a list with no duplicate entries
 /proc/unique_list(list/inserted_list)
 	. = list()
 	for(var/i in inserted_list)
-		. |= i
+		. |= LIST_VALUE_WRAP_LISTS(i)
 
 ///same as unique_list, but returns nothing and acts on list in place (also handles associated values properly)
 /proc/unique_list_in_place(list/inserted_list)
@@ -511,13 +705,12 @@
 			inserted_list[key] = temp[key]
 
 ///for sorting clients or mobs by ckey
-/proc/sort_key(list/ckey_list, order=1)
-	return sortTim(ckey_list, order >= 0 ? /proc/cmp_ckey_asc : /proc/cmp_ckey_dsc)
+/proc/sort_key(list/ckey_list, order = 1)
+	return sortTim(ckey_list, order >= 0 ? GLOBAL_PROC_REF(cmp_ckey_asc) : GLOBAL_PROC_REF(cmp_ckey_dsc))
 
 ///Specifically for record datums in a list.
-/proc/sort_record(list/record_list, field = "name", order = 1)
-	GLOB.cmp_field = field
-	return sortTim(record_list, order >= 0 ? /proc/cmp_records_asc : /proc/cmp_records_dsc)
+/proc/sort_record(list/record_list, order = 1)
+	return sortTim(record_list, order >= 0 ? GLOBAL_PROC_REF(cmp_records_asc) : GLOBAL_PROC_REF(cmp_records_dsc))
 
 ///sort any value in a list
 /proc/sort_list(list/list_to_sort, cmp=/proc/cmp_text_asc)
@@ -525,7 +718,7 @@
 
 ///uses sort_list() but uses the var's name specifically. This should probably be using mergeAtom() instead
 /proc/sort_names(list/list_to_sort, order=1)
-	return sortTim(list_to_sort.Copy(), order >= 0 ? /proc/cmp_name_asc : /proc/cmp_name_dsc)
+	return sortTim(list_to_sort.Copy(), order >= 0 ? GLOBAL_PROC_REF(cmp_name_asc) : GLOBAL_PROC_REF(cmp_name_dsc))
 
 ///Converts a bitfield to a list of numbers (or words if a wordlist is provided)
 /proc/bitfield_to_list(bitfield = 0, list/wordlist)
@@ -556,11 +749,27 @@
 			i++
 	return i
 
-/// Returns datum/data/record
-/proc/find_record(field, value, list/inserted_list)
-	for(var/datum/data/record/record_to_check in inserted_list)
-		if(record_to_check.fields[field] == value)
-			return record_to_check
+/**
+ * Returns the first record in the list that matches the name
+ *
+ * If locked_only is TRUE, locked records will be checked
+ *
+ * If locked_only is FALSE, crew records will be checked
+ *
+ * If no record is found, returns null
+ */
+/proc/find_record(value, locked_only = FALSE)
+	if(locked_only)
+		for(var/datum/record/locked/target in GLOB.manifest.locked)
+			if(target.name != value)
+				continue
+			return target
+		return null
+
+	for(var/datum/record/crew/target in GLOB.manifest.general)
+		if(target.name != value)
+			continue
+		return target
 	return null
 
 
@@ -625,9 +834,9 @@
 			inserted_list.Cut(to_index, to_index + 1)
 	else
 		if(to_index > from_index)
-			var/a = to_index
+			var/temp = to_index
 			to_index = from_index
-			from_index = a
+			from_index = temp
 
 		for(var/i in 1 to len)
 			inserted_list.Swap(from_index++, to_index++)
@@ -660,11 +869,6 @@
 		if(checked_datum.vars[varname] == value)
 			return checked_datum
 
-///remove all nulls from a list
-/proc/remove_nulls_from_list(list/inserted_list)
-	while(inserted_list.Remove(null))
-		continue
-	return inserted_list
 
 ///Copies a list, and all lists inside it recusively
 ///Does not copy any other reference type
@@ -686,6 +890,21 @@
 			.[i] = key
 			.[key] = value
 
+/// A version of deep_copy_list that actually supports associative list nesting: list(list(list("a" = "b"))) will actually copy correctly.
+/proc/deep_copy_list_alt(list/inserted_list)
+	if(!islist(inserted_list))
+		return inserted_list
+	var/copied_list = inserted_list.Copy()
+	. = copied_list
+	for(var/key_or_value in inserted_list)
+		if(isnum(key_or_value) || !inserted_list[key_or_value])
+			continue
+		var/value = inserted_list[key_or_value]
+		var/new_value = value
+		if(islist(value))
+			new_value = deep_copy_list_alt(value)
+		copied_list[key_or_value] = new_value
+
 ///takes an input_key, as text, and the list of keys already used, outputting a replacement key in the format of "[input_key] ([number_of_duplicates])" if it finds a duplicate
 ///use this for lists of things that might have the same name, like mobs or objects, that you plan on giving to a player as input
 /proc/avoid_assoc_duplicate_keys(input_key, list/used_key_list)
@@ -697,14 +916,6 @@
 	else
 		used_key_list[input_key] = 1
 	return input_key
-
-///Flattens a keyed list into a list of it's contents
-/proc/flatten_list(list/key_list)
-	if(!islist(key_list))
-		return null
-	. = list()
-	for(var/key in key_list)
-		. |= key_list[key]
 
 ///Make a normal list an associative one
 /proc/make_associative(list/flat_list)
@@ -750,8 +961,26 @@
 /proc/assoc_to_keys(list/input)
 	var/list/keys = list()
 	for(var/key in input)
-		keys += key
+		UNTYPED_LIST_ADD(keys, key)
 	return keys
+
+/// Turns an associative list into a flat list of keys, but for sprite accessories, respecting the locked variable
+/proc/assoc_to_keys_features(list/input)
+	var/list/keys = list()
+	for(var/key in input)
+		var/datum/sprite_accessory/value = input[key]
+		if(value?.locked)
+			continue
+		UNTYPED_LIST_ADD(keys, key)
+	return keys
+
+/// Turns an associative list into a flat list of values
+/proc/assoc_to_values(list/key_list)
+	if(!islist(key_list))
+		return null
+	. = list()
+	for(var/key in key_list)
+		. |= LIST_VALUE_WRAP_LISTS(key_list[key])
 
 ///compare two lists, returns TRUE if they are the same
 /proc/compare_list(list/l,list/d)
@@ -784,7 +1013,7 @@
 	. = list()
 	for(var/i in list_to_filter)
 		if(condition.Invoke(i))
-			. |= i
+			. |= LIST_VALUE_WRAP_LISTS(i)
 
 ///Returns a list with all weakrefs resolved
 /proc/recursive_list_resolve(list/list_to_resolve)
@@ -798,7 +1027,7 @@
 		else
 			. += list(recursive_list_resolve_element(element))
 
-///Helper for /proc/recursive_list_resolve
+///Helper for recursive_list_resolve()
 /proc/recursive_list_resolve_element(element)
 	if(islist(element))
 		var/list/inner_list = element
@@ -808,3 +1037,360 @@
 		return ref.resolve()
 	else
 		return element
+
+/**
+ * Intermediate step for preparing lists to be passed into the lua editor tgui.
+ * Resolves weakrefs, converts some values without a standard textual representation to text,
+ * and can handle self-referential lists and potential duplicate output keys.
+ */
+/proc/prepare_lua_editor_list(list/target_list, list/visited)
+	if(!visited)
+		visited = list()
+	var/list/ret = list()
+	visited[target_list] = ret
+	var/list/duplicate_keys = list()
+	for(var/i in 1 to target_list.len)
+		var/key = target_list[i]
+		var/new_key = key
+		if(isweakref(key))
+			var/datum/weakref/ref = key
+			new_key = ref.resolve() || "null weakref"
+		else if(key == world)
+			new_key = world.name
+		else if(ref(key) == "\[0xe000001\]")
+			new_key = "global"
+		else if(islist(key))
+			if(visited[key])
+				new_key = visited[key]
+			else
+				new_key = prepare_lua_editor_list(key, visited)
+		var/value
+		if(!isnull(key) && !isnum(key))
+			value = target_list[key]
+		if(isweakref(value))
+			var/datum/weakref/ref = value
+			value = ref.resolve() || "null weakref"
+		if(value == world)
+			value = "world"
+		else if(ref(value) == "\[0xe000001\]")
+			value = "global"
+		else if(islist(value))
+			if(visited[value])
+				value = visited[value]
+			else
+				value = prepare_lua_editor_list(value, visited)
+		var/list/to_add = list()
+		if(!isnull(value))
+			var/final_key = new_key
+			while(duplicate_keys[final_key])
+				duplicate_keys[new_key]++
+				final_key = "[new_key] ([duplicate_keys[new_key]])"
+			duplicate_keys[final_key] = 1
+			to_add[final_key] = value
+		else
+			to_add += list(new_key)
+		ret += to_add
+		if(i < target_list.len)
+			CHECK_TICK
+	return ret
+
+/**
+ * Converts a list into a list of assoc lists of the form ("key" = key, "value" = value)
+ * so that list keys that are themselves lists can be fully json-encoded
+ * and that unique objects with the same string representation do not
+ * produce duplicate keys that are clobbered by the standard JavaScript JSON.parse function
+ */
+/proc/kvpify_list(list/target_list, depth = INFINITY, list/visited)
+	if(!visited)
+		visited = list()
+	var/list/ret = list()
+	visited[target_list] = ret
+	for(var/i in 1 to target_list.len)
+		var/key = target_list[i]
+		var/new_key = key
+		if(islist(key) && depth)
+			if(visited[key])
+				new_key = visited[key]
+			else
+				new_key = kvpify_list(key, depth-1, visited)
+		var/value
+		if(!isnull(key) && !isnum(key))
+			value = target_list[key]
+		if(islist(value) && depth)
+			if(visited[value])
+				value = visited[value]
+			else
+				value = kvpify_list(value, depth-1, visited)
+		if(!isnull(value))
+			ret += list(list("key" = new_key, "value" = value))
+		else
+			ret += list(list("key" = i, "value" = new_key))
+		if(i < target_list.len)
+			CHECK_TICK
+	return ret
+
+/// Compares 2 lists, returns TRUE if they are the same
+/proc/deep_compare_list(list/list_1, list/list_2)
+	if(list_1 == list_2)
+		return TRUE
+
+	if(!islist(list_1) || !islist(list_2))
+		return FALSE
+
+	if(list_1.len != list_2.len)
+		return FALSE
+
+	for(var/i in 1 to list_1.len)
+		var/key_1 = list_1[i]
+		var/key_2 = list_2[i]
+		if (islist(key_1) && islist(key_2))
+			if(!deep_compare_list(key_1, key_2))
+				return FALSE
+		else if(key_1 != key_2)
+			return FALSE
+		if(istext(key_1) || islist(key_1) || ispath(key_1) || isdatum(key_1) || key_1 == world)
+			var/value_1 = list_1[key_1]
+			var/value_2 = list_2[key_1]
+			if (islist(value_1) && islist(value_2))
+				if(!deep_compare_list(value_1, value_2))
+					return FALSE
+			else if(value_1 != value_2)
+				return FALSE
+	return TRUE
+
+/// Returns a copy of the list where any element that is a datum is converted into a weakref
+/proc/weakrefify_list(list/target_list, list/visited)
+	if(!visited)
+		visited = list()
+	var/list/ret = list()
+	visited[target_list] = ret
+	for(var/i in 1 to target_list.len)
+		var/key = target_list[i]
+		var/new_key = key
+		if(isdatum(key))
+			new_key = WEAKREF(key)
+		else if(islist(key))
+			if(visited.Find(key))
+				new_key = visited[key]
+			else
+				new_key = weakrefify_list(key, visited)
+		var/value
+		if(!isnull(key) && !isnum(key))
+			value = target_list[key]
+		if(isdatum(value))
+			value = WEAKREF(value)
+		else if(islist(value))
+			if(visited[value])
+				value = visited[value]
+			else
+				value = weakrefify_list(value, visited)
+		var/list/to_add = list(new_key)
+		if(!isnull(value))
+			to_add[new_key] = value
+		ret += to_add
+		if(i < target_list.len)
+			CHECK_TICK
+	return ret
+
+/// Runtimes if the passed in list is not sorted
+/proc/assert_sorted(list/list, name, cmp = GLOBAL_PROC_REF(cmp_numeric_asc))
+	var/last_value = list[1]
+
+	for (var/index in 2 to list.len)
+		var/value = list[index]
+
+		if (call(cmp)(value, last_value) < 0)
+			stack_trace("[name] is not sorted. value at [index] ([value]) is in the wrong place compared to the previous value of [last_value] (when compared to by [cmp])")
+
+		last_value = value
+
+/**
+ * Converts a list of coordinates, or an assosciative list if passed, into a turf by calling locate(x, y, z) based on the values in the list
+ */
+/proc/coords2turf(list/coords)
+	if("x" in coords)
+		return locate(coords["x"], coords["y"], coords["z"])
+	return locate(coords[1], coords[2], coords[3])
+
+/**
+ * Given a list and a list of its variant hints, appends variants that aren't explicitly required by dreamluau,
+ * but are required by the lua editor tgui.
+ */
+/proc/add_lua_editor_variants(list/values, list/variants, list/visited, path = "")
+	if(!islist(visited))
+		visited = list()
+		visited[values] = "\[\]"
+	if(!islist(values) || !islist(variants))
+		return
+	if(values.len != variants.len)
+		CRASH("values and variants must be the same length")
+	for(var/i in 1 to variants.len)
+		var/pair = variants[i]
+		var/pair_modified = FALSE
+		if(isnull(pair))
+			pair = list("key", "value")
+		var/key = values[i]
+		if(islist(key))
+			if(visited[key])
+				pair["key"] = list("cycle", visited[key])
+			else
+				var/list/key_variants = pair["key"]
+				var/new_path = path + "\[[i], \"key\"\],"
+				visited[key] = new_path
+				add_lua_editor_variants(key, key_variants, visited, new_path)
+				visited -= key
+				pair["key"] = list("list", key_variants)
+			pair_modified = TRUE
+		else if(isdatum(key) || key == world || ref(key) == "\[0xe000001\]")
+			pair["key"] = list("ref", ref(key))
+			pair_modified = TRUE
+		var/value
+		if(!isnull(key) && !isnum(key))
+			value = values[key]
+		if(islist(value))
+			if(visited[value])
+				pair["value"] = list("cycle", visited[value])
+			else
+				var/list/value_variants = pair["value"]
+				var/new_path = path + "\[[i], \"value\"\],"
+				visited[value] = new_path
+				add_lua_editor_variants(value, value_variants, visited, new_path)
+				visited -= value
+				pair["value"] = list("list", value_variants)
+			pair_modified = TRUE
+		else if(isdatum(value) || value == world || ref(value) == "\[0xe000001\]")
+			pair["value"] = list("ref", ref(value))
+			pair_modified = TRUE
+		if(pair_modified && pair != variants[i])
+			variants[i] = pair
+		if(i < variants.len)
+			CHECK_TICK
+
+/proc/add_lua_return_value_variants(list/values, list/variants)
+	if(!islist(values) || !islist(variants))
+		return
+	if(values.len != variants.len)
+		CRASH("values and variants must be the same length")
+	for(var/i in 1 to values.len)
+		var/value = values[i]
+		if(islist(value))
+			add_lua_editor_variants(value, variants[i])
+		else if(isdatum(value) || value == world || ref(value) == "\[0xe000001\]")
+			variants[i] = list("ref", ref(value))
+
+/proc/deep_copy_without_cycles(list/values, list/visited)
+	if(!islist(visited))
+		visited = list()
+	if(!islist(values))
+		return values
+	var/list/ret = list()
+	var/cycle_count = 0
+	visited[values] = TRUE
+	for(var/i in 1 to values.len)
+		var/key = values[i]
+		var/out_key = key
+		if(islist(key))
+			if(visited[key])
+				do
+					out_key = "\[cyclical reference[cycle_count ? " (i)" : ""]\]"
+					cycle_count++
+				while(values.Find(out_key))
+			else
+				visited[key] = TRUE
+				out_key = deep_copy_without_cycles(key, visited)
+				visited -= key
+		var/value
+		if(!isnull(key) && !isnum(key))
+			value = values[key]
+		var/out_value = value
+		if(islist(value))
+			if(visited[value])
+				out_value = "\[cyclical reference\]"
+			else
+				visited[value] = TRUE
+				out_value = deep_copy_without_cycles(value, visited)
+				visited -= value
+		var/list/to_add = list(out_key)
+		if(!isnull(out_value))
+			to_add[out_key] = out_value
+		ret += to_add
+		if(i < values.len)
+			CHECK_TICK
+	return ret
+
+/**
+ * Given a list and a list of its variant hints, removes any list key/values that are represent lua values that could not be directly converted to DM.
+ */
+/proc/remove_non_dm_variants(list/return_values, list/variants, list/visited)
+	if(!islist(visited))
+		visited = list()
+	if(!islist(return_values) || !islist(variants) || visited[return_values])
+		return
+	visited[return_values] = TRUE
+	if(return_values.len != variants.len)
+		CRASH("return_values and variants must be the same length")
+	for(var/i in 1 to variants.len)
+		var/pair = variants[i]
+		if(!islist(variants))
+			continue
+		var/key = return_values[i]
+		if(pair["key"])
+			if(!islist(pair["key"]))
+				return_values[i] = null
+				continue
+			remove_non_dm_variants(key, pair["key"], visited)
+		if(pair["value"])
+			if(!islist(pair["value"]))
+				return_values[key] = null
+				continue
+			remove_non_dm_variants(return_values[key], pair["value"], visited)
+
+/proc/compare_lua_logs(list/log_1, list/log_2)
+	if(log_1 == log_2)
+		return TRUE
+	for(var/field in list("status", "name", "message", "chunk"))
+		if(log_1[field] != log_2[field])
+			return FALSE
+	switch(log_1["status"])
+		if("finished", "yield")
+			return deep_compare_list(
+					recursive_list_resolve(log_1["return_values"]),
+					recursive_list_resolve(log_2["return_values"])
+					) && deep_compare_list(log_1["variants"], log_2["variants"])
+		if("runtime")
+			return log_1["file"] == log_2["file"]\
+				&& log_1["line"] == log_2["line"]\
+				&& deep_compare_list(log_1["stack"], log_2["stack"])
+		else
+			return TRUE
+
+
+/**
+ * Similar to pick_weight_recursive, except without the weight part, meaning it should hopefully not take
+ * up as much computing power for things that don't +need+ weights.
+ * * * Able to handle cases such as:
+ * * pick_recursive(list(a), list(b), list(c))
+ * * pick_recursive(list(list(a), list(b)))
+ * * pick_recursive(a, list(b), list(list(c), list(d)))
+ * * pick_recusrive(list(a, b, c), d, e)
+ * Really any combination of lists & vars, as long as the passed lists aren't empty
+ */
+/proc/pick_recursive(...)
+	var/result = pick(args)
+	while(islist(result))
+		result = pick(result)
+	return result
+
+/** Takes in two weighted lists and outputs a third list containing the elements of both inputs with their weights blended according to a given proportion.
+ * Not exact and may have rounding errors, will round to nearest 1/1000.
+ * */
+/proc/blend_weighted_lists(list/listA, list/listB, blend)
+	var/list/joined_list = listA | listB
+
+	listA = counterlist_normalise(listA)
+	listB = counterlist_normalise(listB)
+
+	for(var/element in joined_list)
+		joined_list[element] = round((listA[element] * (1 - blend) + listB[element] * (blend)) * 1000)
+
+	return joined_list

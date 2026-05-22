@@ -1,11 +1,13 @@
 /obj/item/transfer_valve
-	icon = 'icons/obj/assemblies.dmi'
+	icon = 'icons/obj/devices/assemblies.dmi'
 	name = "tank transfer valve"
 	icon_state = "valve_1"
 	base_icon_state = "valve"
 	inhand_icon_state = "ttv"
 	lefthand_file = 'icons/mob/inhands/weapons/bombs_lefthand.dmi'
 	righthand_file = 'icons/mob/inhands/weapons/bombs_righthand.dmi'
+	worn_icon = 'icons/mob/clothing/back/backpack.dmi'
+	worn_icon_state = "ttv"
 	desc = "Regulates the transfer of air between two tanks."
 	w_class = WEIGHT_CLASS_BULKY
 
@@ -15,24 +17,82 @@
 	var/mob/attacher = null
 	var/valve_open = FALSE
 	var/toggle = TRUE
+	///do we have cables attached to be able to be put on the back?
+	var/wired = FALSE
+	///our overlay when wired = true
+	var/mutable_appearance/cable_overlay
+
+/obj/item/transfer_valve/Initialize(mapload)
+	. = ..()
+	AddElement(/datum/element/cuffable_item)
+	RegisterSignal(src, COMSIG_ITEM_FRIED, PROC_REF(on_fried))
+	register_context()
+	register_item_context()
 
 /obj/item/transfer_valve/Destroy()
 	attached_device = null
 	return ..()
 
+/obj/item/transfer_valve/add_context(atom/source, list/context, obj/item/held_item, mob/user)
+	. = ..()
+
+	if(tank_one || tank_two)
+		context[SCREENTIP_CONTEXT_ALT_LMB] = "Remove [tank_one || tank_two]"
+		. = CONTEXTUAL_SCREENTIP_SET
+	if(istype(held_item) && is_type_in_list(held_item, list(/obj/item/tank, /obj/item/assembly)))
+		context[SCREENTIP_CONTEXT_LMB] = "Attach [held_item]"
+		. = CONTEXTUAL_SCREENTIP_SET
+
+	return . || NONE
+
+/obj/item/transfer_valve/add_item_context(obj/item/source, list/context, atom/target, mob/living/user)
+	. = NONE
+	if(istype(target, /obj/vehicle/ridden/wheelchair))
+		var/obj/vehicle/ridden/wheelchair/chair = target
+		if(!chair.bell_attached)
+			context[SCREENTIP_CONTEXT_LMB] = "Attach TTV to wheelchair."
+			return CONTEXTUAL_SCREENTIP_SET
+
+/obj/item/transfer_valve/click_alt(mob/user)
+	if(tank_one)
+		split_gases()
+		valve_open = FALSE
+		tank_one.forceMove(drop_location())
+	else if(tank_two)
+		split_gases()
+		valve_open = FALSE
+		tank_two.forceMove(drop_location())
+
+	return CLICK_ACTION_SUCCESS
+
 /obj/item/transfer_valve/IsAssemblyHolder()
 	return TRUE
 
-/obj/item/transfer_valve/handle_atom_del(atom/deleted_atom)
+/obj/item/transfer_valve/Exited(atom/movable/gone, direction)
 	. = ..()
-	if(deleted_atom == tank_one)
+	if(gone == tank_one)
 		tank_one = null
 		update_appearance()
-		return
-	if(deleted_atom == tank_two)
+	else if(gone == tank_two)
 		tank_two = null
 		update_appearance()
-		return
+
+/obj/item/transfer_valve/interact_with_atom(atom/interacting_with, mob/living/user, list/modifiers)
+	. = ..()
+	if (!istype(interacting_with, /obj/vehicle/ridden/wheelchair))
+		return NONE
+	var/obj/vehicle/ridden/wheelchair/chair = interacting_with
+
+	if (chair.bomb_attached)
+		user.balloon_alert(user, "already has a TTV!")
+		return ITEM_INTERACT_FAILURE
+	user.balloon_alert(user, "attaching TTV...")
+	if (!do_after(user, 0.5 SECONDS, chair))
+		return ITEM_INTERACT_FAILURE
+
+	chair.attach_bomb(src)
+	user.log_message("attached [src] to [chair]", LOG_GAME)
+	return ITEM_INTERACT_SUCCESS
 
 /obj/item/transfer_valve/attackby(obj/item/item, mob/user, params)
 	if(istype(item, /obj/item/tank))
@@ -65,11 +125,32 @@
 			return
 		attached_device = A
 		to_chat(user, span_notice("You attach the [item] to the valve controls and secure it."))
-		A.on_attach()
 		A.holder = src
+		A.on_attach()
 		A.toggle_secure() //this calls update_icon(), which calls update_icon() on the holder (i.e. the bomb).
 		log_bomber(user, "attached a [item.name] to a ttv -", src, null, FALSE)
 		attacher = user
+
+	else if(istype(item, /obj/item/stack/cable_coil) && !wired)
+		var/obj/item/stack/cable_coil/coil = item
+		if (coil.get_amount() < 15)
+			to_chat(user, span_warning("You need fifteen lengths of coil for this!"))
+			return
+		coil.use(15)
+		to_chat(user, span_notice("You add some cables, not being really sure why. Looks like <i>backpack</i> straps."))
+		wired = TRUE
+		slot_flags |= ITEM_SLOT_BACK
+		update_appearance()
+
+	else if(item.tool_behaviour == TOOL_WIRECUTTER && wired)
+		item.play_tool_sound(src)
+		to_chat(user, span_notice("You remove the cables."))
+		wired = FALSE
+		slot_flags &= ~ITEM_SLOT_BACK
+		Move(drop_location())
+		new /obj/item/stack/cable_coil(drop_location(), 15)
+		update_appearance()
+
 	return
 
 //These keep attached devices synced up, for example a TTV with a mouse trap being found in a bag so it's triggered, or moving the TTV with an infrared beam sensor to update the beam's direction.
@@ -99,7 +180,7 @@
 	if(toggle)
 		toggle = FALSE
 		toggle_valve()
-		addtimer(CALLBACK(src, .proc/toggle_off), 5) //To stop a signal being spammed from a proxy sensor constantly going off or whatever
+		addtimer(CALLBACK(src, PROC_REF(toggle_off)), 5) //To stop a signal being spammed from a proxy sensor constantly going off or whatever
 
 /obj/item/transfer_valve/proc/toggle_off()
 	toggle = TRUE
@@ -122,6 +203,19 @@
 		J.transform = T
 		underlays = list(J)
 
+	if(wired)
+		cable_overlay = mutable_appearance(icon, icon_state = "valve_cables", layer = layer + 0.05, appearance_flags = KEEP_TOGETHER)
+		add_overlay(cable_overlay)
+
+	else if(cable_overlay)
+		cut_overlay(cable_overlay, TRUE)
+		cable_overlay = null
+
+	worn_icon_state = "[initial(worn_icon_state)][tank_two ? "l" : ""][tank_one ? "r" : ""]"
+	if(ishuman(loc)) //worn
+		var/mob/living/carbon/human/human = loc
+		human.update_worn_back()
+
 	if(!attached_device)
 		return
 
@@ -133,24 +227,29 @@
 		. += "proxy_beam"
 
 
-/obj/item/transfer_valve/proc/merge_gases(datum/gas_mixture/target, change_volume = TRUE)
-	var/target_self = FALSE
-	var/datum/gas_mixture/mix_one = tank_one.return_air()
-	var/datum/gas_mixture/mix_two = tank_two.return_air()
-	if(!target || (target == mix_one))
-		target = mix_two
-	if(target == mix_two)
-		target_self = TRUE
+/// Merge both gases into a single tank. Combine the volume by default. If target tank isn't specified default to tank_two
+/obj/item/transfer_valve/proc/merge_gases(obj/item/tank/target, change_volume = TRUE)
+	if(!target)
+		target = tank_two
+
+	if(!istype(target) || (target != tank_one && target != tank_two))
+		return FALSE
+
+	for(var/obj/effect/forcefield/cosmic_field/potential_field as anything in GLOB.active_cosmic_fields)
+		if(get_dist(potential_field, src) < 3)
+			new /obj/effect/temp_visual/revenant(get_turf(src))
+			return FALSE
+
+	// Throw both tanks into processing queue
+	var/datum/gas_mixture/target_mix = target.return_air()
+	var/datum/gas_mixture/other_mix
+	other_mix = (target == tank_one ? tank_two : tank_one).return_air()
+
 	if(change_volume)
-		if(!target_self)
-			target.volume += tank_two.volume
-		target.volume += mix_one.volume
-	var/datum/gas_mixture/temp
-	temp = mix_one.remove_ratio(1)
-	target.merge(temp)
-	if(!target_self)
-		temp = mix_two.remove_ratio(1)
-		target.merge(temp)
+		target_mix.volume += other_mix.volume
+
+	target_mix.merge(other_mix.remove_ratio(1))
+	return TRUE
 
 /obj/item/transfer_valve/proc/split_gases()
 	if (!valve_open || !tank_one || !tank_two)
@@ -168,17 +267,17 @@
 	Exadv1: I know this isn't how it's going to work, but this was just to check
 	it explodes properly when it gets a signal (and it does).
 */
-/obj/item/transfer_valve/proc/toggle_valve()
+/obj/item/transfer_valve/proc/toggle_valve(obj/item/tank/target, change_volume = TRUE)
+	playsound(src, 'sound/effects/valve_opening.ogg', 50)
 	if(!valve_open && tank_one && tank_two)
-		valve_open = TRUE
 		var/turf/bombturf = get_turf(src)
 
 		var/attachment
 		var/attachment_signal_log
 		if(attached_device)
-			if(istype(attached_device, /obj/item/assembly/signaler))
+			if(issignaler(attached_device))
 				var/obj/item/assembly/signaler/attached_signaller = attached_device
-				attachment = "<A HREF='?_src_=holder;[HrefToken()];secrets=list_signalers'>[attached_signaller]</A>"
+				attachment = "<A href='byond://?_src_=holder;[HrefToken()];secrets=list_signalers'>[attached_signaller]</A>"
 				attachment_signal_log = attached_signaller.last_receive_signal_log ? "The following log entry is the last one associated with the attached signaller<br>[attached_signaller.last_receive_signal_log]" : "There is no signal log entry."
 			else
 				attachment = attached_device
@@ -195,15 +294,25 @@
 		if(bomber)
 			admin_bomber_message = "The bomb's most recent set of fingerprints indicate it was last touched by [ADMIN_LOOKUPFLW(bomber)]"
 			bomber_message = " - Last touched by: [key_name_admin(bomber)]"
+			bomber.log_message("opened bomb valve", LOG_GAME, log_globally = FALSE)
+
+		if(istype(attachment, /obj/item/assembly/voice))
+			var/obj/item/assembly/voice/spoken_trigger = attachment
+			attachment_message += " with the following activation message: \"[spoken_trigger.recorded]\""
+			admin_attachment_message += " with the following activation message: \"[spoken_trigger.recorded]\""
 
 		var/admin_bomb_message = "Bomb valve opened in [ADMIN_VERBOSEJMP(bombturf)]<br>[admin_attachment_message]<br>[admin_bomber_message]<br>[attachment_signal_log]"
 		GLOB.bombers += admin_bomb_message
 		message_admins(admin_bomb_message)
 		log_game("Bomb valve opened in [AREACOORD(bombturf)][attachment_message][bomber_message]")
 
-		merge_gases()
+		valve_open = merge_gases(target, change_volume)
+
+		if(!valve_open)
+			stack_trace("TTV gas merging failed.")
+
 		for(var/i in 1 to 6)
-			addtimer(CALLBACK(src, /atom/.proc/update_appearance), 20 + (i - 1) * 10)
+			addtimer(CALLBACK(src, TYPE_PROC_REF(/atom/, update_appearance)), 20 + (i - 1) * 10)
 
 	else if(valve_open && tank_one && tank_two)
 		split_gases()
@@ -215,6 +324,12 @@
 */
 /obj/item/transfer_valve/proc/c_state()
 	return
+
+///Signal when deep fried, so it can have an explosive reaction!
+/obj/item/transfer_valve/proc/on_fried(datum/source, fry_time)
+	SIGNAL_HANDLER
+	log_bomber(null, "TTV valve opened via deepfrying", src, "last fingerprints = [fingerprintslast]")
+	toggle_valve()
 
 /obj/item/transfer_valve/ui_state(mob/user)
 	return GLOB.hands_state
@@ -233,7 +348,7 @@
 	data["valve"] = valve_open
 	return data
 
-/obj/item/transfer_valve/ui_act(action, params)
+/obj/item/transfer_valve/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	. = ..()
 	if(.)
 		return
@@ -244,14 +359,12 @@
 				split_gases()
 				valve_open = FALSE
 				tank_one.forceMove(drop_location())
-				tank_one = null
 				. = TRUE
 		if("tanktwo")
 			if(tank_two)
 				split_gases()
 				valve_open = FALSE
 				tank_two.forceMove(drop_location())
-				tank_two = null
 				. = TRUE
 		if("toggle")
 			toggle_valve()
@@ -273,3 +386,11 @@
  */
 /obj/item/transfer_valve/proc/ready()
 	return tank_one && tank_two
+
+/obj/item/transfer_valve/fake/Initialize(mapload)
+	. = ..()
+
+	tank_one = new /obj/item/tank/internals/plasma (src)
+	tank_two = new /obj/item/tank/internals/oxygen (src)
+
+	update_appearance()

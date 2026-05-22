@@ -1,20 +1,35 @@
 // Flags for the obj_flags var on /obj
 
-
+/// Object has been affected by a cryptographic sequencer (EMAG) disabling it or causing other malicious effects
 #define EMAGGED (1<<0)
-#define IN_USE (1<<1) // If we have a user using us, this will be set on. We will check if the user has stopped using us, and thus stop updating and LAGGING EVERYTHING!
-#define CAN_BE_HIT (1<<2) //can this be bludgeoned by items?
-#define BEING_SHOCKED (1<<3) // Whether this thing is currently (already) being shocked by a tesla
-#define DANGEROUS_POSSESSION (1<<4) //Admin possession yes/no
-#define ON_BLUEPRINTS (1<<5)  //Are we visible on the station blueprints at roundstart?
-#define UNIQUE_RENAME (1<<6) // can you customize the description/name of the thing?
-#define USES_TGUI (1<<7) //put on things that use tgui on ui_interact instead of custom/old UI.
-#define FROZEN (1<<8)
-#define BLOCK_Z_OUT_DOWN (1<<9)  // Should this object block z falling from loc?
-#define BLOCK_Z_OUT_UP (1<<10) // Should this object block z uprise from loc?
-#define BLOCK_Z_IN_DOWN (1<<11) // Should this object block z falling from above?
-#define BLOCK_Z_IN_UP (1<<12) // Should this object block z uprise from below?
-#define NO_BUILD (1<<13) // Can we build on this object?
+/// Can this be bludgeoned by items
+#define CAN_BE_HIT (1<<1)
+/// Admin possession yes/no
+#define DANGEROUS_POSSESSION (1<<2)
+/// Can you customize the description/name of the thing
+#define UNIQUE_RENAME (1<<3)
+/// If it can be renamed, is its description excluded
+#define RENAME_NO_DESC (1<<4)
+/// Should this object block z falling from loc
+#define BLOCK_Z_OUT_DOWN (1<<5)
+/// Should this object block z uprise from loc
+#define BLOCK_Z_OUT_UP (1<<6)
+/// Should this object block z falling from above
+#define BLOCK_Z_IN_DOWN (1<<7)
+/// Should this object block z uprise from below
+#define BLOCK_Z_IN_UP (1<<8)
+/// Does this object prevent things from being built on it
+#define BLOCKS_CONSTRUCTION (1<<9)
+/// Does this object prevent same-direction things from being built on it
+#define BLOCKS_CONSTRUCTION_DIR (1<<10)
+/// Can we ignore density when building on this object (for example, directional windows and grilles)
+#define IGNORE_DENSITY (1<<11)
+/// Can this object conduct electricity
+#define CONDUCTS_ELECTRICITY (1<<12)
+/// Atoms don't spawn anything when deconstructed (they just vanish)
+#define NO_DEBRIS_AFTER_DECONSTRUCTION (1<<13)
+/// Flag which tells an object to hang onto an support atom on late initialize. Usefull only during mapload and supported by some atoms only
+#define MOUNT_ON_LATE_INITIALIZE (1<<14)
 
 // If you add new ones, be sure to add them to /obj/Initialize as well for complete mapping support
 
@@ -29,48 +44,75 @@
 #define NO_MAT_REDEMPTION (1<<5) // Stops you from putting things like an RCD or other items into an ORM or protolathe for materials.
 #define DROPDEL (1<<6) // When dropped, it calls qdel on itself
 #define NOBLUDGEON (1<<7) // when an item has this it produces no "X has been hit by Y with Z" message in the default attackby()
-#define ABSTRACT (1<<9) // for all things that are technically items but used for various different stuff <= wow thanks for the fucking insight sherlock
+/**
+ * for all things that are technically items but don't want to be treated as such, given on a case-by-case basis
+ * examples of use are hand items, omni-toolsets, non-limb limbs (hand eater, mounted chainsaw, many null rods), borg modules, bodyparts, organs, etc.
+ * This is used for general exclusion, such as preventing insertions into other items
+ * Basically, these aren't "real" items. <= wow thanks for the fucking insight sherlock
+*/
+#define ABSTRACT (1<<9)
 #define IMMUTABLE_SLOW (1<<10) // When players should not be able to change the slowdown of the item (Speed potions, etc)
 #define IN_STORAGE (1<<11) //is this item in the storage item, such as backpack? used for tooltips
 #define SURGICAL_TOOL (1<<12) //Tool commonly used for surgery: won't attack targets in an active surgical operation on help intent (in case of mistakes)
+#define CRUEL_IMPLEMENT (1<<13) //This object, when used for surgery, causes a lot more pain for the patient, and is more efficient in a morbid users hands
 #define HAND_ITEM (1<<14) // If an item is just your hand (circled hand, slapper) and shouldn't block things like riding
-#define EXAMINE_SKIP (1<<15) // Makes the Examine proc not read out this item.
-#define XENOMORPH_HOLDABLE (1<<16) // A Xenomorph can hold this item.
-#define NO_PIXEL_RANDOM_DROP (1<<17) //if dropped, it wont have a randomized pixel_x/pixel_y
+#define XENOMORPH_HOLDABLE (1<<15) // A Xenomorph can hold this item.
+#define NO_PIXEL_RANDOM_DROP (1<<16) //if dropped, it wont have a randomized pixel_x/pixel_y
 ///Can be equipped on digitigrade legs.
-#define IGNORE_DIGITIGRADE (1<<18)
+#define IGNORE_DIGITIGRADE (1<<17)
+/// Has contextual screentips when HOVERING OVER OTHER objects
+#define ITEM_HAS_CONTEXTUAL_SCREENTIPS (1 << 18)
+/// No blood overlay is allowed to appear on this item, and it cannot gain blood DNA forensics
+#define NO_BLOOD_ON_ITEM (1 << 19)
+/// Whether this item should skip the /datum/component/fantasy applied on spawn on the RPG event. Used on things like stacks
+#define SKIP_FANTASY_ON_SPAWN (1<<20)
+/// If an item has had its /datum/element/weapon_description initialized or not.
+#define WEAPON_DESCRIPTION_INITIALIZED (1<<21)
 
 // Flags for the clothing_flags var on /obj/item/clothing
 
+/// SUIT and HEAD items which stop lava from hurting the wearer
 #define LAVAPROTECT (1<<0)
-#define STOPSPRESSUREDAMAGE (1<<1) //SUIT and HEAD items which stop pressure damage. To stop you taking all pressure damage you must have both a suit and head item with this flag.
-#define BLOCK_GAS_SMOKE_EFFECT (1<<2) // blocks the effect that chemical clouds would have on a mob --glasses, mask and helmets ONLY!
-#define MASKINTERNALS (1<<3) // mask allows internals
-#define GAS_FILTERING (1<<4) //mask filters toxins and other harmful gases
-#define NOSLIP (1<<5) //prevents from slipping on wet floors, in space etc
-#define NOSLIP_ICE (1<<6) //prevents from slipping on frozen floors
-#define THICKMATERIAL (1<<7) //prevents syringes, parapens and hypos if the external suit or helmet (if targeting head) has this flag. Example: space suits, biosuit, bombsuits, thick suits that cover your body.
-#define VOICEBOX_TOGGLABLE (1<<8) // The voicebox in this clothing can be toggled.
-#define VOICEBOX_DISABLED (1<<9) // The voicebox is currently turned off.
-#define BLOCKS_SHOVE_KNOCKDOWN (1<<11) // Prevents shovies against a dense object from knocking the wearer down.
-#define SNUG_FIT (1<<12) //Prevents knock-off from things like hat-throwing.
-#define ANTI_TINFOIL_MANEUVER (1<<13) //Hats with negative effects when worn (i.e the tinfoil hat).
-#define DANGEROUS_OBJECT (1<<14) //Clothes that cause a larger notification when placed on a person.
-#define LARGE_WORN_ICON (1<<15) //Clothes that use large icons, for applying the proper overlays like blood
-/// Clothes that block speech (i.e the muzzle). Can be applied to any clothing piece.
-#define BLOCKS_SPEECH (1<<16)
-#define PLASMAMAN_HELMET_EXEMPT (1<<17) //prevents from placing on plasmaman helmet
-
-/// Flags for the organ_flags var on /obj/item/organ
-
-#define ORGAN_SYNTHETIC (1<<0) //Synthetic organs, or cybernetic organs. Reacts to EMPs and don't deteriorate or heal
-#define ORGAN_FROZEN (1<<1) //Frozen organs, don't deteriorate
-#define ORGAN_FAILING (1<<2) //Failing organs perform damaging effects until replaced or fixed
-#define ORGAN_EXTERNAL (1<<3) //Was this organ implanted/inserted/etc, if true will not be removed during species change.
-#define ORGAN_VITAL (1<<4) //Currently only the brain
-#define ORGAN_EDIBLE (1<<5) //is a snack? :D
-#define ORGAN_SYNTHETIC_EMP (1<<6) //Synthetic organ affected by an EMP. Deteriorates over time.
-#define ORGAN_UNREMOVABLE (1<<7) //Can't be removed using surgery
+/// SUIT and HEAD items which stop pressure damage.
+/// To stop you taking all pressure damage you must have both a suit and head item with this flag.
+#define STOPSPRESSUREDAMAGE (1<<1)
+/// blocks the effect that chemical clouds would have on a mob --glasses, mask and helmets ONLY!
+#define BLOCK_GAS_SMOKE_EFFECT (1<<2)
+/// mask allows internals
+#define MASKINTERNALS (1<<3)
+/// mask filters toxins and other harmful gases
+#define GAS_FILTERING (1<<4)
+/// prevents syringes, parapens and hypos if the external suit or helmet (if targeting head) has this flag.
+/// Example: space suits, biosuit, bombsuits, thick suits that cover your body.
+#define THICKMATERIAL (1<<5)
+/// The voicebox in this clothing can be toggled.
+#define VOICEBOX_TOGGLABLE (1<<6)
+/// The voicebox is currently turned off.
+#define VOICEBOX_DISABLED (1<<7)
+/// Prevents knock-off from things like hat-throwing.
+#define SNUG_FIT (1<<8)
+/// Hats with negative effects when worn (i.e the tinfoil hat).
+#define ANTI_TINFOIL_MANEUVER (1<<9)
+/// Clothes that cause a larger notification when placed on a person.
+#define DANGEROUS_OBJECT (1<<10)
+/// Clothes that use large icons, for applying the proper overlays like blood
+#define LARGE_WORN_ICON (1<<11)
+/// prevents from placing on plasmaman helmet or modsuit hat holder
+#define STACKABLE_HELMET_EXEMPT (1<<12)
+/// Prevents plasmamen from igniting when wearing this
+#define PLASMAMAN_PREVENT_IGNITION (1<<13)
+/// Usable as casting clothes by wizards (matters for suits, glasses and headwear)
+#define CASTING_CLOTHES (1<<14)
+///Moths can't eat the clothing that has this flag.
+#define INEDIBLE_CLOTHING (1<<15)
+/// Headgear/helmet allows internals
+#define HEADINTERNALS (1<<16)
+/// Prevents masks from getting adjusted from enabling internals
+#define INTERNALS_ADJUST_EXEMPT (1<<17)
+/// Indicates that the piece of clothing contributes towards Sleeping Carp's style factor, which determines evasion probabilities. See /datums/martial/sleeping_carp/carp_style_check().
+#define CARP_STYLE_FACTOR (1<<18)
+/// Prevents clothing from losing bodyparts coverage when shredded
+#define NO_ZONE_DISABLING (1<<19)
 
 /// Integrity defines for clothing (not flags but close enough)
 #define CLOTHING_PRISTINE 0 // We have no damage on the clothing
@@ -82,7 +124,20 @@
 
 /// Flags for the gun_flags var for firearms
 #define TOY_FIREARM_OVERLAY (1<<0) // If update_overlay would add some indicator that the gun is a toy, like a plastic cap on a pistol
+/// Currently used to identify valid guns to steal
+#define NOT_A_REAL_GUN (1<<1)
+/// This gun shouldn't be allowed to go in a turret (it probably causes a bug/exploit)
+#define TURRET_INCOMPATIBLE (1<<2)
 
 /// Flags for sharpness in obj/item
 #define SHARP_EDGED (1<<0)
 #define SHARP_POINTY (1<<1)
+
+/// Flags for specifically what kind of items to get in get_equipped_items
+#define INCLUDE_POCKETS (1<<0)
+#define INCLUDE_ACCESSORIES (1<<1)
+#define INCLUDE_HELD (1<<2)
+/// Include prosthetic item limbs (which are not flavoured as being equipped items)
+#define INCLUDE_PROSTHETICS (1<<3)
+/// Include items that are not "real" items, such as hand items
+#define INCLUDE_ABSTRACT (1<<4)

@@ -4,22 +4,18 @@
 ///A lavaland geyser that spawns chems and can be mining scanned for points. Made to work with the plumbing pump to extract that sweet rare nectar
 /obj/structure/geyser
 	name = "geyser"
-	icon = 'icons/obj/lavaland/terrain.dmi'
+	icon = 'icons/obj/mining_zones/terrain.dmi'
 	icon_state = "geyser"
 	anchored = TRUE
 
 	///set to null to get it greyscaled from "[icon_state]_soup". Not very usable with the whole random thing, but more types can be added if you change the spawn prob
 	var/erupting_state = null
-	//whether we are active and generating chems
-	var/activated = FALSE
 	///what chem do we produce?
-	var/reagent_id = /datum/reagent/fuel/oil
+	var/datum/reagent/reagent_id = /datum/reagent/fuel/oil
 	///how much reagents we add every process (2 seconds)
 	var/potency = 2
 	///maximum volume
 	var/max_volume = 500
-	///how much we start with after getting activated
-	var/start_volume = 50
 
 	///Have we been discovered with a mining scanner?
 	var/discovered = FALSE
@@ -35,37 +31,40 @@
 
 	AddElement(/datum/element/swabable, CELL_LINE_TABLE_NETHER, CELL_VIRUS_TABLE_GENERIC, 1, 5)
 
-///start producing chems, should be called just once
-/obj/structure/geyser/proc/start_chemming()
-	activated = TRUE
 	create_reagents(max_volume, DRAINABLE)
-	reagents.add_reagent(reagent_id, start_volume)
-	START_PROCESSING(SSfluids, src) //It's main function is to be plumbed, so use SSfluids
+	reagents.add_reagent(reagent_id, max_volume)
+
+	RegisterSignal(reagents, COMSIG_REAGENTS_HOLDER_UPDATED, PROC_REF(start_chemming))
+
 	if(erupting_state)
 		icon_state = erupting_state
 	else
-		var/mutable_appearance/I = mutable_appearance('icons/obj/lavaland/terrain.dmi', "[icon_state]_soup")
+		var/mutable_appearance/I = mutable_appearance('icons/obj/mining_zones/terrain.dmi', "[icon_state]_soup")
 		I.color = mix_color_from_reagents(reagents.reagent_list)
 		add_overlay(I)
 
+///start making those CHHHHHEEEEEEMS. Called whenever chems are removed
+/obj/structure/geyser/proc/start_chemming()
+	SIGNAL_HANDLER
+
+	UnregisterSignal(reagents, COMSIG_REAGENTS_HOLDER_UPDATED)
+
+	START_PROCESSING(SSplumbing, src) //Its main function is to be plumbed, so use SSplumbing
+
+///Add reagents until we are full
 /obj/structure/geyser/process()
-	if(activated && reagents.total_volume <= reagents.maximum_volume) //this is also evaluated in add_reagent, but from my understanding proc calls are expensive
+	//create more
+	if(reagents.total_volume <= reagents.maximum_volume)
 		reagents.add_reagent(reagent_id, potency)
-
-/obj/structure/geyser/plunger_act(obj/item/plunger/P, mob/living/user, _reinforced)
-	if(!_reinforced)
-		to_chat(user, span_warning("The [P.name] isn't strong enough!"))
-		return
-	if(activated)
-		to_chat(user, span_warning("The [name] is already active!"))
 		return
 
-	to_chat(user, span_notice("You start vigorously plunging [src]!"))
-	if(do_after(user, 50 * P.plunge_mod, target = src) && !activated)
-		start_chemming()
+	//we're full
+	RegisterSignal(reagents, COMSIG_REAGENTS_HOLDER_UPDATED, PROC_REF(start_chemming))
+	return PROCESS_KILL
 
-/obj/structure/geyser/attackby(obj/item/item, mob/user, params)
+/obj/structure/geyser/attackby(obj/item/item, mob/user, list/modifiers, list/attack_modifiers)
 	if(!istype(item, /obj/item/mining_scanner) && !istype(item, /obj/item/t_scanner/adv_mining_scanner))
+		playsound(src, SFX_INDUSTRIAL_SCAN, 20, TRUE, -2, TRUE, FALSE)
 		return ..() //this runs the plunger code
 
 	if(discovered)
@@ -73,6 +72,8 @@
 		return
 
 	to_chat(user, span_notice("You discovered the geyser and mark it on the GPS system!"))
+	playsound(src, 'sound/machines/beep/twobeep_high.ogg', 30)
+	SEND_SIGNAL(user, COMSIG_LIVING_DISCOVERED_GEYSER, src)
 	if(discovery_message)
 		to_chat(user, discovery_message)
 
@@ -88,7 +89,7 @@
 		var/obj/item/card/id/card = living.get_idcard()
 		if(card)
 			to_chat(user, span_notice("[point_value] mining points have been paid out!"))
-			card.mining_points += point_value
+			card.registered_account.mining_points += point_value
 
 /obj/structure/geyser/wittel
 	reagent_id = /datum/reagent/wittel
@@ -108,14 +109,23 @@
 	reagent_id = /datum/reagent/water/hollowwater
 	true_name = "hollow water geyser"
 
+/obj/structure/geyser/chiral_buffer
+	reagent_id = /datum/reagent/reaction_agent/inversing_buffer
+	point_value = 250
+	true_name = "chiral inversing geyser"
+	discovery_message = "It's a rare chiral inversing geyser! This could be very powerful in the right hands... "
+
 /obj/structure/geyser/random
 	point_value = 500
-	true_name = "strange geyser"
-	discovery_message = "It's a strange geyser! How does any of this even work?" //it doesnt
 
 /obj/structure/geyser/random/Initialize(mapload)
-	. = ..()
 	reagent_id = get_random_reagent_id()
+
+	true_name = "[initial(reagent_id.name)] geyser"
+
+	discovery_message = "It's a [true_name]! How does any of this even work?" //it doesnt
+
+	return ..()
 
 ///A wearable tool that lets you empty plumbing machinery and some other stuff
 /obj/item/plunger
@@ -124,6 +134,7 @@
 	icon = 'icons/obj/watercloset.dmi'
 	icon_state = "plunger"
 	worn_icon_state = "plunger"
+	icon_angle = 90
 
 	slot_flags = ITEM_SLOT_MASK
 	flags_inv = HIDESNOUT
@@ -139,15 +150,12 @@
 	///What layer we set it to
 	var/target_layer = DUCT_LAYER_DEFAULT
 
-	///Assoc list for possible layers
-	var/list/layers = list("Second Layer" = SECOND_DUCT_LAYER, "Default Layer" = DUCT_LAYER_DEFAULT, "Fourth Layer" = FOURTH_DUCT_LAYER)
-
-/obj/item/plunger/attack_atom(obj/O, mob/living/user, params)
+/obj/item/plunger/attack_atom(obj/attacked_obj, mob/living/user, list/modifiers, list/attack_modifiers)
 	if(layer_mode)
-		SEND_SIGNAL(O, COMSIG_MOVABLE_CHANGE_DUCT_LAYER, O, target_layer)
+		SEND_SIGNAL(attacked_obj, COMSIG_MOVABLE_CHANGE_DUCT_LAYER, attacked_obj, target_layer)
 		return ..()
 	else
-		if(!O.plunger_act(src, user, reinforced))
+		if(!attacked_obj.plunger_act(src, user, reinforced))
 			return ..()
 
 /obj/item/plunger/throw_impact(atom/hit_atom, datum/thrownthing/tt)
@@ -174,14 +182,12 @@
 
 	playsound(src, 'sound/machines/click.ogg', 10, TRUE)
 
-/obj/item/plunger/AltClick(mob/user)
-	if(!istype(user) || !user.canUseTopic(src, BE_CLOSE))
-		return
-
-	var/new_layer = tgui_input_list(user, "Select a layer", "Layer", layers)
-	if(isnull(new_layer))
-		return
-	target_layer = layers[new_layer]
+/obj/item/plunger/click_alt(mob/user)
+	var/new_layer = tgui_input_list(user, "Select a layer", "Layer", GLOB.plumbing_layers)
+	if(isnull(new_layer) || !user.can_perform_action(src))
+		return CLICK_ACTION_BLOCKING
+	target_layer = GLOB.plumbing_layers[new_layer]
+	return CLICK_ACTION_SUCCESS
 
 ///A faster reinforced plunger
 /obj/item/plunger/reinforced
@@ -193,4 +199,4 @@
 	plunge_mod = 0.5
 	layer_mode_sprite = "reinforced_plunger_layer"
 
-	custom_premium_price = PAYCHECK_MEDIUM * 8
+	custom_premium_price = PAYCHECK_CREW * 8

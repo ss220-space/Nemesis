@@ -4,8 +4,8 @@
 	icon = 'icons/obj/machines/prison.dmi'
 	icon_state = "offline"
 	use_power = IDLE_POWER_USE
-	idle_power_usage = 2
-	active_power_usage = 50
+	idle_power_usage = BASE_MACHINE_IDLE_CONSUMPTION * 0.02
+	active_power_usage = BASE_MACHINE_ACTIVE_CONSUMPTION * 0.05
 	var/obj/item/stack/license_plates/empty/current_plate
 	var/pressing = FALSE
 
@@ -26,7 +26,7 @@
 	QDEL_NULL(current_plate)
 	. = ..()
 
-/obj/machinery/plate_press/attackby(obj/item/I, mob/living/user, params)
+/obj/machinery/plate_press/attackby(obj/item/I, mob/living/user, list/modifiers, list/attack_modifiers)
 	if(!is_operational)
 		to_chat(user, span_warning("[src] has to be on to do this!"))
 		return FALSE
@@ -53,16 +53,16 @@
 	update_appearance()
 	to_chat(user, span_notice("You start pressing a new license plate!"))
 
-	if(!do_after(user, 40, target = src))
+	if(!do_after(user, 4 SECONDS, target = src))
 		pressing = FALSE
 		update_appearance()
 		return FALSE
 
-	use_power(100)
+	use_energy(active_power_usage)
 	to_chat(user, span_notice("You finish pressing a new license plate!"))
 
 	pressing = FALSE
 	QDEL_NULL(current_plate)
 	update_appearance()
 
-	new /obj/item/stack/license_plates/filled(drop_location(), 1)
+	new /obj/item/stack/license_plates/filled(drop_location())

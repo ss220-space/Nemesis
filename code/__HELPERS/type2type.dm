@@ -4,7 +4,6 @@
  * file2list
  * angle2dir
  * angle2text
- * worldtime2text
  * text2dir_extended & dir2text_short
  */
 
@@ -36,8 +35,8 @@
 			return "northwest"
 		if(SOUTHWEST)
 			return "southwest"
-		else
-	return
+
+	return NONE
 
 //Turns text into proper directions
 /proc/text2dir(direction)
@@ -58,8 +57,8 @@
 			return SOUTHEAST
 		if("SOUTHWEST")
 			return SOUTHWEST
-		else
-	return
+
+	return NONE
 
 //Converts an angle (degrees) into a ss13 direction
 GLOBAL_LIST_INIT(modulo_angle_to_dir, list(NORTH,NORTHEAST,EAST,SOUTHEAST,SOUTH,SOUTHWEST,WEST,NORTHWEST))
@@ -99,9 +98,34 @@ GLOBAL_LIST_INIT(modulo_angle_to_dir, list(NORTH,NORTHEAST,EAST,SOUTHEAST,SOUTH,
 		else
 			return null
 
+///Returns a single dir rotated by x degrees clockwise, adhering to the cardinal directions.
+#define turn_cardinal(dir, rotation) ( angle2dir_cardinal ( dir2angle(dir) + rotation ) )
+
 //Returns the angle in english
 /proc/angle2text(degree)
 	return dir2text(angle2dir(degree))
+
+/// Returns a list(x, y), being the change in position required to step in the passed in direction
+/proc/dir2offset(dir)
+	switch(dir)
+		if(NORTH)
+			return list(0, 1)
+		if(SOUTH)
+			return list(0, -1)
+		if(EAST)
+			return list(1, 0)
+		if(WEST)
+			return list(-1, 0)
+		if(NORTHEAST)
+			return list(1, 1)
+		if(SOUTHEAST)
+			return list(1, -1)
+		if(NORTHWEST)
+			return list(-1, 1)
+		if(SOUTHWEST)
+			return list(-1, -1)
+		else
+			return list(0, 0)
 
 //Converts a blend_mode constant to one acceptable to icon.Blend()
 /proc/blendMode2iconMode(blend_mode)
@@ -153,71 +177,56 @@ GLOBAL_LIST_INIT(modulo_angle_to_dir, list(NORTH,NORTHEAST,EAST,SOUTHEAST,SOUTH,
 	return .
 
 /// For finding out what body parts a body zone covers, the inverse of the below basically
-/proc/zone2body_parts_covered(def_zone)
+/proc/body_zone2cover_flags(def_zone)
 	switch(def_zone)
 		if(BODY_ZONE_CHEST)
-			return list(CHEST, GROIN)
+			return CHEST|GROIN
+		if(BODY_ZONE_PRECISE_GROIN)
+			return GROIN
 		if(BODY_ZONE_HEAD)
-			return list(HEAD)
+			return HEAD
 		if(BODY_ZONE_L_ARM)
-			return list(ARM_LEFT, HAND_LEFT)
+			return ARM_LEFT|HAND_LEFT
 		if(BODY_ZONE_R_ARM)
-			return list(ARM_RIGHT, HAND_RIGHT)
+			return ARM_RIGHT|HAND_RIGHT
 		if(BODY_ZONE_L_LEG)
-			return list(LEG_LEFT, FOOT_LEFT)
+			return LEG_LEFT|FOOT_LEFT
 		if(BODY_ZONE_R_LEG)
-			return list(LEG_RIGHT, FOOT_RIGHT)
+			return LEG_RIGHT|FOOT_RIGHT
 
 //Turns a Body_parts_covered bitfield into a list of organ/limb names.
-//(I challenge you to find a use for this) -I found a use for it!!
-/proc/body_parts_covered2organ_names(bpc)
+//(I challenge you to find a use for this) -I found a use for it!! | So did I!.
+/proc/cover_flags2body_zones(bpc)
 	var/list/covered_parts = list()
 
 	if(!bpc)
-		return 0
+		return covered_parts
 
-	if(bpc & FULL_BODY)
-		covered_parts |= list(BODY_ZONE_L_ARM,BODY_ZONE_R_ARM,BODY_ZONE_HEAD,BODY_ZONE_CHEST,BODY_ZONE_L_LEG,BODY_ZONE_R_LEG)
+	if(bpc & HEAD)
+		covered_parts |= list(BODY_ZONE_HEAD, BODY_ZONE_PRECISE_EYES, BODY_ZONE_PRECISE_MOUTH)
 
-	else
-		if(bpc & HEAD)
-			covered_parts |= list(BODY_ZONE_HEAD)
-		if(bpc & CHEST)
-			covered_parts |= list(BODY_ZONE_CHEST)
-		if(bpc & GROIN)
-			covered_parts |= list(BODY_ZONE_CHEST)
+	if(bpc & CHEST)
+		covered_parts |= list(BODY_ZONE_CHEST, BODY_ZONE_PRECISE_GROIN)
+	else if(bpc & GROIN)
+		covered_parts |= BODY_ZONE_PRECISE_GROIN
 
-		if(bpc & ARMS)
-			covered_parts |= list(BODY_ZONE_L_ARM,BODY_ZONE_R_ARM)
-		else
-			if(bpc & ARM_LEFT)
-				covered_parts |= list(BODY_ZONE_L_ARM)
-			if(bpc & ARM_RIGHT)
-				covered_parts |= list(BODY_ZONE_R_ARM)
+	if(bpc & HAND_LEFT)
+		covered_parts |= list(BODY_ZONE_L_ARM, BODY_ZONE_PRECISE_L_HAND)
+	else if(bpc & ARM_LEFT)
+		covered_parts |= BODY_ZONE_L_ARM
+	if(bpc & HAND_RIGHT)
+		covered_parts |= list(BODY_ZONE_R_ARM, BODY_ZONE_PRECISE_R_HAND)
+	else if(bpc & ARM_RIGHT)
+		covered_parts |= BODY_ZONE_R_ARM
 
-		if(bpc & HANDS)
-			covered_parts |= list(BODY_ZONE_L_ARM,BODY_ZONE_R_ARM)
-		else
-			if(bpc & HAND_LEFT)
-				covered_parts |= list(BODY_ZONE_L_ARM)
-			if(bpc & HAND_RIGHT)
-				covered_parts |= list(BODY_ZONE_R_ARM)
-
-		if(bpc & LEGS)
-			covered_parts |= list(BODY_ZONE_L_LEG,BODY_ZONE_R_LEG)
-		else
-			if(bpc & LEG_LEFT)
-				covered_parts |= list(BODY_ZONE_L_LEG)
-			if(bpc & LEG_RIGHT)
-				covered_parts |= list(BODY_ZONE_R_LEG)
-
-		if(bpc & FEET)
-			covered_parts |= list(BODY_ZONE_L_LEG,BODY_ZONE_R_LEG)
-		else
-			if(bpc & FOOT_LEFT)
-				covered_parts |= list(BODY_ZONE_L_LEG)
-			if(bpc & FOOT_RIGHT)
-				covered_parts |= list(BODY_ZONE_R_LEG)
+	if(bpc & FOOT_LEFT)
+		covered_parts |= list(BODY_ZONE_L_LEG, BODY_ZONE_PRECISE_L_FOOT)
+	else if(bpc & LEG_LEFT)
+		covered_parts |= BODY_ZONE_L_LEG
+	if(bpc & FOOT_RIGHT)
+		covered_parts |= list(BODY_ZONE_R_LEG, BODY_ZONE_PRECISE_R_FOOT)
+	else if(bpc & LEG_RIGHT)
+		covered_parts |= BODY_ZONE_R_LEG
 
 	return covered_parts
 
@@ -315,15 +324,16 @@ GLOBAL_LIST_INIT(modulo_angle_to_dir, list(NORTH,NORTHEAST,EAST,SOUTHEAST,SOUTH,
 /proc/color_hex2color_matrix(string)
 	var/length = length(string)
 	if((length != 7 && length != 9) || length != length_char(string))
-		return color_matrix_identity()
-	var/r = hex2num(copytext(string, 2, 4))/255
-	var/g = hex2num(copytext(string, 4, 6))/255
-	var/b = hex2num(copytext(string, 6, 8))/255
+		return COLOR_MATRIX_IDENTITY
+	// For runtime safety
+	. = COLOR_MATRIX_IDENTITY
+	var/list/color = rgb2num(string)
+	var/r = color[1] / 255
+	var/g = color[2] / 255
+	var/b = color[3] / 255
 	var/a = 1
-	if(length == 9)
-		a = hex2num(copytext(string, 8, 10))/255
-	if(!isnum(r) || !isnum(g) || !isnum(b) || !isnum(a))
-		return color_matrix_identity()
+	if(length(color) == 4)
+		a = color[4] / 255
 	return list(r,0,0,0, 0,g,0,0, 0,0,b,0, 0,0,0,a, 0,0,0,0)
 
 //will drop all values not on the diagonal
@@ -332,27 +342,12 @@ GLOBAL_LIST_INIT(modulo_angle_to_dir, list(NORTH,NORTHEAST,EAST,SOUTHEAST,SOUTH,
 		return "#ffffffff"
 	return rgb(the_matrix[1]*255, the_matrix[6]*255, the_matrix[11]*255, the_matrix[16]*255)
 
-/proc/type2parent(child)
-	var/string_type = "[child]"
-	var/last_slash = findlasttext(string_type, "/")
-	if(last_slash == 1)
-		switch(child)
-			if(/datum)
-				return null
-			if(/obj, /mob)
-				return /atom/movable
-			if(/area, /turf)
-				return /atom
-			else
-				return /datum
-	return text2path(copytext(string_type, 1, last_slash))
-
 //returns a string the last bit of a type, without the preceeding '/'
-/proc/type2top(the_type)
+/proc/type2top(datum/typepath)
 	//handle the builtins manually
-	if(!ispath(the_type))
+	if(!ispath(typepath))
 		return
-	switch(the_type)
+	switch(typepath)
 		if(/datum)
 			return "datum"
 		if(/atom)
@@ -366,7 +361,7 @@ GLOBAL_LIST_INIT(modulo_angle_to_dir, list(NORTH,NORTHEAST,EAST,SOUTHEAST,SOUTH,
 		if(/turf)
 			return "turf"
 		else //regex everything else (works for /proc too)
-			return lowertext(replacetext("[the_type]", "[type2parent(the_type)]/", ""))
+			return LOWER_TEXT(replacetext("[typepath]", "[typepath::parent_type]/", ""))
 
 /// Return html to load a url.
 /// for use inside of browse() calls to html assets that might be loaded on a cdn.

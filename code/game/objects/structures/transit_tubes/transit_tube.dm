@@ -1,7 +1,7 @@
 
 /obj/structure/transit_tube
 	name = "transit tube"
-	icon = 'icons/obj/atmospherics/pipes/transit_tube.dmi'
+	icon = 'icons/obj/pipes_n_cables/transit_tube.dmi'
 	icon_state = "straight"
 	desc = "A transit tube for moving things around."
 	density = TRUE
@@ -18,28 +18,29 @@
 	if(newdirection)
 		setDir(newdirection)
 	init_tube_dirs()
-	generate_tube_overlays()
+	update_appearance()
 	AddElement(/datum/element/climbable)
+	AddElement(/datum/element/elevation, pixel_shift = 12)
 
 /obj/structure/transit_tube/Destroy()
 	for(var/obj/structure/transit_tube_pod/P in loc)
 		P.deconstruct(FALSE)
 	return ..()
 
-/obj/structure/transit_tube/singularity_pull(S, current_size)
+/obj/structure/transit_tube/singularity_pull(atom/singularity, current_size)
 	..()
 	if(current_size >= STAGE_FIVE)
 		deconstruct(FALSE)
 
-/obj/structure/transit_tube/attackby(obj/item/W, mob/user, params)
+/obj/structure/transit_tube/attackby(obj/item/W, mob/user, list/modifiers, list/attack_modifiers)
 	if(W.tool_behaviour == TOOL_WRENCH)
 		if(tube_construction)
 			for(var/obj/structure/transit_tube_pod/pod in src.loc)
 				to_chat(user, span_warning("Remove the pod first!"))
 				return
-			user.visible_message(span_notice("[user] starts to detach \the [src]."), span_notice("You start to detach the [name]..."))
+			user.visible_message(span_notice("[user] starts to detach \the [src]."), span_notice("You start to detach \the [src]..."))
 			if(W.use_tool(src, user, 2 SECONDS, volume=50))
-				to_chat(user, span_notice("You detach the [name]."))
+				to_chat(user, span_notice("You detach \the [src]."))
 				var/obj/structure/c_transit_tube/R = new tube_construction(loc)
 				R.setDir(dir)
 				transfer_fingerprints_to(R)
@@ -61,7 +62,7 @@
 
 
 /obj/structure/transit_tube/proc/has_entrance(from_dir)
-	from_dir = turn(from_dir, 180)
+	from_dir = REVERSE_DIR(from_dir)
 
 	for(var/direction in tube_dirs)
 		if(direction == from_dir)
@@ -123,41 +124,40 @@
 		if(WEST)
 			tube_dirs = list(EAST, WEST)
 
-
-/obj/structure/transit_tube/proc/generate_tube_overlays()
+/obj/structure/transit_tube/update_overlays()
+	. = ..()
 	for(var/direction in tube_dirs)
-		if(ISDIAGONALDIR(direction))
-			if(direction & NORTH)
-				create_tube_overlay(direction ^ 3, NORTH)
+		if(!ISDIAGONALDIR(direction))
+			. += create_tube_overlay(direction)
+			continue
+		if(!(direction & NORTH))
+			continue
 
-				if(direction & EAST)
-					create_tube_overlay(direction ^ 12, EAST)
-
-				else
-					create_tube_overlay(direction ^ 12, WEST)
+		. += create_tube_overlay(direction ^ 3, NORTH)
+		if(direction & EAST)
+			. += create_tube_overlay(direction ^ 12, EAST)
 		else
-			create_tube_overlay(direction)
-
+			. += create_tube_overlay(direction ^ 12, WEST)
 
 /obj/structure/transit_tube/proc/create_tube_overlay(direction, shift_dir)
-	var/image/tube_overlay = new(dir = direction)
+	// We use image() because a mutable appearance will have its dir mirror the parent which sort of fucks up what we're doing here
+	var/image/tube_overlay = image(icon, dir = direction)
 	if(shift_dir)
 		tube_overlay.icon_state = "decorative_diag"
 		switch(shift_dir)
 			if(NORTH)
-				tube_overlay.pixel_y = 32
+				tube_overlay.pixel_z = 32
 			if(SOUTH)
-				tube_overlay.pixel_y = -32
+				tube_overlay.pixel_z = -32
 			if(EAST)
-				tube_overlay.pixel_x = 32
+				tube_overlay.pixel_w = 32
 			if(WEST)
-				tube_overlay.pixel_x = -32
+				tube_overlay.pixel_w = -32
 	else
 		tube_overlay.icon_state = "decorative"
-	add_overlay(tube_overlay)
 
-
-
+	tube_overlay.overlays += emissive_blocker(icon, tube_overlay.icon_state, src)
+	return tube_overlay
 
 //Some of these are mostly for mapping use
 /obj/structure/transit_tube/horizontal

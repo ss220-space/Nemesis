@@ -1,7 +1,7 @@
 /obj/machinery/wish_granter
 	name = "wish granter"
 	desc = "You're not so sure about this, anymore..."
-	icon = 'icons/obj/device.dmi'
+	icon = 'icons/obj/machines/beacon.dmi'
 	icon_state = "syndbeacon"
 
 	use_power = NO_POWER_USE
@@ -22,7 +22,7 @@
 		to_chat(user, span_boldnotice("You feel a dark stirring inside of the Wish Granter, something you want nothing of. Your instincts are better than any man's."))
 		return
 
-	else if(is_special_character(user))
+	else if(user.is_antag())
 		to_chat(user, span_boldnotice("Even to a heart as dark as yours, you know nothing good will come of this. Something instinctual makes you pull away."))
 
 	else if (!insisting)

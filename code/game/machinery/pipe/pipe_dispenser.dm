@@ -4,11 +4,13 @@
 
 /obj/machinery/pipedispenser
 	name = "pipe dispenser"
-	icon = 'icons/obj/stationobjs.dmi'
+	icon = 'icons/obj/machines/lathes.dmi'
 	icon_state = "pipe_d"
 	desc = "Dispenses countless types of pipes. Very useful if you need pipes."
 	density = TRUE
 	interaction_flags_machine = INTERACT_MACHINE_ALLOW_SILICON | INTERACT_MACHINE_OPEN_SILICON | INTERACT_MACHINE_OFFLINE
+	interaction_flags_mouse_drop = NEED_DEXTERITY
+
 	var/wait = 0
 	var/piping_layer = PIPING_LAYER_DEFAULT
 	///color of pipe
@@ -60,13 +62,13 @@
 	data["init_directions"] = init_directions
 	return data
 
-/obj/machinery/pipedispenser/ui_act(action, params)
+/obj/machinery/pipedispenser/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	if(..())
 		return
 	switch(action)
 		if("color")
 			paint_color = params["paint_color"]
-		
+
 		if("pipe_type")
 			switch(category)
 				if(ATMOS_PIPEDISPENSER)
@@ -74,17 +76,17 @@
 						var/datum/pipe_info/info = GLOB.atmos_pipe_recipes[params["category"]][params["pipe_type"]]
 						var/recipe_type = info.type
 						var/p_type = info.id
-						
+
 						// No spawning arbitrary paths (literally 1984)
 						if(!verify_recipe(GLOB.atmos_pipe_recipes, p_type))
 							return
-						
+
 						// If this is a meter, make that.
 						if(recipe_type == /datum/pipe_info/meter)
 							new /obj/item/pipe_meter(loc)
 							wait = world.time + 1 SECONDS
 							return
-						
+
 						// Otherwise, make a pipe/device
 						var/p_dir = params["pipe_dir"]
 						var/obj/item/pipe/pipe_out = new (loc, p_type, p_dir)
@@ -98,17 +100,17 @@
 					if(wait < world.time)
 						var/datum/pipe_info/info = GLOB.disposal_pipe_recipes[params["category"]][params["pipe_type"]]
 						var/p_type = info.id
-						
+
 						// No spawning arbitrary paths (literally 1984)
 						if(!verify_recipe(GLOB.disposal_pipe_recipes, p_type))
 							return
-						
+
 						var/obj/structure/disposalconstruct/disposal_out = new (loc, p_type)
 						if(!disposal_out.can_place())
 							to_chat(usr, span_warning("There's not enough room to build that here!"))
 							qdel(disposal_out)
 							return
-						
+
 						disposal_out.add_fingerprint(usr)
 						disposal_out.update_appearance()
 						disposal_out.setDir(params["pipe_dir"])
@@ -117,11 +119,11 @@
 					if(wait < world.time)
 						var/datum/pipe_info/info = GLOB.transit_tube_recipes[params["category"]][params["pipe_type"]]
 						var/p_type = info.id
-						
+
 						// No spawning arbitrary paths (literally 1984)
 						if(!verify_recipe(GLOB.transit_tube_recipes, p_type))
 							return
-						
+
 						var/obj/structure/c_transit_tube/tube_out = new p_type(loc)
 						tube_out.add_fingerprint(usr)
 						tube_out.update_appearance()
@@ -129,7 +131,7 @@
 						wait = world.time + 1 SECONDS
 		if("piping_layer")
 			piping_layer = text2num(params["piping_layer"])
-		
+
 		if("init_dir_setting")
 			var/target_dir = p_init_dir ^ text2dir(params["dir_flag"])
 			// Refuse to create a smart pipe that can only connect in one direction (it would act weirdly and lack an icon)
@@ -137,10 +139,10 @@
 				p_init_dir = target_dir
 			else
 				to_chat(usr, span_warning("\The [src]'s screen flashes a warning: Can't configure a pipe to only connect in one direction."))
-		
+
 		if("init_reset")
 			p_init_dir = ALL_CARDINALS
-		
+
 	return TRUE
 
 /obj/machinery/pipedispenser/ui_interact(mob/user, datum/tgui/ui)
@@ -149,7 +151,7 @@
 		ui = new(user, src, "PipeDispenser", name)
 		ui.open()
 
-/obj/machinery/pipedispenser/attackby(obj/item/W, mob/user, params)
+/obj/machinery/pipedispenser/attackby(obj/item/W, mob/user, list/modifiers, list/attack_modifiers)
 	add_fingerprint(user)
 	if (istype(W, /obj/item/pipe) || istype(W, /obj/item/pipe_meter))
 		to_chat(usr, span_notice("You put [W] back into [src]."))
@@ -167,32 +169,26 @@
 				return TRUE
 	return FALSE
 
-/obj/machinery/pipedispenser/wrench_act(mob/living/user, obj/item/I)
-	..()
-	if(default_unfasten_wrench(user, I, 40))
-		user << browse(null, "window=pipedispenser")
-
-	return TRUE
+/obj/machinery/pipedispenser/wrench_act(mob/living/user, obj/item/tool)
+	. = ..()
+	default_unfasten_wrench(user, tool, time = 4 SECONDS)
+	return ITEM_INTERACT_SUCCESS
 
 
 /obj/machinery/pipedispenser/disposal
 	name = "disposal pipe dispenser"
-	icon = 'icons/obj/stationobjs.dmi'
+	icon = 'icons/obj/machines/lathes.dmi'
 	icon_state = "pipe_d"
 	desc = "Dispenses pipes that will ultimately be used to move trash around."
 	density = TRUE
 	category = DISPOSAL_PIPEDISPENSER
 
-
 //Allow you to drag-drop disposal pipes and transit tubes into it
-/obj/machinery/pipedispenser/disposal/MouseDrop_T(obj/structure/pipe, mob/usr)
-	if(!usr.incapacitated())
-		return
-
+/obj/machinery/pipedispenser/disposal/mouse_drop_receive(obj/structure/pipe, mob/user, params)
 	if (!istype(pipe, /obj/structure/disposalconstruct) && !istype(pipe, /obj/structure/c_transit_tube) && !istype(pipe, /obj/structure/c_transit_tube_pod))
 		return
 
-	if (get_dist(usr, src) > 1 || get_dist(src,pipe) > 1 )
+	if (get_dist(user, src) > 1 || get_dist(src, pipe) > 1 )
 		return
 
 	if (pipe.anchored)
@@ -200,12 +196,11 @@
 
 	qdel(pipe)
 
-
 //transit tube dispenser
 //inherit disposal for the dragging proc
 /obj/machinery/pipedispenser/disposal/transit_tube
 	name = "transit tube dispenser"
-	icon = 'icons/obj/stationobjs.dmi'
+	icon = 'icons/obj/machines/lathes.dmi'
 	icon_state = "pipe_d"
 	density = TRUE
 	desc = "Dispenses pipes that will move beings around."

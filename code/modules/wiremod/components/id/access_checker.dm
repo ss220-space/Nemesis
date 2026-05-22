@@ -1,9 +1,7 @@
 /obj/item/circuit_component/compare/access
 	display_name = "Access Checker"
-	desc = "Performs a basic comparison between two numerical lists, with additional functions that help in using it to check access on IDs."
+	desc = "Performs a basic comparison between two lists of strings, with additional functions that help in using it to check access on IDs."
 	category = "ID"
-
-	input_port_amount = 0 //Uses custom ports for its comparisons
 
 	/// A list of the accesses to check
 	var/datum/port/input/subject_accesses
@@ -14,11 +12,9 @@
 	/// Whether to check for all or any of the required accesses
 	var/datum/port/input/check_any
 
-	ui_buttons = list("id-card" = "access")
-
-/obj/item/circuit_component/compare/access/Initialize(mapload)
-	. = ..()
-	gen_access()
+	ui_buttons = list(
+		"id-card" = "access",
+	)
 
 /obj/item/circuit_component/compare/access/get_ui_notices()
 	. = ..()
@@ -26,9 +22,9 @@
 	. += create_ui_notice("When \"Check Any\" is false, returns true only if \"Access To Check\" contains ALL values in \"Required Access\".", "orange", "info")
 
 /obj/item/circuit_component/compare/access/populate_custom_ports()
-	subject_accesses = add_input_port("Access To Check", PORT_TYPE_LIST(PORT_TYPE_NUMBER))
-	required_accesses = add_input_port("Required Access", PORT_TYPE_LIST(PORT_TYPE_NUMBER))
-	check_any = add_input_port("Check Any", PORT_TYPE_NUMBER)
+	subject_accesses = add_input_port("Access To Check", PORT_TYPE_LIST(PORT_TYPE_STRING))
+	required_accesses = add_input_port("Required Access", PORT_TYPE_LIST(PORT_TYPE_STRING))
+	check_any = add_input_port("Check Any", PORT_TYPE_BOOLEAN)
 
 /obj/item/circuit_component/compare/access/save_data_to_list(list/component_data)
 	. = ..()
@@ -36,7 +32,7 @@
 
 /obj/item/circuit_component/compare/access/add_to(obj/item/integrated_circuit/added_to)
 	. = ..()
-	RegisterSignal(added_to, COMSIG_CIRCUIT_POST_LOAD, .proc/on_post_load)
+	RegisterSignal(added_to, COMSIG_CIRCUIT_POST_LOAD, PROC_REF(on_post_load))
 
 /obj/item/circuit_component/compare/access/removed_from(obj/item/integrated_circuit/removed_from)
 	UnregisterSignal(removed_from, COMSIG_CIRCUIT_POST_LOAD)
@@ -57,12 +53,12 @@
 		LAZYCLEARLIST(req_one_access)
 		req_access = required_accesses_list.Copy()
 
-/obj/item/circuit_component/compare/access/do_comparisons(list/ports)
+/obj/item/circuit_component/compare/access/do_comparisons()
 	return check_access_list(subject_accesses.value)
 
 /obj/item/circuit_component/compare/access/ui_perform_action(mob/user, action)
-	if(length(required_accesses.connected_ports))
-		balloon_alert(user, "Disconnect port before manually configuring!")
+	if(LAZYLEN(required_accesses.connected_ports))
+		balloon_alert(user, "disconnect port before manually configuring!")
 		return
 	interact(user)
 
@@ -87,11 +83,11 @@
 
 /obj/item/circuit_component/compare/access/ui_data(mob/user)
 	var/list/data = list()
-	data["accesses"] = required_accesses.value
+	data["accesses"] = required_accesses.value || list()
 	data["oneAccess"] = check_any.value
 	return data
 
-/obj/item/circuit_component/compare/access/ui_act(action, params)
+/obj/item/circuit_component/compare/access/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	. = ..()
 	if(.)
 		return
@@ -110,7 +106,7 @@
 		if("set")
 			var/list/required_accesses_list = required_accesses.value
 			var/list/new_accesses_value = LAZYCOPY(required_accesses_list)
-			var/access = text2num(params["access"])
+			var/access = params["access"]
 			if (!(access in new_accesses_value))
 				new_accesses_value += access
 			else

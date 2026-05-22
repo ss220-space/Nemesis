@@ -8,20 +8,21 @@
 	desc = "Holemaker Deluxe: A sporty model with a good stop power. Any cannon enthusiast should be expected to start here."
 	density = TRUE
 	anchored = TRUE
-	icon = 'icons/obj/cannons.dmi'
+	icon = 'icons/obj/weapons/cannons.dmi'
 	icon_state = "falconet_patina"
 	max_integrity = 300
 	///whether the cannon can be unwrenched from the ground.
 	var/anchorable_cannon = TRUE
 	var/obj/item/stack/cannonball/loaded_cannonball = null
 	var/charge_ignited = FALSE
-	var/fire_delay = 15
+	var/fire_delay = 1.5 SECONDS
 	var/charge_size = 15
-	var/fire_sound = 'sound/weapons/gun/general/cannon.ogg'
+	var/fire_sound = 'sound/items/weapons/gun/general/cannon.ogg'
 
 /obj/structure/cannon/Initialize(mapload)
 	. = ..()
 	create_reagents(charge_size)
+	AddElement(/datum/element/simple_rotation)
 
 /obj/structure/cannon/examine(mob/user)
 	. = ..()
@@ -46,7 +47,14 @@
 	reagents.remove_all()
 	charge_ignited = FALSE
 
-/obj/structure/cannon/attackby(obj/item/used_item, mob/user, params)
+/obj/structure/cannon/wrench_act(mob/living/user, obj/item/tool)
+	. = ..()
+	if(!anchorable_cannon)
+		return FALSE
+	default_unfasten_wrench(user, tool)
+	return ITEM_INTERACT_SUCCESS
+
+/obj/structure/cannon/attackby(obj/item/used_item, mob/user, list/modifiers, list/attack_modifiers)
 	if(charge_ignited)
 		balloon_alert(user, "it's gonna fire!")
 		return
@@ -68,16 +76,17 @@
 			balloon_alert(user, "needs [reagents.maximum_volume]u of charge!")
 			return
 		visible_message(ignition_message)
-		log_game("Cannon fired by [key_name(user)] in [AREACOORD(src)]")
-		addtimer(CALLBACK(src, .proc/fire), fire_delay)
+		user.log_message("fired a cannon", LOG_ATTACK)
+		log_game("[key_name(user)] fired a cannon in [AREACOORD(src)]")
+		addtimer(CALLBACK(src, PROC_REF(fire)), fire_delay)
 		charge_ignited = TRUE
 		return
 
-	else if(istype(used_item, /obj/item/reagent_containers))
+	else if(is_reagent_container(used_item))
 		var/obj/item/reagent_containers/powder_keg = used_item
-		if(!(powder_keg.reagent_flags & OPENCONTAINER))
+		if(!powder_keg.is_open_container())
 			return ..()
-		if(istype(powder_keg, /obj/item/reagent_containers/glass/rag))
+		if(istype(powder_keg, /obj/item/rag))
 			return ..()
 
 		if(!powder_keg.reagents.total_volume)
@@ -93,15 +102,12 @@
 			to_chat(user, span_warning("[powder_keg] doesn't have at least 15u of gunpowder to fill [src]!"))
 			return
 		if(has_enough_gunpowder)
-			powder_keg.reagents.trans_id_to(src, /datum/reagent/gunpowder, amount = charge_size)
+			powder_keg.reagents.trans_to(src, charge_size, target_id = /datum/reagent/gunpowder)
 			balloon_alert(user, "[src] loaded with gunpowder")
 			return
 		if(has_enough_alt_fuel)
-			powder_keg.reagents.trans_id_to(src, /datum/reagent/fuel, amount = charge_size)
+			powder_keg.reagents.trans_to(src, charge_size, target_id = /datum/reagent/fuel)
 			balloon_alert(user, "[src] loaded with welding fuel")
-			return
-	if(anchorable_cannon && used_item.tool_behaviour == TOOL_WRENCH)
-		if(default_unfasten_wrench(user, used_item, time = 2 SECONDS))
 			return
 	..()
 
@@ -111,6 +117,7 @@
 	icon_state = "garbagegun"
 	anchored = FALSE
 	anchorable_cannon = FALSE
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 11.15, /datum/material/glass = SMALL_MATERIAL_AMOUNT * 1.5)
 	var/fires_before_deconstruction = 5
 
 /obj/structure/cannon/trash/fire()
@@ -134,6 +141,18 @@
 	new /obj/item/stack/sheet/iron/five(src.loc)
 	new /obj/item/stack/rods(src.loc)
 	. = ..()
+
+///A cannon found from the fishing mystery box.
+/obj/structure/cannon/mystery_box
+	icon_state = "mystery_box_cannon" //east facing sprite for the presented item, it'll be changed back to normal on init
+	dir = EAST
+	anchored = FALSE
+
+/obj/structure/cannon/mystery_box/Initialize(mapload)
+	. = ..()
+	icon_state = "falconet_patina"
+	reagents.add_reagent(/datum/reagent/gunpowder, charge_size)
+	loaded_cannonball = new(src)
 
 #undef BAD_FUEL_DAMAGE_TAX
 #undef BAD_FUEL_EXPLODE_PROBABILTY

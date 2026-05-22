@@ -1,13 +1,3 @@
-/* Windoor (window door) assembly -Nodrak
- * Step 1: Create a windoor out of rglass
- * Step 2: Add r-glass to the assembly to make a secure windoor (Optional)
- * Step 3: Rotate or Flip the assembly to face and open the way you want
- * Step 4: Wrench the assembly in place
- * Step 5: Add cables to the assembly
- * Step 6: Set access for the door.
- * Step 7: Screwdriver the door to complete
- */
-
 
 /obj/structure/windoor_assembly
 	icon = 'icons/obj/doors/windoor.dmi'
@@ -18,29 +8,46 @@
 	anchored = FALSE
 	density = FALSE
 	dir = NORTH
+	obj_flags = CAN_BE_HIT | BLOCKS_CONSTRUCTION_DIR | UNIQUE_RENAME | RENAME_NO_DESC
 	set_dir_on_move = FALSE
+	can_atmos_pass = ATMOS_PASS_PROC
+	custom_materials = list(/datum/material/glass = SHEET_MATERIAL_AMOUNT * 5, /datum/material/iron = SHEET_MATERIAL_AMOUNT * 2.5)
 
+	/// Reference to the airlock electronics inside for determining window access.
 	var/obj/item/electronics/airlock/electronics = null
+	/// Player generated name string from renaming.
 	var/created_name = null
 
 	//Vars to help with the icon's name
-	var/facing = "l" //Does the windoor open to the left or right?
-	var/secure = FALSE //Whether or not this creates a secure windoor
-	var/state = "01" //How far the door assembly has progressed
-	can_atmos_pass = ATMOS_PASS_PROC
+	///Does the windoor open to the left or right?
+	var/facing = "l"
+	///Whether or not this creates a secure windoor
+	var/secure = FALSE
+	/**
+	  * Windoor (window door) assembly -Nodrak
+	  * Step 1: Create a windoor out of rglass
+	  * Step 2: Add r-glass to the assembly to make a secure windoor (Optional)
+	  * Step 3: Rotate or Flip the assembly to face and open the way you want
+	  * Step 4: Wrench the assembly in place
+	  * Step 5: Add cables to the assembly
+	  * Step 6: Set access for the door.
+	  * Step 7: Crowbar the door to complete
+	 */
+	var/state = "01"
 
-/obj/structure/windoor_assembly/Initialize(mapload, loc, set_dir)
+
+/obj/structure/windoor_assembly/Initialize(mapload, set_dir)
 	. = ..()
 	if(set_dir)
 		setDir(set_dir)
 	air_update_turf(TRUE, TRUE)
 
 	var/static/list/loc_connections = list(
-		COMSIG_ATOM_EXIT = .proc/on_exit,
+		COMSIG_ATOM_EXIT = PROC_REF(on_exit),
 	)
 
 	AddElement(/datum/element/connect_loc, loc_connections)
-	AddComponent(/datum/component/simple_rotation, ROTATION_NEEDS_ROOM)
+	AddElement(/datum/element/simple_rotation, ROTATION_NEEDS_ROOM)
 
 /obj/structure/windoor_assembly/Destroy()
 	set_density(FALSE)
@@ -64,10 +71,10 @@
 
 	if(istype(mover, /obj/structure/window))
 		var/obj/structure/window/moved_window = mover
-		return valid_window_location(loc, moved_window.dir, is_fulltile = moved_window.fulltile)
+		return valid_build_direction(loc, moved_window.dir, is_fulltile = moved_window.fulltile)
 
 	if(istype(mover, /obj/structure/windoor_assembly) || istype(mover, /obj/machinery/door/window))
-		return valid_window_location(loc, mover.dir, is_fulltile = FALSE)
+		return valid_build_direction(loc, mover.dir, is_fulltile = FALSE)
 
 /obj/structure/windoor_assembly/can_atmos_pass(turf/T, vertical = FALSE)
 	if(get_dir(loc, T) == dir)
@@ -91,13 +98,13 @@
 		leaving.Bump(src)
 		return COMPONENT_ATOM_BLOCK_EXIT
 
-/obj/structure/windoor_assembly/attackby(obj/item/W, mob/user, params)
+/obj/structure/windoor_assembly/attackby(obj/item/W, mob/user, list/modifiers, list/attack_modifiers)
 	//I really should have spread this out across more states but thin little windoors are hard to sprite.
 	add_fingerprint(user)
 	switch(state)
 		if("01")
 			if(W.tool_behaviour == TOOL_WELDER && !anchored)
-				if(!W.tool_start_check(user, amount=0))
+				if(!W.tool_start_check(user, amount=1))
 					return
 
 				user.visible_message(span_notice("[user] disassembles the windoor assembly."),
@@ -177,7 +184,7 @@
 			else if(istype(W, /obj/item/stack/cable_coil) && anchored)
 				user.visible_message(span_notice("[user] wires the windoor assembly."), span_notice("You start to wire the windoor assembly..."))
 
-				if(do_after(user, 40, target = src))
+				if(do_after(user, 4 SECONDS, target = src))
 					if(!src || !anchored || src.state != "01")
 						return
 					var/obj/item/stack/cable_coil/CC = W
@@ -213,21 +220,21 @@
 
 			//Adding airlock electronics for access. Step 6 complete.
 			else if(istype(W, /obj/item/electronics/airlock))
-				if(!user.transferItemToLoc(W, src))
-					return
+
 				W.play_tool_sound(src, 100)
 				user.visible_message(span_notice("[user] installs the electronics into the airlock assembly."),
 					span_notice("You start to install electronics into the airlock assembly..."))
 
-				if(do_after(user, 40, target = src))
+				if(do_after(user, 4 SECONDS, target = src))
+
+					if(!user.transferItemToLoc(W, src))
+						return
 					if(!src || electronics)
 						W.forceMove(drop_location())
 						return
 					to_chat(user, span_notice("You install the airlock electronics."))
 					name = "near finished windoor assembly"
 					electronics = W
-				else
-					W.forceMove(drop_location())
 
 			//Screwdriver to remove airlock electronics. Step 6 undone.
 			else if(W.tool_behaviour == TOOL_SCREWDRIVER)
@@ -245,76 +252,18 @@
 					electronics = null
 					ae.forceMove(drop_location())
 
-			else if(istype(W, /obj/item/pen))
-				var/t = tgui_input_text(user, "Enter the name for the door", "Windoor Renaming", created_name, MAX_NAME_LEN)
-				if(!t)
-					return
-				if(!in_range(src, usr) && loc != usr)
-					return
-				created_name = t
-				return
-
-
-
 			//Crowbar to complete the assembly, Step 7 complete.
 			else if(W.tool_behaviour == TOOL_CROWBAR)
 				if(!electronics)
 					to_chat(usr, span_warning("The assembly is missing electronics!"))
 					return
-				user << browse(null, "window=windoor_access")
 				user.visible_message(span_notice("[user] pries the windoor into the frame."),
 					span_notice("You start prying the windoor into the frame..."))
 
 				if(W.use_tool(src, user, 40, volume=100) && electronics)
-
 					set_density(TRUE) //Shouldn't matter but just incase
 					to_chat(user, span_notice("You finish the windoor."))
-
-					if(secure)
-						var/obj/machinery/door/window/brigdoor/windoor = new /obj/machinery/door/window/brigdoor(loc)
-						if(facing == "l")
-							windoor.icon_state = "leftsecureopen"
-							windoor.base_state = "leftsecure"
-						else
-							windoor.icon_state = "rightsecureopen"
-							windoor.base_state = "rightsecure"
-						windoor.setDir(dir)
-						windoor.set_density(FALSE)
-
-						if(electronics.one_access)
-							windoor.req_one_access = electronics.accesses
-						else
-							windoor.req_access = electronics.accesses
-						windoor.electronics = electronics
-						electronics.forceMove(windoor)
-						if(created_name)
-							windoor.name = created_name
-						qdel(src)
-						windoor.close()
-
-
-					else
-						var/obj/machinery/door/window/windoor = new /obj/machinery/door/window(loc)
-						if(facing == "l")
-							windoor.icon_state = "leftopen"
-							windoor.base_state = "left"
-						else
-							windoor.icon_state = "rightopen"
-							windoor.base_state = "right"
-						windoor.setDir(dir)
-						windoor.set_density(FALSE)
-
-						if(electronics.one_access)
-							windoor.req_one_access = electronics.accesses
-						else
-							windoor.req_access = electronics.accesses
-						windoor.electronics = electronics
-						electronics.forceMove(windoor)
-						if(created_name)
-							windoor.name = created_name
-						qdel(src)
-						windoor.close()
-
+					finish_door()
 
 			else
 				return ..()
@@ -322,10 +271,73 @@
 	//Update to reflect changes(if applicable)
 	update_appearance()
 
+/obj/structure/windoor_assembly/examine(mob/user)
+	. = ..()
+	if(!anchored)
+		. += span_notice("\The [src] can be [span_boldnotice("wrenched")] down.")
+		. += span_notice("\The [src] could also be [span_boldnotice("cut apart")] with a [span_boldnotice("welder")].")
+		return
+	switch(state)
+		if("01")
+			. += span_notice("\The [src] needs [span_boldnotice("wiring")], or could be [span_boldnotice("un-wrenched")] from the floor.")
+		if("02")
+			if(!electronics)
+				. += span_notice("\The [src] needs [span_boldnotice("airlock electronics")] to continue installation, or [span_boldnotice("wirecutters")] to take apart.")
+			else
+				. += span_notice("\The [src] is ready to be [span_boldnotice("levered")] into place with a [span_boldnotice("crowbar")].")
+
+/obj/structure/windoor_assembly/proc/finish_door()
+	var/obj/machinery/door/window/windoor
+	if(secure)
+		windoor = new /obj/machinery/door/window/brigdoor(loc)
+		if(facing == "l")
+			windoor.icon_state = "leftsecureopen"
+			windoor.base_state = "leftsecure"
+		else
+			windoor.icon_state = "rightsecureopen"
+			windoor.base_state = "rightsecure"
+
+	else
+		windoor = new /obj/machinery/door/window(loc)
+		if(facing == "l")
+			windoor.icon_state = "leftopen"
+			windoor.base_state = "left"
+		else
+			windoor.icon_state = "rightopen"
+			windoor.base_state = "right"
+
+	windoor.setDir(dir)
+	windoor.set_density(FALSE)
+	if(created_name)
+		windoor.name = created_name
+	else if(electronics.passed_name)
+		windoor.name = sanitize(electronics.passed_name)
+	if(electronics.one_access)
+		windoor.req_one_access = electronics.accesses
+	else
+		windoor.req_access = electronics.accesses
+	if(electronics.unres_sides)
+		windoor.unres_sides = electronics.unres_sides
+		switch(dir)
+			if(NORTH,SOUTH)
+				windoor.unres_sides &= ~EAST
+				windoor.unres_sides &= ~WEST
+			if(EAST,WEST)
+				windoor.unres_sides &= ~NORTH
+				windoor.unres_sides &= ~SOUTH
+		windoor.unres_latch = TRUE
+	electronics.forceMove(windoor)
+	windoor.electronics = electronics
+	windoor.autoclose = TRUE
+	windoor.close()
+	windoor.update_appearance()
+
+	qdel(src)
+
+
 //Flips the windoor assembly, determines whather the door opens to the left or the right
 /obj/structure/windoor_assembly/verb/flip()
 	set name = "Flip Windoor Assembly"
-	set category = "Object"
 	set src in oview(1)
 	if(usr.stat != CONSCIOUS || HAS_TRAIT(usr, TRAIT_HANDS_BLOCKED))
 		return
@@ -344,3 +356,10 @@
 
 	update_appearance()
 	return
+
+/obj/structure/windoor_assembly/nameformat(input, user)
+	created_name = input
+	return input
+
+/obj/structure/windoor_assembly/rename_reset()
+	created_name = initial(created_name)

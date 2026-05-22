@@ -5,24 +5,45 @@
 /obj/structure/fireplace
 	name = "fireplace"
 	desc = "A large stone brick fireplace."
-	icon = 'icons/obj/fireplace.dmi'
+	icon = 'icons/obj/fluff/fireplace.dmi'
 	icon_state = "fireplace"
 	density = FALSE
 	anchored = TRUE
 	pixel_x = -16
 	resistance_flags = FIRE_PROOF
+	light_color = LIGHT_COLOR_FIRE
+	light_angle = 170
+	light_flags = LIGHT_IGNORE_OFFSET
+	/// is the fireplace lit?
 	var/lit = FALSE
-
+	/// the amount of fuel for the fire
 	var/fuel_added = 0
+	/// how much time is left before fire runs out of fuel
 	var/flame_expiry_timer
+	/// the looping sound effect that is played while burning
+	var/datum/looping_sound/burning/burning_loop
 
 /obj/structure/fireplace/Initialize(mapload)
 	. = ..()
-	START_PROCESSING(SSobj, src)
+	burning_loop = new(src)
 
 /obj/structure/fireplace/Destroy()
 	STOP_PROCESSING(SSobj, src)
+	QDEL_NULL(burning_loop)
+	remove_shared_particles(/particles/smoke/burning)
 	. = ..()
+
+/obj/structure/fireplace/setDir(newdir)
+	. = ..()
+	set_light(l_dir = dir)
+
+/// We're offset back into the wall, account for that
+/obj/structure/fireplace/get_light_offset()
+	var/list/hand_back = ..()
+	var/list/dir_offset = dir2offset(REVERSE_DIR(dir))
+	hand_back[1] += dir_offset[1] * 0.5
+	hand_back[2] += dir_offset[2] * 0.5
+	return hand_back
 
 /obj/structure/fireplace/proc/try_light(obj/item/O, mob/user)
 	if(lit)
@@ -37,37 +58,38 @@
 		ignite()
 		return TRUE
 
-/obj/structure/fireplace/attackby(obj/item/T, mob/user)
-	if(istype(T, /obj/item/stack/sheet/mineral/wood))
-		var/obj/item/stack/sheet/mineral/wood/wood = T
+/obj/structure/fireplace/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
+	if(istype(tool, /obj/item/stack/sheet/mineral/wood))
+		var/obj/item/stack/sheet/mineral/wood/wood = tool
 		var/space_remaining = MAXIMUM_BURN_TIMER - burn_time_remaining()
 		var/space_for_logs = round(space_remaining / LOG_BURN_TIMER)
 		if(space_for_logs < 1)
-			to_chat(user, span_warning("You can't fit any more of [T] in [src]!"))
-			return
+			to_chat(user, span_warning("You can't fit any more of [tool] in [src]!"))
+			return ITEM_INTERACT_BLOCKING
+
 		var/logs_used = min(space_for_logs, wood.amount)
 		wood.use(logs_used)
 		adjust_fuel_timer(LOG_BURN_TIMER * logs_used)
-		user.visible_message("<span class='notice'>[user] tosses some \
-			wood into [src].</span>", "<span class='notice'>You add \
-			some fuel to [src].</span>")
-	else if(istype(T, /obj/item/paper_bin))
-		var/obj/item/paper_bin/paper_bin = T
-		user.visible_message("<span class='notice'>[user] throws [T] into \
-			[src].</span>", "<span class='notice'>You add [T] to [src].\
-			</span>")
+		user.visible_message(span_notice("[user] tosses some wood into [src]."), span_notice("You add some fuel to [src]."))
+		return ITEM_INTERACT_SUCCESS
+
+	if(istype(tool, /obj/item/paper_bin))
+		var/obj/item/paper_bin/paper_bin = tool
+		user.visible_message(span_notice("[user] throws [tool] into [src]."), span_notice("You add [tool] to [src]."))
 		adjust_fuel_timer(PAPER_BURN_TIMER * paper_bin.total_paper)
 		qdel(paper_bin)
-	else if(istype(T, /obj/item/paper))
-		user.visible_message("<span class='notice'>[user] throws [T] into \
-			[src].</span>", "<span class='notice'>You throw [T] into [src].\
-			</span>")
+		return ITEM_INTERACT_SUCCESS
+
+	if(istype(tool, /obj/item/paper))
+		user.visible_message(span_notice("[user] throws [tool] into [src]."), span_notice("You throw [tool] into [src]."))
 		adjust_fuel_timer(PAPER_BURN_TIMER)
-		qdel(T)
-	else if(try_light(T,user))
-		return
-	else
-		. = ..()
+		qdel(tool)
+		return ITEM_INTERACT_SUCCESS
+
+	if(tool.ignition_effect(src, user))
+		try_light(tool, user)
+		return ITEM_INTERACT_SUCCESS
+	return NONE
 
 /obj/structure/fireplace/update_overlays()
 	. = ..()
@@ -104,26 +126,25 @@
 		if(2000 to MAXIMUM_BURN_TIMER)
 			set_light(6)
 
-/obj/structure/fireplace/process(delta_time)
+/obj/structure/fireplace/process(seconds_per_tick)
 	if(!lit)
 		return
 	if(world.time > flame_expiry_timer)
 		put_out()
 		return
 
-	playsound(src, 'sound/effects/comfyfire.ogg',50,FALSE, FALSE, TRUE)
 	var/turf/T = get_turf(src)
-	T.hotspot_expose(700, 2.5 * delta_time)
+	T.hotspot_expose(700, 2.5 * seconds_per_tick)
 	update_appearance()
 	adjust_light()
 
 /obj/structure/fireplace/extinguish()
+	. = ..()
 	if(lit)
 		var/fuel = burn_time_remaining()
 		flame_expiry_timer = 0
 		put_out()
 		adjust_fuel_timer(fuel)
-	. = ..()
 
 /obj/structure/fireplace/proc/adjust_fuel_timer(amount)
 	if(lit)
@@ -140,15 +161,38 @@
 		return max(0, fuel_added)
 
 /obj/structure/fireplace/proc/ignite()
+	START_PROCESSING(SSobj, src)
+	burning_loop.start()
 	lit = TRUE
 	desc = "A large stone brick fireplace, warm and cozy."
 	flame_expiry_timer = world.time + fuel_added
 	fuel_added = 0
 	update_appearance()
 	adjust_light()
+	var/obj/effect/abstract/shared_particle_holder/smoke_particles = add_shared_particles(/particles/smoke/burning, "fireplace_[dir]")
+
+	switch(dir)
+		if(SOUTH)
+			smoke_particles.pixel_w = 16
+			smoke_particles.pixel_z = 45
+		if(EAST)
+			smoke_particles.pixel_w = -4
+			smoke_particles.pixel_z = 25
+		if(WEST)
+			smoke_particles.pixel_w = 36
+			smoke_particles.pixel_z = 25
+		if(NORTH) // there is no icon state for SOUTH
+			remove_shared_particles(/particles/smoke/burning)
 
 /obj/structure/fireplace/proc/put_out()
+	STOP_PROCESSING(SSobj, src)
+	burning_loop.stop()
 	lit = FALSE
 	update_appearance()
 	adjust_light()
 	desc = initial(desc)
+	remove_shared_particles(/particles/smoke/burning)
+
+#undef LOG_BURN_TIMER
+#undef PAPER_BURN_TIMER
+#undef MAXIMUM_BURN_TIMER

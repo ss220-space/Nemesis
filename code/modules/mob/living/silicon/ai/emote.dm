@@ -1,30 +1,16 @@
 /datum/emote/ai
+	abstract_type = /datum/emote/ai
 	mob_type_allowed_typecache = /mob/living/silicon/ai
 	mob_type_blacklist_typecache = list()
 
-
+// This might be worth making an abstract type.
 /datum/emote/ai/emotion_display
 	key = "blank"
 	var/emotion = AI_EMOTION_BLANK
 
-/datum/emote/ai/emotion_display/run_emote(mob/user, params, type_override, intentional)
+/datum/emote/ai/emotion_display/run_emote(mob/living/silicon/ai/user, params, type_override, intentional)
 	. = ..()
-	if(!.)
-		return
-	var/mob/living/silicon/ai/ai = user
-	var/turf/ai_turf = get_turf(ai)
-
-	for(var/_display in GLOB.ai_status_displays)
-		var/obj/machinery/status_display/ai/ai_display = _display
-		var/turf/display_turf = get_turf(ai_display)
-
-		// Derelict AIs can't affect station displays.
-		// TODO does this need to be made multiZ aware?
-		if(ai_turf.z != display_turf.z)
-			continue
-
-		ai_display.emotion = emotion
-		ai_display.update()
+	user.apply_emote_display(emotion)
 
 /datum/emote/ai/emotion_display/very_happy
 	key = "veryhappy"
@@ -54,6 +40,14 @@
 	key = "bsod"
 	emotion = AI_EMOTION_BSOD
 
+/datum/emote/ai/emotion_display/dead
+	key = "dead"
+	emotion = AI_EMOTION_DEAD
+
+/datum/emote/ai/emotion_display/download
+	key = "download"
+	emotion = AI_EMOTION_DOWNLOAD
+
 /datum/emote/ai/emotion_display/trollface
 	key = "trollface"
 	emotion = AI_EMOTION_PROBLEMS
@@ -81,9 +75,6 @@
 
 /datum/emote/ai/emotion_display/friend_computer/run_emote(mob/user, params, type_override, intentional)
 	. = ..()
-	if(!.)
-		return
-
 	var/datum/radio_frequency/frequency = SSradio.return_frequency(FREQ_STATUS_DISPLAYS)
 
 	if(!frequency)

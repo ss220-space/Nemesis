@@ -2,77 +2,105 @@
 	if(stat == DEAD)
 		return
 
-	silent = FALSE
 	losebreath = 0
-
-	if(!gibbed)
-		INVOKE_ASYNC(src, .proc/emote, "deathgasp")
+	breathing_loop.stop() //This would've happened eventually but it's nice to make it stop immediatelly in this case
 	reagents.end_metabolization(src)
-
-	add_memory_in_range(src, 7, MEMORY_DEATH, list(DETAIL_PROTAGONIST = src), memory_flags = MEMORY_FLAG_NOMOOD, story_value = STORY_VALUE_OKAY, memory_flags = MEMORY_CHECK_BLIND_AND_DEAF)
 
 	. = ..()
 
-	if(!gibbed)
+	if(!gibbed && !QDELING(src)) //double check they didn't start getting deleted in ..()
 		attach_rot()
 
 	for(var/T in get_traumas())
 		var/datum/brain_trauma/BT = T
 		BT.on_death()
 
-/mob/living/carbon/proc/inflate_gib() // Plays an animation that makes mobs appear to inflate before finally gibbing
-	addtimer(CALLBACK(src, .proc/gib, null, null, TRUE, TRUE), 25)
-	var/matrix/M = matrix()
-	M.Scale(1.8, 1.2)
-	animate(src, time = 40, transform = M, easing = SINE_EASING)
-
-/mob/living/carbon/gib(no_brain, no_organs, no_bodyparts, safe_gib = FALSE)
-	add_memory_in_range(src, 7, MEMORY_GIBBED, list(DETAIL_PROTAGONIST = src), STORY_VALUE_AMAZING, MEMORY_FLAG_NOMOOD, memory_flags = MEMORY_CHECK_BLINDNESS)
-	if(safe_gib) // If you want to keep all the mob's items and not have them deleted
+/mob/living/carbon/gib(drop_bitflags=NONE)
+	if(drop_bitflags & DROP_ITEMS)
 		for(var/obj/item/W in src)
-			dropItemToGround(W)
-			if(prob(50))
-				step(W, pick(GLOB.alldirs))
+			if(dropItemToGround(W))
+				if(prob(50))
+					step(W, pick(GLOB.alldirs))
 	var/atom/Tsec = drop_location()
 	for(var/mob/M in src)
 		M.forceMove(Tsec)
 		visible_message(span_danger("[M] bursts out of [src]!"))
-	. = ..()
+	return ..()
 
-/mob/living/carbon/spill_organs(no_brain, no_organs, no_bodyparts)
+/mob/living/carbon/get_gibs_type(drop_bitflags = NONE)
+	var/obj/item/bodypart/chest = get_bodypart(BODY_ZONE_CHEST) || get_bodypart()
+	if (!istype(chest)) // what
+		return ..()
+
+	if (chest.bodytype & BODYTYPE_ROBOTIC)
+		return /obj/effect/gibspawner/robot
+
+	if (chest.bodytype & BODYTYPE_LARVA_PLACEHOLDER)
+		if (drop_bitflags & DROP_BODYPARTS)
+			return /obj/effect/gibspawner/larva
+		return /obj/effect/gibspawner/larva/bodypartless
+
+	if (chest.bodytype & BODYTYPE_ALIEN)
+		if (drop_bitflags & DROP_BODYPARTS)
+			return /obj/effect/gibspawner/xeno
+		return /obj/effect/gibspawner/xeno/bodypartless
+
+	if (drop_bitflags & DROP_BODYPARTS)
+		return /obj/effect/gibspawner/human
+	return /obj/effect/gibspawner/human/bodypartless
+
+/mob/living/carbon/spill_organs(drop_bitflags=NONE)
 	var/atom/Tsec = drop_location()
-	if(!no_bodyparts)
-		if(no_organs)//so the organs don't get transfered inside the bodyparts we'll drop.
-			for(var/X in internal_organs)
-				if(no_brain || !istype(X, /obj/item/organ/brain))
-					qdel(X)
-		else //we're going to drop all bodyparts except chest, so the only organs that needs spilling are those inside it.
-			for(var/X in internal_organs)
-				var/obj/item/organ/O = X
-				if(no_brain && istype(O, /obj/item/organ/brain))
-					qdel(O) //so the brain isn't transfered to the head when the head drops.
-					continue
-				var/org_zone = check_zone(O.zone) //both groin and chest organs.
-				if(org_zone == BODY_ZONE_CHEST)
-					O.Remove(src)
-					O.forceMove(Tsec)
-					O.throw_at(get_edge_target_turf(src,pick(GLOB.alldirs)),rand(1,3),5)
-	else
-		for(var/X in internal_organs)
-			var/obj/item/organ/I = X
-			if(no_brain && istype(I, /obj/item/organ/brain))
-				qdel(I)
-				continue
-			if(no_organs && !istype(I, /obj/item/organ/brain))
-				qdel(I)
-				continue
-			I.Remove(src)
-			I.forceMove(Tsec)
-			I.throw_at(get_edge_target_turf(src,pick(GLOB.alldirs)),rand(1,3),5)
 
+	for(var/obj/item/organ/organ as anything in organs)
+		if((drop_bitflags & DROP_BRAIN) && istype(organ, /obj/item/organ/brain))
+			if((drop_bitflags & DROP_BODYPARTS) && (check_zone(organ.zone) != BODY_ZONE_CHEST)) // chests can't drop
+				continue // the head will drop, so the brain should stay inside
 
-/mob/living/carbon/spread_bodyparts()
-	for(var/X in bodyparts)
-		var/obj/item/bodypart/BP = X
-		BP.drop_limb()
-		BP.throw_at(get_edge_target_turf(src,pick(GLOB.alldirs)),rand(1,3),5)
+			organ.Remove(src)
+			organ.forceMove(Tsec)
+			organ.throw_at(get_edge_target_turf(src, pick(GLOB.alldirs)), rand(1,3), 5)
+			continue
+
+		if((drop_bitflags & DROP_ORGANS) && !istype(organ, /obj/item/organ/brain))
+			if((drop_bitflags & DROP_BODYPARTS) && (check_zone(organ.zone) != BODY_ZONE_CHEST))
+				continue // only chest & groin organs will be ejected
+
+			organ.Remove(src)
+			organ.forceMove(Tsec)
+			organ.throw_at(get_edge_target_turf(src, pick(GLOB.alldirs)), rand(1,3), 5)
+			continue
+
+		qdel(organ)
+
+/mob/living/carbon/spread_bodyparts(drop_bitflags=NONE)
+	for(var/obj/item/bodypart/part as anything in get_bodyparts())
+		if(part.body_zone == BODY_ZONE_CHEST)
+			continue // never drop this
+		if(!(drop_bitflags & DROP_BRAIN) && part.body_zone == BODY_ZONE_HEAD)
+			continue // don't drop head if we aren't dropping a brain
+
+		var/list/leftover_organs = list()
+		for(var/obj/item/organ/leftover in part)
+			leftover_organs += leftover
+
+		part.drop_limb(TRUE)
+		part.throw_at(get_edge_target_turf(src, pick(GLOB.alldirs)), rand(1,3), 5)
+		// any organs that weren't throw out already about need to follow the bodypart out
+		for(var/obj/item/organ/leftover as anything in leftover_organs)
+			leftover.Remove(src, TRUE)
+			leftover.bodypart_insert(part)
+
+/mob/living/carbon/set_suicide(suicide_state) //you thought that box trick was pretty clever, didn't you? well now hardmode is on, boyo.
+	. = ..()
+	var/obj/item/organ/brain/userbrain = get_organ_slot(ORGAN_SLOT_BRAIN)
+	if(userbrain)
+		userbrain.suicided = suicide_state
+
+/mob/living/carbon/can_suicide()
+	if(!..())
+		return FALSE
+	if(!(mobility_flags & MOBILITY_USE)) //just while I finish up the new 'fun' suiciding verb. This is to prevent metagaming via suicide
+		to_chat(src, span_warning("You can't commit suicide whilst immobile! (You can type Ghost instead however)."))
+		return FALSE
+	return TRUE

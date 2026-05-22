@@ -21,21 +21,14 @@ GLOBAL_LIST_INIT(exp_specialmap, list(
 		ROLE_SPACE_BAR_PATRON,
 		ROLE_LAVALAND_SYNDICATE,
 		ROLE_MAINTENANCE_DRONE,
+		ROLE_DERELICT_DRONE,
+		ROLE_SYNDICATE_DRONE,
+		ROLE_VENUSHUMANTRAP,
 		ROLE_GHOST_ROLE,
 		), // Ghost roles
 	EXP_TYPE_GHOST = list() // dead people, observers
 ))
 GLOBAL_PROTECT(exp_specialmap)
-
-//this is necessary because antags happen before job datums are handed out, but NOT before they come into existence
-//so I can't simply use job datum.department_head straight from the mind datum, laaaaame.
-/proc/get_department_heads(job_title)
-	if(!job_title)
-		return list()
-
-	for(var/datum/job/job as anything in SSjob.joinable_occupations)
-		if(job.title == job_title)
-			return job.department_head //this is a list
 
 /proc/get_full_job_name(job)
 	var/static/regex/cap_expand = new("cap(?!tain)")
@@ -53,7 +46,7 @@ GLOBAL_PROTECT(exp_specialmap)
 	var/static/regex/chef_expand = new("chef")
 	var/static/regex/borg_expand = new("(?<!cy)borg")
 
-	job = lowertext(job)
+	job = LOWER_TEXT(job)
 	job = cap_expand.Replace(job, "captain")
 	job = cmo_expand.Replace(job, "chief medical officer")
 	job = hos_expand.Replace(job, "head of security")

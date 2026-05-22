@@ -12,6 +12,7 @@
 	though fate has other plans for you."
 	flavour_text = "Good. It seems as though your ship crashed. You remember that you were convicted of "
 	spawner_job_path = /datum/job/escaped_prisoner
+	allow_custom_character = GHOSTROLE_TAKE_PREFS_APPEARANCE
 
 /obj/effect/mob_spawn/ghost_role/human/prisoner_transport/Initialize(mapload)
 	. = ..()
@@ -24,7 +25,7 @@
 	new /obj/structure/fluff/empty_sleeper/syndicate(get_turf(src))
 	return ..()
 
-/obj/effect/mob_spawn/ghost_role/human/prisoner_transport/special(mob/living/carbon/human/spawned_human)
+/obj/effect/mob_spawn/ghost_role/human/prisoner_transport/special(mob/living/carbon/human/spawned_human, mob/mob_possessor, apply_prefs)
 	. = ..()
 	spawned_human.fully_replace_character_name(null, "NTP #LL-0[rand(111,999)]") //Nanotrasen Prisoner #Lavaland-(numbers)
 
@@ -50,14 +51,19 @@
 	flavour_text = "Cater to visiting guests with your fellow staff, advertise the hotel, and make sure the manager doesn't fire you. Remember, the customer is always right!"
 	important_text = "Do NOT leave the hotel, as that is grounds for contract termination."
 	spawner_job_path = /datum/job/hotel_staff
+	allow_custom_character = ALL
 
 /datum/outfit/hotelstaff
 	name = "Hotel Staff"
 	uniform = /obj/item/clothing/under/misc/assistantformal
+	back = /obj/item/storage/backpack
 	shoes = /obj/item/clothing/shoes/laceup
 	r_pocket = /obj/item/radio/off
-	back = /obj/item/storage/backpack
-	implants = list(/obj/item/implant/mindshield, /obj/item/implant/exile/noteleport)
+
+	implants = list(
+		/obj/item/implant/exile/noteleport,
+		/obj/item/implant/mindshield,
+	)
 
 /obj/effect/mob_spawn/ghost_role/human/hotel_staff/security
 	name = "hotel security sleeper"
@@ -71,11 +77,11 @@
 /datum/outfit/hotelstaff/security
 	name = "Hotel Security"
 	uniform = /obj/item/clothing/under/rank/security/officer/blueshirt
-	shoes = /obj/item/clothing/shoes/jackboots
 	suit = /obj/item/clothing/suit/armor/vest/blueshirt
-	head = /obj/item/clothing/head/helmet/blueshirt
 	back = /obj/item/storage/backpack/security
 	belt = /obj/item/storage/belt/security/full
+	head = /obj/item/clothing/head/helmet/blueshirt
+	shoes = /obj/item/clothing/shoes/jackboots
 
 /obj/effect/mob_spawn/ghost_role/human/hotel_staff/Destroy()
 	new/obj/structure/fluff/empty_sleeper/syndicate(get_turf(src))
@@ -90,20 +96,22 @@
 	flavour_text = "You have awoken, without instruction. Death to Nanotrasen! If there are some clues around as to what you're supposed to be doing, you best follow those."
 	outfit = /datum/outfit/syndicate_empty
 	spawner_job_path = /datum/job/space_syndicate
+	allow_custom_character = ALL
 
 /datum/outfit/syndicate_empty
 	name = "Syndicate Operative Empty"
-	uniform = /obj/item/clothing/under/syndicate
-	shoes = /obj/item/clothing/shoes/combat
-	gloves = /obj/item/clothing/gloves/tackler/combat/insulated
-	ears = /obj/item/radio/headset/syndicate/alt
-	back = /obj/item/storage/backpack
-	implants = list(/obj/item/implant/weapons_auth)
 	id = /obj/item/card/id/advanced/chameleon
 	id_trim = /datum/id_trim/chameleon/operative
+	uniform = /obj/item/clothing/under/syndicate
+	back = /obj/item/storage/backpack
+	ears = /obj/item/radio/headset/syndicate/alt
+	gloves = /obj/item/clothing/gloves/tackler/combat/insulated
+	shoes = /obj/item/clothing/shoes/combat
+
+	implants = list(/obj/item/implant/weapons_auth)
 
 /datum/outfit/syndicate_empty/post_equip(mob/living/carbon/human/H)
-	H.faction |= ROLE_SYNDICATE
+	H.add_faction(ROLE_SYNDICATE)
 
 //For ghost bar.
 /obj/effect/mob_spawn/ghost_role/human/space_bar_patron
@@ -114,6 +122,7 @@
 	flavour_text = "Hang out at the bar and chat with your buddies. Feel free to hop back in the cryogenics when you're done chatting."
 	outfit = /datum/outfit/cryobartender
 	spawner_job_path = /datum/job/space_bar_patron
+	allow_custom_character = ALL
 
 /obj/effect/mob_spawn/ghost_role/human/space_bar_patron/attack_hand(mob/user, list/modifiers)
 	var/despawn = tgui_alert(usr, "Return to cryosleep? (Warning, Your mob will be deleted!)", null, list("Yes", "No"))
@@ -124,11 +133,12 @@
 
 /datum/outfit/cryobartender
 	name = "Cryogenic Bartender"
-	uniform = /obj/item/clothing/under/rank/civilian/bartender
-	back = /obj/item/storage/backpack
-	shoes = /obj/item/clothing/shoes/sneakers/black
+	neck = /obj/item/clothing/neck/bowtie
+	uniform = /obj/item/clothing/under/costume/buttondown/slacks/service
 	suit = /obj/item/clothing/suit/armor/vest
+	back = /obj/item/storage/backpack
 	glasses = /obj/item/clothing/glasses/sunglasses/reagent
+	shoes = /obj/item/clothing/shoes/sneakers/black
 
 //Timeless prisons: Spawns in Wish Granter prisons in lavaland. Ghosts become age-old users of the Wish Granter and are advised to seek repentance for their past.
 /obj/effect/mob_spawn/ghost_role/human/exile
@@ -147,7 +157,7 @@
 	new/obj/structure/fluff/empty_sleeper(get_turf(src))
 	return ..()
 
-/obj/effect/mob_spawn/ghost_role/human/exile/special(mob/living/new_spawn)
+/obj/effect/mob_spawn/ghost_role/human/exile/special(mob/living/new_spawn, mob/mob_possessor, apply_prefs)
 	. = ..()
 	new_spawn.fully_replace_character_name(null,"Wish Granter's Victim ([rand(1,999)])")
 	var/wish = rand(1,4)
@@ -161,17 +171,18 @@
 			message = "<b>You wished for power. Little good it did you, cast out of the light. You are the [gender == MALE ? "king" : "queen"] of a hell that holds no subjects. You feel only remorse.</b>"
 		if(4)
 			message = "<b>You wished for immortality, even as your friends lay dying behind you. No matter how many times you cast yourself into the lava, you awaken in this room again within a few days. There is no escape.</b>"
-	to_chat(new_spawn, "<span class='infoplain'>[message]</span>")
+	to_chat(new_spawn, span_infoplain("[message]"))
 
 /obj/effect/mob_spawn/ghost_role/human/nanotrasensoldier
 	name = "sleeper"
 	icon = 'icons/obj/machines/sleeper.dmi'
 	icon_state = "sleeper"
-	faction = list("nanotrasenprivate")
+	faction = list(FACTION_NANOTRASEN_PRIVATE)
 	prompt_name = "a private security officer"
 	you_are_text = "You are a Nanotrasen Private Security Officer!"
 	flavour_text = "If higher command has an assignment for you, it's best you follow that. Otherwise, death to The Syndicate."
 	outfit = /datum/outfit/nanotrasensoldier
+	allow_custom_character = ALL
 
 /obj/effect/mob_spawn/ghost_role/human/commander
 	name = "sleeper"
@@ -181,6 +192,7 @@
 	you_are_text = "You are a Nanotrasen Commander!"
 	flavour_text = "Upper-crusty of Nanotrasen. You should be given the respect you're owed."
 	outfit = /datum/outfit/nanotrasencommander
+	allow_custom_character = GHOSTROLE_TAKE_PREFS_APPEARANCE
 
 //space doctor, a rat with cancer, and bessie from an old removed lavaland ruin.
 
@@ -193,18 +205,19 @@
 	flavour_text = "It's your job- no, your duty as a doctor, to care and heal those in need."
 	outfit = /datum/outfit/job/doctor
 	spawner_job_path = /datum/job/space_doctor
+	allow_custom_character = ALL
 
 /obj/effect/mob_spawn/ghost_role/human/doctor/alive/equip(mob/living/carbon/human/doctor)
 	. = ..()
 	// Remove radio and PDA so they wouldn't annoy station crew.
-	var/list/del_types = list(/obj/item/pda, /obj/item/radio/headset)
+	var/list/del_types = list(/obj/item/modular_computer/pda, /obj/item/radio/headset)
 	for(var/del_type in del_types)
 		var/obj/item/unwanted_item = locate(del_type) in doctor
 		qdel(unwanted_item)
 
 /obj/effect/mob_spawn/ghost_role/mouse
 	name = "sleeper"
-	mob_type = /mob/living/simple_animal/mouse
+	mob_type = /mob/living/basic/mouse
 	prompt_name = "a mouse"
 	you_are_text = "You're a mouse!"
 	flavour_text = "Uh... yep! Squeak squeak, motherfucker."
@@ -221,7 +234,7 @@
 	icon = 'icons/obj/machines/sleeper.dmi'
 	icon_state = "sleeper"
 
-/obj/effect/mob_spawn/cow/special(mob/living/spawned_mob)
+/obj/effect/mob_spawn/cow/special(mob/living/spawned_mob, mob/mob_possessor, apply_prefs)
 	. = ..()
 	gender = FEMALE
 
@@ -238,16 +251,18 @@
 	flavour_text = "Monitor Nanotrasen communications and record information. All intruders should be disposed of \
 	swiftly to assure no gathered information is stolen or lost. Try not to wander too far from the outpost as the \
 	caves can be a deadly place even for a trained operative such as yourself."
+	allow_custom_character = ALL
 
 /datum/outfit/snowsyndie
 	name = "Syndicate Snow Operative"
-	uniform = /obj/item/clothing/under/syndicate/coldres
-	shoes = /obj/item/clothing/shoes/combat/coldres
-	ears = /obj/item/radio/headset/syndicate/alt
-	r_pocket = /obj/item/gun/ballistic/automatic/pistol
 	id = /obj/item/card/id/advanced/chameleon
-	implants = list(/obj/item/implant/exile)
 	id_trim = /datum/id_trim/chameleon/operative
+	uniform = /obj/item/clothing/under/syndicate/coldres
+	ears = /obj/item/radio/headset/syndicate/alt
+	shoes = /obj/item/clothing/shoes/combat/coldres
+	r_pocket = /obj/item/gun/ballistic/automatic/pistol
+
+	implants = list(/obj/item/implant/exile)
 
 //Forgotten syndicate ship
 
@@ -262,14 +277,12 @@
 	important_text = "Obey orders given by your captain. DO NOT let the ship fall into enemy hands."
 	outfit = /datum/outfit/syndicatespace/syndicrew
 	spawner_job_path = /datum/job/syndicate_cybersun
+	allow_custom_character = ALL
 
-/datum/outfit/syndicatespace/syndicrew/post_equip(mob/living/carbon/human/H)
-	H.faction |= ROLE_SYNDICATE
-
-/obj/effect/mob_spawn/ghost_role/human/syndicatespace/special(mob/living/new_spawn)
+/obj/effect/mob_spawn/ghost_role/human/syndicatespace/special(mob/living/new_spawn, mob/mob_possessor, apply_prefs)
 	. = ..()
-	new_spawn.grant_language(/datum/language/codespeak, TRUE, TRUE, LANGUAGE_MIND)
-	var/datum/job/spawn_job = SSjob.GetJobType(spawner_job_path)
+	new_spawn.grant_language(/datum/language/codespeak, source = LANGUAGE_MIND)
+	var/datum/job/spawn_job = SSjob.get_job_type(spawner_job_path)
 	var/policy = get_policy(spawn_job.policy_index)
 	if(policy)
 		to_chat(new_spawn, span_bold("[policy]"))
@@ -282,40 +295,44 @@
 	important_text = "Protect the ship and secret documents in your backpack with your own life."
 	outfit = /datum/outfit/syndicatespace/syndicaptain
 	spawner_job_path = /datum/job/syndicate_cybersun_captain
-
-/datum/outfit/syndicatespace/syndicaptain/post_equip(mob/living/carbon/human/H)
-	H.faction |= ROLE_SYNDICATE
+	allow_custom_character = ALL
 
 /obj/effect/mob_spawn/ghost_role/human/syndicatespace/captain/Destroy()
 	new /obj/structure/fluff/empty_sleeper/syndicate/captain(get_turf(src))
 	return ..()
 
+/datum/outfit/syndicatespace
+	name = "Syndicate Ship Base"
+	id = /obj/item/card/id/advanced/black/syndicate_command/crew_id
+	uniform = /obj/item/clothing/under/syndicate/combat
+	back = /obj/item/storage/backpack
+	belt = /obj/item/storage/belt/military/assault
+	ears = /obj/item/radio/headset/syndicate/alt
+	gloves = /obj/item/clothing/gloves/combat
+	shoes = /obj/item/clothing/shoes/combat
+
+	implants = list(/obj/item/implant/weapons_auth)
+
+/datum/outfit/syndicatespace/post_equip(mob/living/carbon/human/syndie_scum)
+	syndie_scum.add_faction(ROLE_SYNDICATE)
+
 /datum/outfit/syndicatespace/syndicrew
 	name = "Syndicate Ship Crew Member"
-	uniform = /obj/item/clothing/under/syndicate/combat
 	glasses = /obj/item/clothing/glasses/night
 	mask = /obj/item/clothing/mask/gas/syndicate
-	ears = /obj/item/radio/headset/syndicate/alt
-	shoes = /obj/item/clothing/shoes/combat
-	gloves = /obj/item/clothing/gloves/combat
-	back = /obj/item/storage/backpack
 	l_pocket = /obj/item/gun/ballistic/automatic/pistol
 	r_pocket = /obj/item/knife/combat/survival
-	belt = /obj/item/storage/belt/military/assault
-	id = /obj/item/card/id/advanced/black/syndicate_command/crew_id
-	implants = list(/obj/item/implant/weapons_auth)
 
 /datum/outfit/syndicatespace/syndicaptain
 	name = "Syndicate Ship Captain"
+	id = /obj/item/card/id/advanced/black/syndicate_command/captain_id
 	uniform = /obj/item/clothing/under/syndicate/combat
 	suit = /obj/item/clothing/suit/armor/vest/capcarapace/syndicate
-	head = /obj/item/clothing/head/hos/beret/syndicate
 	ears = /obj/item/radio/headset/syndicate/alt/leader
-	shoes = /obj/item/clothing/shoes/combat
-	gloves = /obj/item/clothing/gloves/combat
-	back = /obj/item/storage/backpack
+	head = /obj/item/clothing/head/hats/hos/beret/syndicate
 	r_pocket = /obj/item/knife/combat/survival
-	belt = /obj/item/storage/belt/military/assault
-	id = /obj/item/card/id/advanced/black/syndicate_command/captain_id
-	implants = list(/obj/item/implant/weapons_auth)
-	backpack_contents = list(/obj/item/documents/syndicate/red, /obj/item/paper/fluff/ruins/forgottenship/password, /obj/item/gun/ballistic/automatic/pistol/aps)
+	backpack_contents = list(
+		/obj/item/documents/syndicate/red,
+		/obj/item/gun/ballistic/automatic/pistol/aps,
+		/obj/item/paper/fluff/ruins/forgottenship/password,
+	)

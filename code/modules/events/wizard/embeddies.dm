@@ -4,11 +4,19 @@
 	typepath = /datum/round_event/wizard/embedpocalypse
 	max_occurrences = 1
 	earliest_start = 0 MINUTES
+	description = "Everything becomes pointy enough to embed in people when thrown."
+	min_wizard_trigger_potency = 3
+	max_wizard_trigger_potency = 7
 
 ///behold... the only reason sticky is a subtype...
-/datum/round_event_control/wizard/embedpocalypse/canSpawnEvent(players_amt, gamemode)
+/datum/round_event_control/wizard/embedpocalypse/can_spawn_event(players_amt, allow_magic = FALSE)
+	. = ..()
+	if(!.)
+		return .
+
 	if(GLOB.global_funny_embedding)
 		return FALSE
+	return TRUE
 
 /datum/round_event/wizard/embedpocalypse/start()
 	GLOB.global_funny_embedding = new /datum/global_funny_embedding/pointy
@@ -19,6 +27,7 @@
 	typepath = /datum/round_event/wizard/embedpocalypse/sticky
 	max_occurrences = 1
 	earliest_start = 0 MINUTES
+	description = "Everything becomes sticky enough to be glued to people when thrown."
 
 /datum/round_event/wizard/embedpocalypse/sticky/start()
 	GLOB.global_funny_embedding = new /datum/global_funny_embedding/sticky
@@ -34,13 +43,16 @@ GLOBAL_DATUM(global_funny_embedding, /datum/global_funny_embedding)
  * Makes every item in the world embed when thrown, but also hooks into global signals for new items created to also bless them with embed-ability(??).
  */
 /datum/global_funny_embedding
-	var/embed_type = EMBED_POINTY
+	var/embed_type = /datum/embedding/global_funny
 	var/prefix = "error"
+
+/datum/embedding/global_funny
+	ignore_throwspeed_threshold = TRUE
 
 /datum/global_funny_embedding/New()
 	. = ..()
 	//second operation takes MUCH longer, so lets set up signals first.
-	RegisterSignal(SSdcs, COMSIG_GLOB_NEW_ITEM, .proc/on_new_item_in_existence)
+	RegisterSignal(SSdcs, COMSIG_GLOB_NEW_ITEM, PROC_REF(on_new_item_in_existence))
 	handle_current_items()
 
 /datum/global_funny_embedding/Destroy(force)
@@ -52,11 +64,11 @@ GLOBAL_DATUM(global_funny_embedding, /datum/global_funny_embedding)
 	SIGNAL_HANDLER
 
 	// this proc says it's for initializing components, but we're initializing elements too because it's you and me against the world >:)
-	if(LAZYLEN(created_item.embedding))
-		return //already embeds to some degree, so whatever 🐀
-	created_item.embedding = embed_type
+	if(created_item.get_embed())
+		return //already embeds to some degree, so whatever // No rat allowed
+
 	created_item.name = "[prefix] [created_item.name]"
-	created_item.updateEmbedding()
+	created_item.set_embed(embed_type)
 
 /**
  * ### handle_current_items
@@ -68,17 +80,20 @@ GLOBAL_DATUM(global_funny_embedding, /datum/global_funny_embedding)
 		CHECK_TICK
 		if(!(embed_item.flags_1 & INITIALIZED_1))
 			continue
-		if(!embed_item.embedding)
-			embed_item.embedding = embed_type
-			embed_item.updateEmbedding()
-			embed_item.name = "[prefix] [embed_item.name]"
+		if(embed_item.get_embed())
+			continue
+		embed_item.set_embed(embed_type)
+		embed_item.name = "[prefix] [embed_item.name]"
 
 ///everything will be... POINTY!!!!
 /datum/global_funny_embedding/pointy
-	embed_type = EMBED_POINTY
 	prefix = "pointy"
 
 ///everything will be... sticky? sure, why not
 /datum/global_funny_embedding/sticky
-	embed_type = EMBED_HARMLESS
+	embed_type = /datum/embedding/global_funny/sticky
 	prefix = "sticky"
+
+/datum/embedding/global_funny/sticky
+	pain_mult = 0
+	jostle_pain_mult = 0

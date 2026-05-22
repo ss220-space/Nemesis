@@ -3,12 +3,25 @@
 /obj/structure/plaque/static_plaque
 	engraved = TRUE
 
+/obj/structure/plaque/static_plaque/Initialize(mapload)
+	. = ..()
+	if(isopenturf(loc) && !isProbablyWallMounted(src))
+		SET_PLANE_IMPLICIT(src, FLOOR_PLANE)
+		layer = HIGH_TURF_LAYER
+
+/obj/structure/plaque/static_plaque/get_mountable_objects()
+	return list()
+
+/obj/structure/plaque/static_plaque/find_and_mount_on_atom(mark_for_late_init, late_init)
+	if(isProbablyWallMounted(src))
+		return ..()
+
 /obj/structure/plaque/static_plaque/atmos
 	name = "\improper FEA Atmospherics Division plaque"
 	desc = "This plaque commemorates the fall of the Atmos FEA division. For all the charred, dizzy, and brittle men who have died in its hands."
 
 /obj/structure/plaque/static_plaque/thunderdome
-	name = "Thunderdome Plaque"
+	name = "\improper Thunderdome plaque"
 	desc = "This plaque commemorates those who have fallen in glorious combat.  For all the charred, dizzy, and beaten men who have died in its hands."
 
 /obj/structure/plaque/static_plaque/golden
@@ -25,12 +38,20 @@
 
 // Runtimestation: added Nov 11, 2016 (946ec1fec869eb59d6a84e32c90613af734fcd0e)
 /obj/structure/plaque/static_plaque/golden/commission
-	name = "Commission Plaque"
+	name = "commission plaque"
 	desc = "Spinward Sector Station SS-13\n'Runtime' Class Outpost\nCommissioned 03/11/2556\n'Dedicated to the Pioneers'"
 	icon_state = "commission_nt"
 	layer = BELOW_OPEN_DOOR_LAYER
 
 //Current stations
+
+// Catwalk: added Apr 10, 2025 (#90532)
+/obj/structure/plaque/static_plaque/golden/commission/catwalk
+	desc = "Spinward Sector Station SS-13\n'Catwalk' Class Outpost\nCommissioned 10/04/2565\n'The New Level'"
+
+// Deltastation: added Dec 17, 2016 (#22066)
+/obj/structure/plaque/static_plaque/golden/commission/delta
+	desc = "Spinward Sector Station SS-13\n'Delta' Class Outpost\nCommissioned 17/12/2556\n'Efficiency Through Redundancy'"
 
 // Icebox Station: added May 13, 2020 (#51090)
 /obj/structure/plaque/static_plaque/golden/commission/icebox
@@ -40,17 +61,17 @@
 /obj/structure/plaque/static_plaque/golden/commission/meta
 	desc = "Spinward Sector Station SS-13\n'Meta' Class Outpost\nCommissioned 11/03/2553\n'Theseus' Station'"
 
-// Deltastation: added Dec 17, 2016 (#22066)
-/obj/structure/plaque/static_plaque/golden/commission/delta
-	desc = "Spinward Sector Station SS-13\n'Delta' Class Outpost\nCommissioned 17/12/2556\n'Efficiency Through Redundancy'"
-
-// Kilostation: added Nov 13, 2019 (#46968)
-/obj/structure/plaque/static_plaque/golden/commission/kilo
-	desc = "Spinward Sector Station SS-13\n'Kilo' Class Outpost\nCommissioned 13/11/2559\n'Forever Different'"
+// Nebulastation: added Nov 6, 2024 (#84826)
+/obj/structure/plaque/static_plaque/golden/commission/nebula
+	desc = "Spinward Sector Station SS-13\n'Nebula' Class Outpost\nCommissioned 06/11/2564\n'The New Future'"
 
 // Tramstation: added Mar 11, 2021 (#56509)
 /obj/structure/plaque/static_plaque/golden/commission/tram
 	desc = "Spinward Sector Station SS-13\n'Tram' Class Outpost\nCommissioned 11/03/2561\n'Making Moves'"
+
+// Wawastation: added Jun 4, 2024 (#82298)
+/obj/structure/plaque/static_plaque/golden/commission/wawa
+	desc = "Spinward Sector Station SS-13\n'Wawa' Class Outpost\nCommissioned 04/06/2564\n'Forever Vertical'"
 
 //Removed stations
 
@@ -90,9 +111,17 @@
 /obj/structure/plaque/static_plaque/golden/commission/efficiency
 	desc = "Spinward Sector Station SS-07\n'Efficiency' Class Outpost\nCommissioned 28/01/2556\nDecommissioned 20/12/2556\n'Work Smarter, Not Harder'"
 
+// Kilostation: added Nov 13, 2019 (#46968), removed
+/obj/structure/plaque/static_plaque/golden/commission/kilo
+	desc = "Spinward Sector Station SS-13\n'Kilo' Class Outpost\nCommissioned 13/11/2559\nDecommissioned \n'Forever Different'"
+
 // Ministation: added Jan 29, 2014 (7a76e9456b782e6626bf81e27a912d8232c76b18), removed Dec 27, 2016 (#22453)- 2 years, 10 months, 28 days
 /obj/structure/plaque/static_plaque/golden/commission/mini
 	desc = "Spinward Sector Station SS-08\n'Mini' Class Outpost\nCommissioned 29/01/2554\nDecommissioned 27/12/2556\n'The Littlest Station'"
+
+// North Star: added Apr 13, 2023 (#74371), removed Nov 25, 2024 (#87937)- 1 year, 7 months, 12 days
+/obj/structure/plaque/static_plaque/golden/commission/northstar
+	desc = "Spinward Sector Ship SS-13\n'North Star' Class Vessel\nCommissioned 13/04/2563\nDecommissioned 25/11/2564\n'New Opportunities'"
 
 // Omegastation: added Dec 27, 2016 (#22453), removed Sep 20, 2018 (#40352)- 1 year, 8 months, 24 days
 /obj/structure/plaque/static_plaque/golden/commission/omega
@@ -101,6 +130,10 @@
 // Uterusstation: added Sep 03, 2011 (bbd6db9ce2d6341892b89a620593fc8877f5a817), removed Jun 21, 2012 (72d72f7ce522c2d2ad4863f44ee9f5054413c489)- 9 months, 18 days
 /obj/structure/plaque/static_plaque/golden/commission/uterus
 	desc = "Spinward Sector Station SS-01\n'Uterus' Class Outpost\nCommissioned 03/09/2551\nDecommissioned 21/06/2552\n'Humanity's Vanguard'"
+
+// Birdshot: added Apr 29, 2023 (#74371), removed Jul 9, 2025 (#92022) — 2 years, 2 months, 10 days
+/obj/structure/plaque/static_plaque/golden/commission/birdshot
+	desc = "Spinward Sector Station SS-13\n'Birdshot' Class Outpost\nCommissioned 29/04/2563\nDecommissioned 09/07/2565\n'Shooting for the Stars'"
 
 // Other Stations
 
@@ -137,3 +170,7 @@
 /obj/structure/sign/plaques/kiddie/perfect_drone
 	name = "\improper 'Perfect Drone' sign"
 	desc = "A guide to the drone shell dispenser, detailing the constructive and destructive applications of modern repair drones, as well as the development of the incorruptible cyborg servants of tomorrow, available today."
+
+/obj/structure/sign/plaques/kiddie/gameoflife
+	name = "\improper Conway's The Game Of Life plaque"
+	desc = "A plaque detailing the historical significance of The Game Of Life in the field of computer science, and that the mural underfoot is a representation of the game in action."

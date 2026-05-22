@@ -1,7 +1,7 @@
 /obj/machinery/abductor/gland_dispenser
 	name = "replacement organ storage"
 	desc = "A tank filled with replacement organs."
-	icon = 'icons/obj/abductor.dmi'
+	icon = 'icons/obj/antags/abductor.dmi'
 	icon_state = "dispenser"
 	density = TRUE
 	var/list/gland_types
@@ -22,7 +22,7 @@
 		gland_colors[i] = random_color()
 		amounts[i] = rand(1,5)
 
-/obj/machinery/abductor/gland_dispenser/ui_status(mob/user)
+/obj/machinery/abductor/gland_dispenser/ui_status(mob/user, datum/ui_state/state)
 	if(!isabductor(user) && !isobserver(user))
 		return UI_CLOSE
 	return ..()
@@ -48,7 +48,7 @@
 		data["glands"] += list(gland_information)
 	return data
 
-/obj/machinery/abductor/gland_dispenser/ui_act(action, list/params)
+/obj/machinery/abductor/gland_dispenser/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	. = ..()
 	if(.)
 		return
@@ -61,7 +61,7 @@
 			Dispense(gland_id)
 			return TRUE
 
-/obj/machinery/abductor/gland_dispenser/attackby(obj/item/W, mob/user, params)
+/obj/machinery/abductor/gland_dispenser/attackby(obj/item/W, mob/user, list/modifiers, list/attack_modifiers)
 	if(istype(W, /obj/item/organ/heart/gland))
 		if(!user.transferItemToLoc(W, src))
 			return

@@ -1,26 +1,15 @@
-/*
-//////////////////////////////////////
-
-Weight Loss
-
-	Very Very Noticable.
-	Decreases resistance.
-	Decreases stage speed.
-	Reduced Transmittable.
-	High level.
-
-Bonus
-	Decreases the weight of the mob,
-	forcing it to be skinny.
-
-//////////////////////////////////////
+/*Weight Loss
+ * No effect on stealth
+ * Increases resistance
+ * Reduces stage speed
+ * Reduces transmissibility
+ * Bonus: Drains nutrition from the host
 */
-
 /datum/symptom/weight_loss
-
 	name = "Weight Loss"
 	desc = "The virus mutates the host's metabolism, making it almost unable to gain nutrition from food."
-	stealth = -2
+	illness = "Placid Reflux"
+	stealth = 0
 	resistance = 2
 	stage_speed = -2
 	transmittable = -2
@@ -29,6 +18,9 @@ Bonus
 	base_message_chance = 100
 	symptom_delay_min = 15
 	symptom_delay_max = 45
+	required_organ = ORGAN_SLOT_STOMACH
+	symptom_cure = /datum/reagent/medicine/diphenhydramine // It's good with terrible stats, it should be harder to cure
+	cure_color = "orange"
 	threshold_descs = list(
 		"Stealth 4" = "The symptom is less noticeable."
 	)

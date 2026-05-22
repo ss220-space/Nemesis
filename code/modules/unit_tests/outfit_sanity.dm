@@ -3,20 +3,59 @@
 	/* We don't check the result of equip_to_slot_or_del because it returns false for random jumpsuits, as they delete themselves on init */ \
 	var/obj/item/outfit_item = H.get_item_by_slot(##slot_name); \
 	if (!outfit_item) { \
-		Fail("[outfit.name]'s [#outfit_key] is invalid! Could not equip a [outfit.##outfit_key] into that slot."); \
+		TEST_FAIL("[outfit.name]'s [#outfit_key] is invalid! Could not equip a [outfit.##outfit_key] into that slot."); \
 	} \
-	outfit_item.on_outfit_equip(H, FALSE, ##slot_name); \
+	else { \
+		outfit_item.on_outfit_equip(H, FALSE, ##slot_name); \
+	} \
 }
 
-/datum/unit_test/outfit_sanity/Run()
-	var/mob/living/carbon/human/H = allocate(/mob/living/carbon/human)
+/// See #66313 and #60901. outfit_sanity used to runtime whenever you had two mergable sheets in either hand. Previously, this only had a 3% chance of occuring. Now 100%.
+/datum/outfit/stacks_in_hands
+	name = "Mr. Runtime"
 
-	for (var/outfit_type in subtypesof(/datum/outfit))
+	uniform = /obj/item/clothing/under/suit/tuxedo
+	glasses = /obj/item/clothing/glasses/sunglasses
+	mask = /obj/item/cigarette/cigar/havana
+	shoes = /obj/item/clothing/shoes/laceup
+	l_hand = /obj/item/stack/spacecash/c1000
+	r_hand = /obj/item/stack/spacecash/c1000
+
+/// outfit_sanity needs to cover insertions into duffelbags
+/datum/outfit/duffel_user
+	name = "Mr. Runtime"
+	back = /obj/item/storage/backpack/duffelbag
+	backpack_contents = list(/obj/item/cigarette/cigar/havana)
+
+/// Satchels too
+/datum/outfit/stachel_user
+	name = "Mr. Runtime"
+	back = /obj/item/storage/backpack/satchel
+	backpack_contents = list(/obj/item/cigarette/cigar/havana)
+
+/// And just in case we'll check backpacks
+/datum/outfit/backpack_user
+	name = "Mr. Runtime"
+	back = /obj/item/storage/backpack
+	backpack_contents = list(/obj/item/cigarette/cigar/havana)
+
+/datum/unit_test/outfit_sanity/Run()
+	var/datum/outfit/prototype_outfit = /datum/outfit
+	var/prototype_name = initial(prototype_outfit.name)
+	var/mob/living/carbon/human/H = allocate(/mob/living/carbon/human/consistent)
+
+	var/list/outfits_to_check = subtypesof(/datum/outfit)
+	outfits_to_check -= typesof(/datum/outfit/deathmatch_loadout)
+
+	for (var/outfit_type in outfits_to_check)
 		// Only make one human and keep undressing it because it's much faster
-		for (var/obj/item/I in H.get_equipped_items(include_pockets = TRUE))
+		for (var/obj/item/I in H.get_equipped_items(INCLUDE_POCKETS|INCLUDE_ABSTRACT))
 			qdel(I)
 
 		var/datum/outfit/outfit = new outfit_type
+
+		if(outfit.name == prototype_name)
+			TEST_FAIL("[outfit.type]'s name is invalid! Uses default outfit name!")
 		outfit.pre_equip(H, TRUE)
 
 		CHECK_OUTFIT_SLOT(uniform, ITEM_SLOT_ICLOTHING)
@@ -45,7 +84,16 @@
 			for (var/path in backpack_contents)
 				var/number = backpack_contents[path] || 1
 				for (var/_ in 1 to number)
-					if (!H.equip_to_slot_or_del(new path(H), ITEM_SLOT_BACKPACK, TRUE))
-						Fail("[outfit.name]'s backpack_contents are invalid! Couldn't add [path] to backpack.")
+					if (!H.equip_to_storage(new path(H), ITEM_SLOT_BACK, indirect_action = TRUE, del_on_fail = TRUE))
+						TEST_FAIL("[outfit.name]'s backpack_contents are invalid! Couldn't add [path] to backpack.")
+
+		if (outfit.belt_contents)
+			var/list/belt_contents = outfit.belt_contents?.Copy()
+			for (var/path in belt_contents)
+				var/number = belt_contents[path] || 1
+				for (var/_ in 1 to number)
+					if (!H.equip_to_storage(new path(H), ITEM_SLOT_BELT, indirect_action = TRUE, del_on_fail = TRUE))
+						TEST_FAIL("[outfit.name]'s belt_contents are invalid! Couldn't add [path] to backpack.")
+
 
 #undef CHECK_OUTFIT_SLOT

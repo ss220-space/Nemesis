@@ -15,7 +15,6 @@
 /obj/structure/toilet{
 	dir = 4
 	},
-/obj/machinery/duct,
 /turf/open/floor/iron/freezer,
 /area/ruin/space/djstation)
 "d" = (
@@ -25,6 +24,12 @@
 "f" = (
 /obj/machinery/duct,
 /turf/open/floor/wood/tile,
+/area/ruin/space/djstation)
+"g" = (
+/obj/structure/window/plasma/spawner/directional/south,
+/obj/structure/table/wood,
+/obj/effect/spawner/random/exotic/languagebook,
+/turf/open/floor/carpet/purple,
 /area/ruin/space/djstation)
 "h" = (
 /obj/structure/table/reinforced/plastitaniumglass,
@@ -38,21 +43,23 @@
 "i" = (
 /turf/closed/wall,
 /area/ruin/space/djstation)
+"l" = (
+/obj/structure/window/plasma/spawner/directional/south,
+/obj/structure/table/wood,
+/obj/item/flashlight/lamp/green{
+	pixel_y = 4
+	},
+/turf/open/floor/carpet/purple,
+/area/ruin/space/djstation)
 "p" = (
 /obj/machinery/door/airlock/public/glass{
 	name = "Rest Room"
 	},
 /turf/template_noop,
-/area/template_noop)
+/area/space/nearstation)
 "s" = (
-/obj/machinery/shower{
-	dir = 4
-	},
+/obj/machinery/shower/directional/east,
 /turf/open/floor/iron/freezer,
-/area/ruin/space/djstation)
-"t" = (
-/obj/machinery/light/directional/south,
-/turf/open/floor/wood/tile,
 /area/ruin/space/djstation)
 "u" = (
 /obj/machinery/duct,
@@ -60,14 +67,6 @@
 	name = "Bedroom"
 	},
 /turf/open/floor/wood/tile,
-/area/ruin/space/djstation)
-"v" = (
-/obj/structure/window/plasma,
-/obj/structure/table/wood,
-/obj/item/flashlight/lamp/green{
-	pixel_y = 4
-	},
-/turf/open/floor/carpet/purple,
 /area/ruin/space/djstation)
 "x" = (
 /obj/effect/spawner/random/trash/soap{
@@ -92,7 +91,7 @@
 	},
 /obj/modular_map_connector,
 /turf/template_noop,
-/area/template_noop)
+/area/space/nearstation)
 "C" = (
 /obj/machinery/duct,
 /obj/machinery/light/directional/south,
@@ -110,15 +109,17 @@
 /turf/open/floor/plating,
 /area/ruin/space/djstation)
 "L" = (
-/obj/structure/bed,
-/obj/item/bedsheet/purple,
+/obj/structure/bed{
+	dir = 4
+	},
+/obj/item/bedsheet/purple{
+	dir = 4
+	},
 /turf/open/floor/carpet/purple,
 /area/ruin/space/djstation)
-"N" = (
-/obj/structure/window/plasma,
-/obj/structure/table/wood,
-/obj/effect/spawner/random/exotic/languagebook,
-/turf/open/floor/carpet/purple,
+"S" = (
+/obj/machinery/light/small/directional/south,
+/turf/open/floor/wood/tile,
 /area/ruin/space/djstation)
 "T" = (
 /obj/structure/dresser,
@@ -141,9 +142,7 @@
 /area/space/nearstation)
 "X" = (
 /obj/structure/mirror/directional/north,
-/obj/structure/sink{
-	pixel_y = 17
-	},
+/obj/structure/sink/directional/south,
 /turf/open/floor/iron/freezer,
 /area/ruin/space/djstation)
 "Y" = (
@@ -212,7 +211,7 @@ a
 a
 J
 L
-v
+l
 f
 A
 i
@@ -227,7 +226,7 @@ J
 D
 D
 f
-t
+S
 i
 X
 C
@@ -238,7 +237,7 @@ a
 a
 J
 z
-N
+g
 T
 f
 U

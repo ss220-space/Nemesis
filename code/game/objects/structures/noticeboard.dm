@@ -1,10 +1,10 @@
-#define MAX_NOTICES 5
+#define MAX_NOTICES 8
 
 /obj/structure/noticeboard
 	name = "notice board"
-	desc = "A board for pinning important notices upon."
-	icon = 'icons/obj/stationobjs.dmi'
-	icon_state = "nboard00"
+	desc = "A board for pinning important notices upon. It is made of the finest Spanish cork."
+	icon = 'icons/obj/wallmounts.dmi'
+	icon_state = "noticeboard"
 	density = FALSE
 	anchored = TRUE
 	max_integrity = 150
@@ -13,22 +13,33 @@
 
 MAPPING_DIRECTIONAL_HELPERS(/obj/structure/noticeboard, 32)
 
+/obj/structure/noticeboard/on_object_saved()
+	var/data
+
+	for(var/obj/item/paper/paper in contents)
+		var/metadata = generate_tgm_metadata(paper)
+		data += "[data ? ",\n" : ""][paper.type][metadata]"
+
+	return data
+
 /obj/structure/noticeboard/Initialize(mapload)
 	. = ..()
 
 	if(!mapload)
 		return
 
-	for(var/obj/item/I in loc)
+	for(var/obj/item/paper/paper in loc)
 		if(notices >= MAX_NOTICES)
 			break
-		if(istype(I, /obj/item/paper))
-			I.forceMove(src)
-			notices++
-	icon_state = "nboard0[notices]"
+
+		paper.forceMove(src)
+		notices++
+	update_appearance(UPDATE_ICON)
+	if(mapload)
+		find_and_mount_on_atom()
 
 //attaching papers!!
-/obj/structure/noticeboard/attackby(obj/item/O, mob/user, params)
+/obj/structure/noticeboard/attackby(obj/item/O, mob/user, list/modifiers, list/attack_modifiers)
 	if(istype(O, /obj/item/paper) || istype(O, /obj/item/photo))
 		if(!allowed(user))
 			to_chat(user, span_warning("You are not authorized to add notices!"))
@@ -37,7 +48,7 @@ MAPPING_DIRECTIONAL_HELPERS(/obj/structure/noticeboard, 32)
 			if(!user.transferItemToLoc(O, src))
 				return
 			notices++
-			icon_state = "nboard0[notices]"
+			update_appearance(UPDATE_ICON)
 			to_chat(user, span_notice("You pin the [O] to the noticeboard."))
 		else
 			to_chat(user, span_warning("The notice board is full!"))
@@ -65,7 +76,7 @@ MAPPING_DIRECTIONAL_HELPERS(/obj/structure/noticeboard, 32)
 		data["items"] += list(content_data)
 	return data
 
-/obj/structure/noticeboard/ui_act(action, params)
+/obj/structure/noticeboard/ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 	. = ..()
 	if(.)
 		return
@@ -89,6 +100,11 @@ MAPPING_DIRECTIONAL_HELPERS(/obj/structure/noticeboard, 32)
 			remove_item(item, user)
 			return TRUE
 
+/obj/structure/noticeboard/update_overlays()
+	. = ..()
+	if(notices)
+		. += "notices_[notices]"
+
 /**
  * Removes an item from the notice board
  *
@@ -102,14 +118,27 @@ MAPPING_DIRECTIONAL_HELPERS(/obj/structure/noticeboard, 32)
 		user.put_in_hands(item)
 		balloon_alert(user, "removed from board")
 	notices--
-	icon_state = "nboard0[notices]"
+	update_appearance(UPDATE_ICON)
 
-/obj/structure/noticeboard/deconstruct(disassembled = TRUE)
-	if(!(flags_1 & NODECONSTRUCT_1))
-		new /obj/item/stack/sheet/iron (loc, 1)
+/obj/structure/noticeboard/atom_deconstruct(disassembled = TRUE)
+	if(!disassembled)
+		new /obj/item/stack/sheet/mineral/wood(loc)
+	else
+		new /obj/item/wallframe/noticeboard(loc)
 	for(var/obj/item/content in contents)
 		remove_item(content)
-	qdel(src)
+
+/obj/item/wallframe/noticeboard
+	name = "notice board"
+	desc = "Right now it's more of a clipboard. Attach to a wall to use."
+	icon = 'icons/obj/wallmounts.dmi'
+	icon_state = "noticeboard"
+	custom_materials = list(
+		/datum/material/wood = SHEET_MATERIAL_AMOUNT,
+	)
+	resistance_flags = FLAMMABLE
+	result_path = /obj/structure/noticeboard
+	pixel_shift = 32
 
 // Notice boards for the heads of staff (plus the qm)
 
@@ -151,6 +180,6 @@ MAPPING_DIRECTIONAL_HELPERS(/obj/structure/noticeboard, 32)
 /obj/structure/noticeboard/staff
 	name = "Staff Notice Board"
 	desc = "Important notices from the heads of staff."
-	req_access = list(ACCESS_HEADS)
+	req_access = list(ACCESS_COMMAND)
 
 #undef MAX_NOTICES

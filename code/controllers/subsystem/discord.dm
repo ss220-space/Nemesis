@@ -31,7 +31,7 @@
 SUBSYSTEM_DEF(discord)
 	name = "Discord"
 	wait = 3000
-	init_order = INIT_ORDER_DISCORD
+	init_stage = INITSTAGE_EARLY
 
 	/// People to save to notify file
 	var/list/notify_members = list()
@@ -43,24 +43,20 @@ SUBSYSTEM_DEF(discord)
 	/// People who have tried to verify this round already
 	var/list/reverify_cache
 
-	/// Common words list, used to generate one time tokens
-	var/list/common_words
-
 	/// The file where notification status is saved
 	var/notify_file = file("data/notify.json")
 
 	/// Is TGS enabled (If not we won't fire because otherwise this is useless)
 	var/enabled = FALSE
 
-/datum/controller/subsystem/discord/Initialize(start_timeofday)
-	common_words = world.file2list("strings/1000_most_common.txt")
+/datum/controller/subsystem/discord/Initialize()
 	reverify_cache = list()
 	// Check for if we are using TGS, otherwise return and disables firing
 	if(world.TgsAvailable())
 		enabled = TRUE // Allows other procs to use this (Account linking, etc)
 	else
 		can_fire = FALSE // We dont want excess firing
-		return ..() // Cancel
+		return SS_INIT_NO_NEED
 
 	try
 		people_to_notify = json_decode(file2text(notify_file))
@@ -69,9 +65,11 @@ SUBSYSTEM_DEF(discord)
 	var/notifymsg = jointext(people_to_notify, ", ")
 	if(notifymsg)
 		notifymsg += ", a new round is starting!"
-		send2chat(trim(notifymsg), CONFIG_GET(string/chat_new_game_notifications)) // Sends the message to the discord, using same config option as the roundstart notification
+		for(var/channel_tag in CONFIG_GET(str_list/chat_new_game_notifications))
+			// Sends the message to the discord, using same config option as the roundstart notification
+			send2chat(new /datum/tgs_message_content(trim(notifymsg)), channel_tag)
 	fdel(notify_file) // Deletes the file
-	return ..()
+	return SS_INIT_SUCCESS
 
 /datum/controller/subsystem/discord/fire()
 	if(!enabled)
@@ -100,7 +98,7 @@ SUBSYSTEM_DEF(discord)
  * * lookup_ckey A string representing the ckey to search on
  */
 /datum/controller/subsystem/discord/proc/lookup_id(lookup_ckey)
-	var/datum/discord_link_record/link = find_discord_link_by_ckey(lookup_ckey)
+	var/datum/discord_link_record/link = find_discord_link_by_ckey(lookup_ckey, only_valid = TRUE)
 	if(link)
 		return link.discord_id
 
@@ -113,7 +111,7 @@ SUBSYSTEM_DEF(discord)
  * * lookup_id The discord id as a string
  */
 /datum/controller/subsystem/discord/proc/lookup_ckey(lookup_id)
-	var/datum/discord_link_record/link = find_discord_link_by_discord_id(lookup_id)
+	var/datum/discord_link_record/link = find_discord_link_by_discord_id(lookup_id, only_valid = TRUE)
 	if(link)
 		return link.ckey
 
@@ -140,9 +138,9 @@ SUBSYSTEM_DEF(discord)
  * ```
  *
  * Notes:
- * * The token is guaranteed to unique during it's validity period
+ * * The token is guaranteed to unique during its validity period
  * * The validity period is currently set at 4 hours
- * * a token may not be unique outside it's validity window (to reduce conflicts)
+ * * a token may not be unique outside its validity window (to reduce conflicts)
  *
  * Arguments:
  * * ckey_for a string representing the ckey this token is for
@@ -156,7 +154,7 @@ SUBSYSTEM_DEF(discord)
 	// While there's a collision in the token, generate a new one (should rarely happen)
 	while(not_unique)
 		//Column is varchar 100, so we trim just in case someone does us the dirty later
-		one_time_token = trim("[pick(common_words)]-[pick(common_words)]-[pick(common_words)]-[pick(common_words)]-[pick(common_words)]-[pick(common_words)]", 100)
+		one_time_token = trim("[pick(GLOB.most_common_words_alphabetical)]-[pick(GLOB.most_common_words_alphabetical)]-[pick(GLOB.most_common_words_alphabetical)]-[pick(GLOB.most_common_words_alphabetical)]-[pick(GLOB.most_common_words_alphabetical)]-[pick(GLOB.most_common_words_alphabetical)]", 100)
 
 		not_unique = find_discord_link_by_token(one_time_token, timebound = TRUE)
 
@@ -219,12 +217,15 @@ SUBSYSTEM_DEF(discord)
  *
  * Returns a [/datum/discord_link_record]
  */
-/datum/controller/subsystem/discord/proc/find_discord_link_by_ckey(ckey, timebound = FALSE)
+/datum/controller/subsystem/discord/proc/find_discord_link_by_ckey(ckey, timebound = FALSE, only_valid = FALSE)
 	var/timeboundsql = ""
 	if(timebound)
 		timeboundsql = "AND timestamp >= Now() - INTERVAL 4 HOUR"
+	var/validsql = ""
+	if(only_valid)
+		validsql = "AND valid = 1"
 
-	var/query = "SELECT CAST(discord_id AS CHAR(25)), ckey, MAX(timestamp), one_time_token FROM [format_table_name("discord_links")] WHERE ckey = :ckey [timeboundsql] GROUP BY ckey, discord_id, one_time_token LIMIT 1"
+	var/query = "SELECT CAST(discord_id AS CHAR(25)), ckey, MAX(timestamp), one_time_token FROM [format_table_name("discord_links")] WHERE ckey = :ckey [timeboundsql]  [validsql] GROUP BY ckey, discord_id, one_time_token LIMIT 1"
 	var/datum/db_query/query_get_discord_link_record = SSdbcore.NewQuery(
 		query,
 		list("ckey" = ckey)
@@ -254,12 +255,15 @@ SUBSYSTEM_DEF(discord)
  *
  * Returns a [/datum/discord_link_record]
  */
-/datum/controller/subsystem/discord/proc/find_discord_link_by_discord_id(discord_id, timebound = FALSE)
+/datum/controller/subsystem/discord/proc/find_discord_link_by_discord_id(discord_id, timebound = FALSE, only_valid = FALSE)
 	var/timeboundsql = ""
 	if(timebound)
 		timeboundsql = "AND timestamp >= Now() - INTERVAL 4 HOUR"
+	var/validsql = ""
+	if(only_valid)
+		validsql = "AND valid = 1"
 
-	var/query = "SELECT CAST(discord_id AS CHAR(25)), ckey, MAX(timestamp), one_time_token FROM [format_table_name("discord_links")] WHERE discord_id = :discord_id [timeboundsql] GROUP BY ckey, discord_id, one_time_token LIMIT 1"
+	var/query = "SELECT CAST(discord_id AS CHAR(25)), ckey, MAX(timestamp), one_time_token FROM [format_table_name("discord_links")] WHERE discord_id = :discord_id [timeboundsql] [validsql] GROUP BY ckey, discord_id, one_time_token LIMIT 1"
 	var/datum/db_query/query_get_discord_link_record = SSdbcore.NewQuery(
 		query,
 		list("discord_id" = discord_id)
@@ -274,3 +278,21 @@ SUBSYSTEM_DEF(discord)
 
 	//Make sure we clean up the query
 	qdel(query_get_discord_link_record)
+
+
+/**
+ * Extract a discord id from a mention string
+ *
+ * This will regex out the mention <@num> block to extract the discord id
+ *
+ * Arguments:
+ * * discord_id The users discord mention string (string)
+ *
+ * Returns a text string with the discord id or null
+ */
+/datum/controller/subsystem/discord/proc/get_discord_id_from_mention(mention)
+	var/static/regex/discord_mention_extraction_regex = regex(@"<@([0-9]+)>")
+	discord_mention_extraction_regex.Find(mention)
+	if (length(discord_mention_extraction_regex.group) == 1)
+		return discord_mention_extraction_regex.group[1]
+	return null

@@ -14,10 +14,12 @@ Buildable meters
 	var/pipename
 	force = 7
 	throwforce = 7
-	icon = 'icons/obj/atmospherics/pipes/pipe_item.dmi'
+	icon = 'icons/obj/pipes_n_cables/pipe_item.dmi'
 	icon_state = "simple"
+	icon_state_preview = "manifold4w"
 	inhand_icon_state = "buildpipe"
 	w_class = WEIGHT_CLASS_NORMAL
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT)
 	///Piping layer that we are going to be on
 	var/piping_layer = PIPING_LAYER_DEFAULT
 	///Type of pipe-object made, selected from the RPD
@@ -29,19 +31,126 @@ Buildable meters
 	///Initial direction of the created pipe (either made from the RPD or after unwrenching the pipe)
 	var/p_init_dir = SOUTH
 
+/obj/item/pipe/on_craft_completion(list/components, datum/crafting_recipe/current_recipe, atom/crafter)
+	. = ..()
+	if(!istype(current_recipe, /datum/crafting_recipe/spec_pipe))
+		return
+	var/datum/crafting_recipe/spec_pipe/pipe_recipe = current_recipe
+	pipe_type = pipe_recipe.pipe_type
+	pipe_color = ATMOS_COLOR_OMNI
+	setDir(crafter.dir)
+	update()
+
 /obj/item/pipe/directional
 	RPD_type = PIPE_UNARY
+
+/obj/item/pipe/directional/he_junction
+	icon_state_preview = "junction"
+	pipe_type = /obj/machinery/atmospherics/pipe/heat_exchanging/junction
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 2)
+
+/obj/item/pipe/directional/vent
+	name = "air vent fitting"
+	icon_state_preview = "uvent"
+	pipe_type = /obj/machinery/atmospherics/components/unary/vent_pump
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 6 + SMALL_MATERIAL_AMOUNT / 2, /datum/material/glass = SMALL_MATERIAL_AMOUNT / 2)
+
+/obj/item/pipe/directional/scrubber
+	name = "air scrubber fitting"
+	icon_state_preview = "scrubber"
+	pipe_type = /obj/machinery/atmospherics/components/unary/vent_scrubber
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 6 + SMALL_MATERIAL_AMOUNT / 2, /datum/material/glass = SMALL_MATERIAL_AMOUNT / 2)
+
+/obj/item/pipe/directional/connector
+	icon_state_preview = "connector"
+	pipe_type = /obj/machinery/atmospherics/components/unary/portables_connector
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 2)
+
+/obj/item/pipe/directional/passive_vent
+	icon_state_preview = "pvent"
+	pipe_type = /obj/machinery/atmospherics/components/unary/passive_vent
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 2)
+
+/obj/item/pipe/directional/injector
+	icon_state_preview = "injector"
+	pipe_type = /obj/machinery/atmospherics/components/unary/outlet_injector
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 2, /datum/material/glass = SMALL_MATERIAL_AMOUNT / 2)
+
+/obj/item/pipe/directional/he_exchanger
+	icon_state_preview = "heunary"
+	pipe_type = /obj/machinery/atmospherics/components/unary/heat_exchanger
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT, /datum/material/alloy/plasteel = SHEET_MATERIAL_AMOUNT)
+
+/obj/item/pipe/directional/airlock_pump
+	icon_state_preview = "airlock_pump"
+	pipe_type = /obj/machinery/atmospherics/components/unary/airlock_pump
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 6, /datum/material/glass = SMALL_MATERIAL_AMOUNT * 0.7)
+
 /obj/item/pipe/binary
 	RPD_type = PIPE_STRAIGHT
+
+/obj/item/pipe/binary/layer_adapter
+	icon_state_preview = "manifoldlayer"
+	pipe_type = /obj/machinery/atmospherics/pipe/layer_manifold
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 2)
+
+/obj/item/pipe/binary/color_adapter
+	icon_state_preview = "adapter_center"
+	pipe_type = /obj/machinery/atmospherics/pipe/color_adapter
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 2)
+
+/obj/item/pipe/binary/pressure_pump
+	icon_state_preview = "pump"
+	pipe_type = /obj/machinery/atmospherics/components/binary/pump
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 6, /datum/material/glass = SMALL_MATERIAL_AMOUNT / 2)
+
+/obj/item/pipe/binary/manual_valve
+	icon_state_preview = "mvalve"
+	pipe_type = /obj/machinery/atmospherics/components/binary/valve
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 2)
+
 /obj/item/pipe/binary/bendable
 	RPD_type = PIPE_BENDABLE
+
 /obj/item/pipe/trinary
 	RPD_type = PIPE_TRINARY
+
 /obj/item/pipe/trinary/flippable
 	RPD_type = PIPE_TRIN_M
 	var/flipped = FALSE
+
+/obj/item/pipe/trinary/flippable/filter
+	name = "gas filter fitting"
+	icon_state_preview = "filter"
+	pipe_type = /obj/machinery/atmospherics/components/trinary/filter
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 6, /datum/material/glass = SMALL_MATERIAL_AMOUNT / 2)
+
+/obj/item/pipe/trinary/flippable/mixer
+	icon_state_preview = "mixer"
+	pipe_type = /obj/machinery/atmospherics/components/trinary/mixer
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 6, /datum/material/glass = SMALL_MATERIAL_AMOUNT / 2)
+
 /obj/item/pipe/quaternary
 	RPD_type = PIPE_ONEDIR
+
+/obj/item/pipe/quaternary/pipe
+	icon_state_preview = "manifold4w"
+	pipe_type = /obj/machinery/atmospherics/pipe/smart
+
+/obj/item/pipe/quaternary/pipe/crafted
+
+/obj/item/pipe/quaternary/pipe/crafted/Initialize(mapload, _pipe_type, _dir, obj/machinery/atmospherics/make_from, device_color, device_init_dir = SOUTH)
+	. = ..()
+	pipe_type = /obj/machinery/atmospherics/pipe/smart
+	pipe_color = ATMOS_COLOR_OMNI
+	p_init_dir = ALL_CARDINALS
+	setDir(SOUTH)
+	update()
+
+/obj/item/pipe/quaternary/he_pipe
+	icon_state_preview = "he_manifold4w"
+	pipe_type = /obj/machinery/atmospherics/pipe/heat_exchanging/manifold4w
+	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 2)
 
 /obj/item/pipe/Initialize(mapload, _pipe_type, _dir, obj/machinery/atmospherics/make_from, device_color, device_init_dir = SOUTH)
 	if(make_from)
@@ -55,13 +164,24 @@ Buildable meters
 	update()
 	pixel_x += rand(-5, 5)
 	pixel_y += rand(-5, 5)
-	
+
 	//Flipping handled manually due to custom handling for trinary pipes
-	AddComponent(/datum/component/simple_rotation, ROTATION_NO_FLIPPING)
+	AddElement(/datum/element/simple_rotation, ROTATION_NO_FLIPPING)
+
+	// Only 'normal' pipes
+	if(type != /obj/item/pipe/quaternary)
+		return ..()
+	var/static/list/slapcraft_recipe_list = list(/datum/crafting_recipe/ghettojetpack, /datum/crafting_recipe/pipegun, /datum/crafting_recipe/smoothbore_disabler, /datum/crafting_recipe/improvised_pneumatic_cannon)
+
+	AddElement(
+		/datum/element/slapcrafting,\
+		slapcraft_recipes = slapcraft_recipe_list,\
+	)
+
 	return ..()
 
 /obj/item/pipe/proc/make_from_existing(obj/machinery/atmospherics/make_from)
-	p_init_dir = make_from.initialize_directions
+	p_init_dir = make_from.get_init_directions()
 	setDir(make_from.dir)
 	pipename = make_from.name
 	add_atom_colour(make_from.color, FIXED_COLOUR_PRIORITY)
@@ -92,22 +212,22 @@ Buildable meters
 /obj/item/pipe/proc/update()
 	var/obj/machinery/atmospherics/fakeA = pipe_type
 	name = "[initial(fakeA.name)] fitting"
+	desc = initial(fakeA.desc)
 	icon_state = initial(fakeA.pipe_state)
 	if(ispath(pipe_type,/obj/machinery/atmospherics/pipe/heat_exchanging))
 		resistance_flags |= FIRE_PROOF | LAVA_PROOF
 
 /obj/item/pipe/verb/flip()
-	set category = "Object"
 	set name = "Invert Pipe"
 	set src in view(1)
 
-	if ( usr.incapacitated() )
+	if ( usr.incapacitated )
 		return
 
 	do_a_flip()
 
 /obj/item/pipe/proc/do_a_flip()
-	setDir(turn(dir, -180))
+	setDir(REVERSE_DIR(dir))
 
 /obj/item/pipe/trinary/flippable/do_a_flip()
 	setDir(turn(dir, flipped ? 45 : -45))
@@ -180,18 +300,35 @@ Buildable meters
 				return TRUE
 	// no conflicts found
 
-	var/obj/machinery/atmospherics/built_machine = new pipe_type(loc, , , p_init_dir)
+	var/obj/machinery/atmospherics/built_machine = new pipe_type(loc, null, fixed_dir(), p_init_dir)
 	build_pipe(built_machine)
-	built_machine.on_construction(pipe_color, piping_layer)
+	built_machine.on_construction(user, pipe_color, piping_layer)
 	transfer_fingerprints_to(built_machine)
 
 	wrench.play_tool_sound(src)
 	user.visible_message( \
-		"[user] fastens \the [src].", \
+		span_notice("[user] fastens \the [src]."), \
 		span_notice("You fasten \the [src]."), \
 		span_hear("You hear ratcheting."))
 
 	qdel(src)
+
+/obj/item/pipe/welder_act(mob/living/user, obj/item/welder)
+	. = ..()
+	if(istype(pipe_type, /obj/machinery/atmospherics/components))
+		return TRUE
+	if(!welder.tool_start_check(user, amount=2))
+		return TRUE
+	add_fingerprint(user)
+
+	if(welder.use_tool(src, user, 2 SECONDS, volume=2))
+		new /obj/item/sliced_pipe(drop_location())
+		user.visible_message( \
+			"[user] welds \the [src] in two.", \
+			span_notice("You weld \the [src] in two."), \
+			span_hear("You hear welding."))
+
+		qdel(src)
 
 /**
  * Attempt to automatically resolve a pipe conflict by reconfiguring any smart pipes involved.
@@ -271,9 +408,6 @@ Buildable meters
 	return FALSE
 
 /obj/item/pipe/proc/build_pipe(obj/machinery/atmospherics/A)
-	A.setDir(fixed_dir())
-	A.set_init_directions(p_init_dir)
-
 	if(pipename)
 		A.name = pipename
 	if(A.on)
@@ -286,16 +420,16 @@ Buildable meters
 	..()
 	T.flipped = flipped
 
-/obj/item/pipe/suicide_act(mob/user)
+/obj/item/pipe/suicide_act(mob/living/user)
 	user.visible_message(span_suicide("[user] shoves [src] in [user.p_their()] mouth and turns it on! It looks like [user.p_theyre()] trying to commit suicide!"))
 	if(iscarbon(user))
 		var/mob/living/carbon/C = user
-		for(var/i=1 to 20)
-			C.vomit(0, TRUE, FALSE, 4, FALSE)
+		for(var/i in 1 to 20)
+			C.vomit(vomit_flags = (MOB_VOMIT_BLOOD | MOB_VOMIT_HARM), lost_nutrition = 0, distance = 4)
 			if(prob(20))
 				C.spew_organ()
-			sleep(5)
-		C.blood_volume = 0
+			sleep(0.5 SECONDS)
+		C.set_blood_volume(0)
 	return(OXYLOSS|BRUTELOSS)
 
 /obj/item/pipe/examine(mob/user)
@@ -312,6 +446,7 @@ Buildable meters
 	balloon_alert(user, "pipe layer set to [piping_layer]")
 	return SECONDARY_ATTACK_CANCEL_ATTACK_CHAIN
 
+
 /obj/item/pipe/trinary/flippable/examine(mob/user)
 	. = ..()
 	. += span_notice("You can flip the device by Right-Clicking it.")
@@ -327,7 +462,7 @@ Buildable meters
 /obj/item/pipe_meter
 	name = "meter"
 	desc = "A meter that can be wrenched on pipes, or attached to the floor with screws."
-	icon = 'icons/obj/atmospherics/pipes/pipe_item.dmi'
+	icon = 'icons/obj/pipes_n_cables/pipe_item.dmi'
 	icon_state = "meter"
 	inhand_icon_state = "buildpipe"
 	w_class = WEIGHT_CLASS_BULKY
@@ -359,7 +494,7 @@ Buildable meters
 
 	new /obj/machinery/meter/turf(loc, piping_layer)
 	S.play_tool_sound(src)
-	to_chat(user, span_notice("You fasten the meter to the [loc.name]."))
+	to_chat(user, span_notice("You fasten the meter to \the [loc]."))
 	qdel(src)
 
 /obj/item/pipe_meter/dropped()

@@ -1,14 +1,100 @@
-
-/mob/living/proc/get_bodypart(zone)
+/**
+ * Returns a bodypart of the specified zone that this mob has
+ *
+ * * zone: the zone to get.
+ * Defaults to chest, allowing for skilling zone nullchecks if you don't care what bodypart you get.
+ * * include_stumps: whether or not to consider stumps as valid bodyparts to return.
+ * Defaults to FALSE, meaning that if a limb is missing (is a stump), nothing will be returned.
+ *
+ * Returns a bodypart, or null.
+ */
+/mob/living/proc/get_bodypart(zone = BODY_ZONE_CHEST, include_stumps = FALSE)
 	return
 
-/mob/living/carbon/get_bodypart(zone)
-	if(!zone)
-		zone = BODY_ZONE_CHEST
-	for(var/obj/item/bodypart/bodypart as anything in bodyparts)
-		if(bodypart.body_zone == zone)
-			return bodypart
+/mob/living/carbon/get_bodypart(zone = BODY_ZONE_CHEST, include_stumps = FALSE)
+	RETURN_TYPE(/obj/item/bodypart)
 
+	for(var/obj/item/bodypart/bodypart as anything in bodyparts)
+		if(!include_stumps && IS_STUMP(bodypart))
+			continue
+		if(bodypart.body_zone != zone)
+			continue
+		return bodypart
+
+/**
+ * Returns all bodyparts this mob has, optionally including stumps.
+ *
+ * include_stumps: whether or not to consider stumps as valid bodyparts to return.
+ * Defaults to FALSE, meaning that if a limb is missing (is a stump), it won't be included in the returned list.
+ *
+ * Returns a list of bodyparts, which may be empty.
+ */
+/mob/living/proc/get_bodyparts(include_stumps = FALSE)
+	var/list/parts = list()
+	for(var/zone in get_all_limbs())
+		var/obj/item/bodypart/bodypart = get_bodypart(zone, include_stumps)
+		if(bodypart)
+			parts += bodypart
+
+	return parts
+
+/**
+ * Returns all bodyparts this mob has, indexed by their body zone
+ * Also includes stumps and nulls, so be sure to check for those if you use this proc.
+ * (Note: nulls will be very rare - as 95% of missing limbs are represented as stumps - but not impossible due to some edge cases)
+ *
+ * Returns a list of bodyparts indexed by their body zone
+ */
+/mob/living/proc/get_bodyparts_by_zones() as /list
+	var/list/parts = list()
+	for(var/zone in get_all_limbs())
+		parts[zone] = get_bodypart(zone)
+	return parts
+
+///Returns TRUE/FALSE on whether the mob should have a limb in a given zone, used for species-restrictions.
+/mob/living/carbon/proc/should_have_limb(zone)
+	if(!zone || !dna)
+		return TRUE
+	var/datum/species/carbon_species = dna.species
+	if(zone in carbon_species.bodypart_overrides)
+		return TRUE
+	return FALSE
+
+/// Replaces a single limb and deletes the old one if there was one
+/mob/living/carbon/proc/del_and_replace_bodypart(obj/item/bodypart/new_limb, special)
+	var/obj/item/bodypart/old_limb = get_bodypart(new_limb.body_zone)
+	if(old_limb)
+		old_limb.drop_limb(special = TRUE)
+		qdel(old_limb)
+	new_limb.try_attach_limb(src, special = special)
+
+/// Replaces a single limb and returns the old one if there was one
+/mob/living/carbon/proc/return_and_replace_bodypart(obj/item/bodypart/new_limb, special)
+	var/obj/item/bodypart/old_limb = get_bodypart(new_limb.body_zone)
+	if(!isnull(old_limb))
+		old_limb.drop_limb(special = special)
+		old_limb.moveToNullspace()
+
+	new_limb.try_attach_limb(src, special = special)
+	return old_limb // can be null
+
+/// Replaces the chosen limb(zone) to the original one
+/mob/living/carbon/proc/reset_to_original_bodypart(limb_zone)
+	if (!(limb_zone in GLOB.all_body_zones))
+		stack_trace("Invalid zone [limb_zone] provided to reset_to_original_bodypart()")
+		return
+
+	// find old limb to del it first
+	var/obj/item/bodypart/old_limb = get_bodypart(limb_zone)
+	if(old_limb)
+		old_limb.drop_limb(special = TRUE)
+		qdel(old_limb)
+
+	// mаke and attach the original limb
+	var/obj/item/bodypart/original_limb = newBodyPart(limb_zone)
+	original_limb.try_attach_limb(src, TRUE)
+	original_limb.update_limb(is_creating = TRUE)
+	regenerate_icons()
 
 /mob/living/carbon/has_hand_for_held_index(i)
 	if(!i)
@@ -21,14 +107,24 @@
 
 ///Get the bodypart for whatever hand we have active, Only relevant for carbons
 /mob/proc/get_active_hand()
+	RETURN_TYPE(/obj/item/bodypart)
 	return FALSE
 
 /mob/living/carbon/get_active_hand()
 	var/which_hand = BODY_ZONE_PRECISE_L_HAND
-	if(!(active_hand_index % 2))
+	if(IS_RIGHT_INDEX(active_hand_index))
 		which_hand = BODY_ZONE_PRECISE_R_HAND
 	return get_bodypart(check_zone(which_hand))
 
+/// Gets the inactive hand of the mob. Returns FALSE on non-carbons, otherwise returns the /obj/item/bodypart.
+/mob/proc/get_inactive_hand()
+	return null
+
+/mob/living/carbon/get_inactive_hand()
+	var/which_hand = BODY_ZONE_PRECISE_R_HAND
+	if(IS_RIGHT_INDEX(active_hand_index))
+		which_hand = BODY_ZONE_PRECISE_L_HAND
+	return get_bodypart(check_zone(which_hand))
 
 /mob/proc/has_left_hand(check_disabled = TRUE)
 	return TRUE
@@ -36,13 +132,13 @@
 
 /mob/living/carbon/has_left_hand(check_disabled = TRUE)
 	for(var/obj/item/bodypart/hand_instance in hand_bodyparts)
-		if(!(hand_instance.held_index % 2) || (check_disabled && hand_instance.bodypart_disabled))
+		if(IS_RIGHT_INDEX(hand_instance.held_index) || (check_disabled && hand_instance.bodypart_disabled))
 			continue
 		return TRUE
 	return FALSE
 
 
-/mob/living/carbon/alien/larva/has_left_hand()
+/mob/living/carbon/alien/larva/has_left_hand(check_disabled = TRUE)
 	return TRUE
 
 
@@ -52,22 +148,35 @@
 
 /mob/living/carbon/has_right_hand(check_disabled = TRUE)
 	for(var/obj/item/bodypart/hand_instance in hand_bodyparts)
-		if(hand_instance.held_index % 2 || (check_disabled && hand_instance.bodypart_disabled))
+		if(IS_LEFT_INDEX(hand_instance.held_index) || (check_disabled && hand_instance.bodypart_disabled))
 			continue
 		return TRUE
 	return FALSE
 
 
-/mob/living/carbon/alien/larva/has_right_hand()
+/mob/living/carbon/alien/larva/has_right_hand(check_disabled = TRUE)
 	return TRUE
 
+/// Returns the bodypart holding the passed item
+/mob/living/carbon/proc/get_hand_of_item(obj/item/I)
+	return get_bodypart(get_hand_zone_of_item(I))
 
-/mob/living/proc/get_missing_limbs()
-	return list()
-
-/mob/living/carbon/get_missing_limbs()
+///Returns a list of all limbs this mob should have.
+/mob/living/proc/get_all_limbs() as /list
 	RETURN_TYPE(/list)
-	var/list/full = list(BODY_ZONE_HEAD, BODY_ZONE_CHEST, BODY_ZONE_R_ARM, BODY_ZONE_L_ARM, BODY_ZONE_R_LEG, BODY_ZONE_L_LEG)
+	return GLOB.all_body_zones.Copy()
+
+///Returns a list of all limbs this mob should have.
+/mob/living/carbon/get_all_limbs()
+	// gets the "normal list", ie chest-head-legs-arms. order matters for human rendering!
+	. = dna?.species?.bodypart_overrides.Copy() || ..()
+	// includes any additional adminbussed hands
+	for(var/obj/item/bodypart/hand in hand_bodyparts)
+		. |= hand.body_zone
+
+///Returns a list of all missing limbs this mob should have on them, but don't.
+/mob/living/carbon/proc/get_missing_limbs() as /list
+	var/list/full = get_all_limbs()
 	for(var/zone in full)
 		if(get_bodypart(zone))
 			full -= zone
@@ -84,7 +193,7 @@
 	return list()
 
 /mob/living/carbon/get_disabled_limbs()
-	var/list/full = list(BODY_ZONE_HEAD, BODY_ZONE_CHEST, BODY_ZONE_R_ARM, BODY_ZONE_L_ARM, BODY_ZONE_R_LEG, BODY_ZONE_L_LEG)
+	var/list/full = get_all_limbs()
 	var/list/disabled = list()
 	for(var/zone in full)
 		var/obj/item/bodypart/affecting = get_bodypart(zone)
@@ -103,88 +212,89 @@
 
 ///Remove a specific embedded item from the carbon mob
 /mob/living/carbon/proc/remove_embedded_object(obj/item/embedded)
-	SEND_SIGNAL(src, COMSIG_CARBON_EMBED_REMOVAL, embedded)
+	if (embedded.get_embed()?.owner != src)
+		return
+	embedded.get_embed().remove_embedding()
 
 ///Remove all embedded objects from all limbs on the carbon mob
 /mob/living/carbon/proc/remove_all_embedded_objects()
-	for(var/obj/item/bodypart/bodypart as anything in bodyparts)
-		for(var/obj/item/embedded in bodypart.embedded_objects)
+	for(var/obj/item/bodypart/bodypart as anything in get_bodyparts(include_stumps = TRUE))
+		for(var/obj/item/embedded as anything in bodypart.embedded_objects)
 			remove_embedded_object(embedded)
 
-/mob/living/carbon/proc/has_embedded_objects(include_harmless=FALSE)
-	for(var/obj/item/bodypart/bodypart as anything in bodyparts)
-		for(var/obj/item/embedded in bodypart.embedded_objects)
-			if(!include_harmless && embedded.isEmbedHarmless())
+/mob/living/carbon/proc/has_embedded_objects(include_harmless = FALSE)
+	for(var/obj/item/bodypart/bodypart as anything in get_bodyparts(include_stumps = TRUE))
+		for(var/obj/item/embedded as anything in bodypart.embedded_objects)
+			if(!include_harmless && embedded.get_embed().is_harmless(consider_stamina = TRUE))
 				continue
 			return TRUE
 
 //Helper for quickly creating a new limb - used by augment code in species.dm spec_attacked_by
-/mob/living/carbon/proc/newBodyPart(zone, robotic, fixed_icon)
-	var/obj/item/bodypart/new_bodypart
-	switch(zone)
-		if(BODY_ZONE_L_ARM)
-			new_bodypart = new /obj/item/bodypart/l_arm()
-		if(BODY_ZONE_R_ARM)
-			new_bodypart = new /obj/item/bodypart/r_arm()
-		if(BODY_ZONE_HEAD)
-			new_bodypart = new /obj/item/bodypart/head()
-		if(BODY_ZONE_L_LEG)
-			new_bodypart = new /obj/item/bodypart/l_leg()
-		if(BODY_ZONE_R_LEG)
-			new_bodypart = new /obj/item/bodypart/r_leg()
-		if(BODY_ZONE_CHEST)
-			new_bodypart = new /obj/item/bodypart/chest()
-	if(new_bodypart)
-		new_bodypart.update_limb(fixed_icon, src)
-		if(robotic)
-			new_bodypart.change_bodypart_status(BODYPART_ROBOTIC)
-	. = new_bodypart
+//
+// FUCK YOU AUGMENT CODE - With love, Kapu
+/mob/living/carbon/proc/newBodyPart(zone)
+	var/path = dna.species.bodypart_overrides[zone]
+	if(isnull(path))
+		return null
+	var/obj/item/bodypart/new_bodypart = new path()
+	return new_bodypart
 
-/mob/living/carbon/human/newBodyPart(zone, robotic, fixed_icon)
-	var/obj/item/bodypart/bodypart
-	var/datum/species/species = dna.species
-	var/obj/item/bodypart/selected_type = species.bodypart_overides[zone]
-	bodypart = new selected_type()
-	if(bodypart)
-		bodypart.update_limb(fixed_icon, src)
-		if(robotic)
-			bodypart.change_bodypart_status(BODYPART_ROBOTIC)
-	. = bodypart
-
-/mob/living/carbon/alien/larva/newBodyPart(zone, robotic, fixed_icon)
+/mob/living/carbon/alien/larva/newBodyPart(zone)
 	var/obj/item/bodypart/new_bodypart
 	switch(zone)
 		if(BODY_ZONE_HEAD)
 			new_bodypart = new /obj/item/bodypart/head/larva()
 		if(BODY_ZONE_CHEST)
 			new_bodypart = new /obj/item/bodypart/chest/larva()
-	if(new_bodypart)
-		new_bodypart.update_limb(fixed_icon, src)
-		if(robotic)
-			new_bodypart.change_bodypart_status(BODYPART_ROBOTIC)
 	. = new_bodypart
 
-/mob/living/carbon/alien/humanoid/newBodyPart(zone, robotic, fixed_icon)
+/mob/living/carbon/alien/adult/newBodyPart(zone)
 	var/obj/item/bodypart/new_bodypart
 	switch(zone)
 		if(BODY_ZONE_L_ARM)
-			new_bodypart = new /obj/item/bodypart/l_arm/alien()
+			new_bodypart = new /obj/item/bodypart/arm/left/alien()
 		if(BODY_ZONE_R_ARM)
-			new_bodypart = new /obj/item/bodypart/r_arm/alien()
+			new_bodypart = new /obj/item/bodypart/arm/right/alien()
 		if(BODY_ZONE_HEAD)
 			new_bodypart = new /obj/item/bodypart/head/alien()
 		if(BODY_ZONE_L_LEG)
-			new_bodypart = new /obj/item/bodypart/l_leg/alien()
+			new_bodypart = new /obj/item/bodypart/leg/left/alien()
 		if(BODY_ZONE_R_LEG)
-			new_bodypart = new /obj/item/bodypart/r_leg/alien()
+			new_bodypart = new /obj/item/bodypart/leg/right/alien()
 		if(BODY_ZONE_CHEST)
 			new_bodypart = new /obj/item/bodypart/chest/alien()
 	if(new_bodypart)
-		new_bodypart.update_limb(fixed_icon, src)
-		if(robotic)
-			new_bodypart.change_bodypart_status(BODYPART_ROBOTIC)
-	. = new_bodypart
+		new_bodypart.update_limb(is_creating = TRUE)
 
+/// Makes sure that the owner's bodytype flags match the flags of all of its parts and organs
+/mob/living/carbon/proc/synchronize_bodytypes()
+	var/all_limb_flags = NONE
+	for(var/obj/item/bodypart/limb as anything in get_bodyparts(include_stumps = TRUE))
+		for(var/obj/item/organ/organ in limb)
+			all_limb_flags |= organ.external_bodytypes
+		all_limb_flags |= limb.bodytype
+
+	bodytype = all_limb_flags
+
+/// Makes sure that the owner's bodyshape flags match the flags of all of its parts and organs
+/mob/living/carbon/proc/synchronize_bodyshapes()
+	var/all_limb_flags = NONE
+	for(var/obj/item/bodypart/limb as anything in get_bodyparts(include_stumps = TRUE))
+		for(var/obj/item/organ/organ in limb)
+			all_limb_flags |= organ.external_bodyshapes
+		all_limb_flags |= limb.bodyshape
+
+	bodyshape = all_limb_flags
+
+/// Get all bodyshapes but filter out bodyshapes that are currently being hidden
+/mob/living/carbon/proc/get_active_bodyshapes()
+	var/active_shapes = bodyshape
+	// future todo: both of these are state based, maybe we can just remove relevant bodyshapes directly. would remove the need for this proc
+	if((active_shapes & BODYSHAPE_DIGITIGRADE) && is_digitigrade_squished())
+		active_shapes &= ~BODYSHAPE_DIGITIGRADE
+	if((active_shapes & BODYSHAPE_SNOUTED) && (obscured_slots & HIDESNOUT))
+		active_shapes &= ~BODYSHAPE_SNOUTED
+	return active_shapes
 
 /proc/skintone2hex(skin_tone)
 	. = 0
@@ -207,6 +317,14 @@
 			. = "#c4915e"
 		if("indian")
 			. = "#b87840"
+		if("mixed1")
+			. = "#a57a66"
+		if("mixed2")
+			. = "#87563d"
+		if("mixed3")
+			. = "#725547"
+		if("mixed4")
+			. = "#866e63"
 		if("african1")
 			. = "#754523"
 		if("african2")
@@ -215,37 +333,5 @@
 			. = "#fff4e6"
 		if("orange")
 			. = "#ffc905"
-
-/mob/living/carbon/proc/Digitigrade_Leg_Swap(swap_back)
-	var/body_plan_changed = FALSE
-	for(var/obj/item/bodypart/existing_bodypart as anything in bodyparts)
-		var/obj/item/bodypart/new_bodypart
-		if((!existing_bodypart.use_digitigrade && swap_back == FALSE) || (existing_bodypart.use_digitigrade && swap_back == TRUE))
-			if(existing_bodypart.body_part == LEG_LEFT)
-				if(swap_back == TRUE)
-					new_bodypart = new /obj/item/bodypart/l_leg
-				else
-					new_bodypart = new /obj/item/bodypart/l_leg/digitigrade
-			else if(existing_bodypart.body_part == LEG_RIGHT)
-				if(swap_back == TRUE)
-					new_bodypart = new /obj/item/bodypart/r_leg
-				else
-					new_bodypart = new /obj/item/bodypart/r_leg/digitigrade
-		if(!new_bodypart)
-			continue
-		body_plan_changed = TRUE
-		existing_bodypart.drop_limb(1)
-		qdel(existing_bodypart)
-		new_bodypart.attach_limb(src) //no sanity for if this fails here because we just dropped out a limb of the same zone, SHOULD be okay
-	if(body_plan_changed && ishuman(src))
-		var/mob/living/carbon/human/leg_owner = src
-		if(leg_owner.w_uniform)
-			var/obj/item/clothing/under/uniform = leg_owner.w_uniform
-			if(uniform.mutantrace_variation)
-				if(swap_back)
-					uniform.adjusted = NORMAL_STYLE
-				else
-					uniform.adjusted = DIGITIGRADE_STYLE
-				leg_owner.update_inv_w_uniform()
-		if(leg_owner.shoes && !(leg_owner.shoes.item_flags & IGNORE_DIGITIGRADE) && !swap_back)
-			leg_owner.dropItemToGround(leg_owner.shoes)
+		if("green")
+			. = "#a8e61d"

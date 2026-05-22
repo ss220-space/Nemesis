@@ -4,25 +4,24 @@
 		their time is up, issue equipment to security, be a security officer when \
 		they all eventually die."
 	auto_deadmin_role_flags = DEADMIN_POSITION_SECURITY
-	department_head = list(JOB_HEAD_OF_SECURITY)
 	faction = FACTION_STATION
 	total_positions = 1
 	spawn_positions = 1
-	supervisors = "the head of security"
-	selection_color = "#ffeeee"
+	supervisors = SUPERVISOR_HOS
 	minimal_player_age = 7
 	exp_requirements = 300
 	exp_required_type = EXP_TYPE_CREW
 	exp_granted_type = EXP_TYPE_CREW
+	config_tag = "WARDEN"
 
 	outfit = /datum/outfit/job/warden
 	plasmaman_outfit = /datum/outfit/plasmaman/warden
 
-	paycheck = PAYCHECK_HARD
+	paycheck = PAYCHECK_CREW
 	paycheck_department = ACCOUNT_SEC
 
-	mind_traits = list(TRAIT_DONUT_LOVER)
-	liver_traits = list(TRAIT_LAW_ENFORCEMENT_METABOLISM)
+	desensitized_base = DESENSITIZED_THRESHOLD
+	liver_traits = list(TRAIT_LAW_ENFORCEMENT_METABOLISM, TRAIT_PRETENDER_ROYAL_METABOLISM)
 
 	display_order = JOB_DISPLAY_ORDER_WARDEN
 	bounty_types = CIV_JOB_SEC
@@ -41,8 +40,22 @@
 		/obj/item/storage/box/lethalshot = 5
 	)
 	rpg_title = "Jailor"
-	job_flags = JOB_ANNOUNCE_ARRIVAL | JOB_CREW_MANIFEST | JOB_EQUIP_RANK | JOB_CREW_MEMBER | JOB_NEW_PLAYER_JOINABLE | JOB_BOLD_SELECT_TEXT | JOB_REOPEN_ON_ROUNDSTART_LOSS | JOB_ASSIGN_QUIRKS | JOB_CAN_BE_INTERN
+	job_flags = STATION_JOB_FLAGS | JOB_BOLD_SELECT_TEXT | JOB_ANTAG_PROTECTED
 
+/datum/job/warden/after_spawn(mob/living/spawned, client/player_client)
+	. = ..()
+	if(!ishuman(spawned) || !prob(PIG_COP_PROBABILITY))
+		return
+	var/mob/living/carbon/human/piggy = spawned
+	for (var/obj/item/bodypart/ham as anything in piggy.get_bodyparts())
+		// These are string lists
+		ham.butcher_drops = ham.butcher_drops.Copy()
+		for (var/meat_type in ham.butcher_drops)
+			if (!ispath(meat_type, /obj/item/food/meat/slab))
+				continue
+			ham.butcher_drops[/obj/item/food/meat/slab/pig] = ham.butcher_drops[meat_type]
+			ham.butcher_drops -= meat_type
+		ham.butcher_drops = string_list(ham.butcher_drops)
 
 /datum/outfit/job/warden
 	name = "Warden"
@@ -52,22 +65,19 @@
 	uniform = /obj/item/clothing/under/rank/security/warden
 	suit = /obj/item/clothing/suit/armor/vest/warden/alt
 	suit_store = /obj/item/gun/energy/disabler
-	backpack_contents = list(
-		/obj/item/evidencebag = 1,
-		/obj/item/modular_computer/tablet/preset/advanced/security = 1,
-		)
-	belt = /obj/item/pda/warden
+	belt = /obj/item/modular_computer/pda/warden
 	ears = /obj/item/radio/headset/headset_sec/alt
 	glasses = /obj/item/clothing/glasses/hud/security/sunglasses
-	gloves = /obj/item/clothing/gloves/color/black
-	head = /obj/item/clothing/head/warden
-	shoes = /obj/item/clothing/shoes/jackboots
+	gloves = /obj/item/clothing/gloves/color/black/security
+	head = /obj/item/clothing/head/hats/warden/red
+	shoes = /obj/item/clothing/shoes/jackboots/sec
 	l_pocket = /obj/item/restraints/handcuffs
 	r_pocket = /obj/item/assembly/flash/handheld
 
 	backpack = /obj/item/storage/backpack/security
 	satchel = /obj/item/storage/backpack/satchel/sec
 	duffelbag = /obj/item/storage/backpack/duffelbag/sec
+	messenger = /obj/item/storage/backpack/messenger/sec
 
 	box = /obj/item/storage/box/survival/security
 	implants = list(/obj/item/implant/mindshield)

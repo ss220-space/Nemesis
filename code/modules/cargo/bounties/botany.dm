@@ -1,8 +1,8 @@
 /datum/bounty/item/botany
 	reward = CARGO_CRATE_VALUE * 10
-	var/datum/bounty/item/botany/multiplier = 0 //adds bonus reward money; increased for higher tier or rare mutations
-	var/datum/bounty/item/botany/bonus_desc //for adding extra flavor text to bounty descriptions
-	var/datum/bounty/item/botany/foodtype = "meal" //same here
+	var/multiplier = 0 //adds bonus reward money; increased for higher tier or rare mutations
+	var/bonus_desc //for adding extra flavor text to bounty descriptions
+	var/foodtype = "meal" //same here
 
 /datum/bounty/item/botany/New()
 	..()
@@ -137,7 +137,7 @@
 
 /datum/bounty/item/botany/eggplant_eggy
 	name = "Egg-plants"
-	wanted_types = list(/obj/item/food/grown/shell/eggy = TRUE)
+	wanted_types = list(/obj/item/food/grown/eggy = TRUE)
 	bonus_desc = "Not to be confused with eggplants."
 	multiplier = 2
 
@@ -213,7 +213,7 @@
 
 /datum/bounty/item/botany/bonfire
 	name = "Lit Bonfire"
-	description = "Space heaters are malfunctioning and the cargo crew of Central Command is starting to feel cold. Grow some logs and Ship a lit bonfire to warm them up."
+	description = "Our space heaters are malfunctioning and the cargo crew of Central Command is starting to feel cold. Grow some logs and ship a lit bonfire to warm them up."
 	wanted_types = list(/obj/structure/bonfire = TRUE)
 
 /datum/bounty/item/botany/bonfire/applies_to(obj/O)
@@ -221,3 +221,7 @@
 		return FALSE
 	var/obj/structure/bonfire/B = O
 	return !!B.burning
+
+/datum/bounty/item/botany/cucumber
+	name = "Cucumbers"
+	wanted_types = list(/obj/item/food/grown/cucumber = TRUE)

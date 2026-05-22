@@ -9,16 +9,17 @@
 /obj/structure/transit_tube/station
 	name = "station tube station"
 	icon_state = "closed_station0"
+	base_icon_state = "station0"
 	desc = "The lynchpin of the transit system."
 	exit_delay = 1
 	enter_delay = 2
 	tube_construction = /obj/structure/c_transit_tube/station
+
 	var/open_status = STATION_TUBE_CLOSED
 	var/pod_moving = FALSE
 	var/cooldown_delay = 50
 	var/launch_cooldown = 0
 	var/reverse_launch = FALSE
-	var/base_icon = "station0"
 	var/boarding_dir //from which direction you can board the tube
 
 /obj/structure/transit_tube/station/Initialize(mapload)
@@ -40,14 +41,9 @@
 				pod.update_appearance()
 				return
 
-
 //pod insertion
-/obj/structure/transit_tube/station/MouseDrop_T(obj/structure/c_transit_tube_pod/R, mob/user)
-	if(isliving(user))
-		var/mob/living/L = user
-		if(L.incapacitated())
-			return
-	if (!istype(R) || get_dist(user, src) > 1 || get_dist(src,R) > 1)
+/obj/structure/transit_tube/station/mouse_drop_receive(obj/structure/c_transit_tube_pod/R, mob/user, params)
+	if (!istype(R) || get_dist(user, src) > 1 || get_dist(src, R) > 1)
 		return
 	for(var/obj/structure/transit_tube_pod/pod in loc)
 		return //no fun allowed
@@ -73,7 +69,7 @@
 						return
 					for(var/obj/structure/transit_tube_pod/pod in loc)
 						pod.visible_message(span_warning("[user] starts putting [GM] into the [pod]!"))
-						if(do_after(user, 15, target = src))
+						if(do_after(user, 1.5 SECONDS, target = src))
 							if(open_status == STATION_TUBE_OPEN && GM && user.grab_state >= GRAB_AGGRESSIVE && user.pulling == GM && !GM.buckled && !GM.has_buckled_mobs())
 								GM.Paralyze(100)
 								src.Bumped(GM)
@@ -87,7 +83,7 @@
 					else if(open_status == STATION_TUBE_OPEN)
 						if(pod.contents.len && user.loc != pod)
 							user.visible_message(span_notice("[user] starts emptying [pod]'s contents onto the floor."), span_notice("You start emptying [pod]'s contents onto the floor..."))
-							if(do_after(user, 10, target = src)) //So it doesn't default to close_animation() on fail
+							if(do_after(user, 1 SECONDS, target = src)) //So it doesn't default to close_animation() on fail
 								if(pod && pod.loc == loc)
 									for(var/atom/movable/AM in pod)
 										AM.forceMove(get_turf(user))
@@ -97,7 +93,7 @@
 				break
 
 
-/obj/structure/transit_tube/station/attackby(obj/item/W, mob/user, params)
+/obj/structure/transit_tube/station/attackby(obj/item/W, mob/user, list/modifiers, list/attack_modifiers)
 	if(W.tool_behaviour == TOOL_CROWBAR)
 		for(var/obj/structure/transit_tube_pod/P in loc)
 			P.deconstruct(FALSE, user)
@@ -106,14 +102,14 @@
 
 /obj/structure/transit_tube/station/proc/open_animation()
 	if(open_status == STATION_TUBE_CLOSED)
-		icon_state = "opening_[base_icon]"
+		icon_state = "opening_[base_icon_state]"
 		open_status = STATION_TUBE_OPENING
-		addtimer(CALLBACK(src, .proc/finish_animation), OPEN_DURATION)
+		addtimer(CALLBACK(src, PROC_REF(finish_animation)), OPEN_DURATION)
 
 /obj/structure/transit_tube/station/proc/finish_animation()
 	switch(open_status)
 		if(STATION_TUBE_OPENING)
-			icon_state = "open_[base_icon]"
+			icon_state = "open_[base_icon_state]"
 			open_status = STATION_TUBE_OPEN
 			for(var/obj/structure/transit_tube_pod/pod in loc)
 				for(var/thing in pod)
@@ -124,14 +120,14 @@
 					var/atom/movable/movable_content = thing
 					movable_content.forceMove(loc) //Everything else is moved out of.
 		if(STATION_TUBE_CLOSING)
-			icon_state = "closed_[base_icon]"
+			icon_state = "closed_[base_icon_state]"
 			open_status = STATION_TUBE_CLOSED
 
 /obj/structure/transit_tube/station/proc/close_animation()
 	if(open_status == STATION_TUBE_OPEN)
-		icon_state = "closing_[base_icon]"
+		icon_state = "closing_[base_icon_state]"
 		open_status = STATION_TUBE_CLOSING
-		addtimer(CALLBACK(src, .proc/finish_animation), CLOSE_DURATION)
+		addtimer(CALLBACK(src, PROC_REF(finish_animation)), CLOSE_DURATION)
 
 /obj/structure/transit_tube/station/proc/launch_pod()
 	if(launch_cooldown >= world.time)
@@ -153,7 +149,7 @@
 
 /obj/structure/transit_tube/station/pod_stopped(obj/structure/transit_tube_pod/pod, from_dir)
 	pod_moving = TRUE
-	addtimer(CALLBACK(src, .proc/start_stopped, pod), 5)
+	addtimer(CALLBACK(src, PROC_REF(start_stopped), pod), 0.5 SECONDS)
 
 /obj/structure/transit_tube/station/proc/start_stopped(obj/structure/transit_tube_pod/pod)
 	if(QDELETED(pod))
@@ -162,7 +158,7 @@
 		pod.setDir(tube_dirs[1]) //turning the pod around for next launch.
 	launch_cooldown = world.time + cooldown_delay
 	open_animation()
-	addtimer(CALLBACK(src, .proc/finish_stopped, pod), OPEN_DURATION + 2)
+	addtimer(CALLBACK(src, PROC_REF(finish_stopped), pod), OPEN_DURATION + 2)
 
 /obj/structure/transit_tube/station/proc/finish_stopped(obj/structure/transit_tube_pod/pod)
 	pod_moving = FALSE
@@ -182,12 +178,12 @@
 			tube_dirs = list(NORTH, SOUTH)
 		if(WEST)
 			tube_dirs = list(NORTH, SOUTH)
-	boarding_dir = turn(dir, 180)
+	boarding_dir = REVERSE_DIR(dir)
 
 
 /obj/structure/transit_tube/station/flipped
 	icon_state = "closed_station1"
-	base_icon = "station1"
+	base_icon_state = "station1"
 	tube_construction = /obj/structure/c_transit_tube/station/flipped
 
 /obj/structure/transit_tube/station/flipped/init_tube_dirs()
@@ -200,7 +196,7 @@
 	tube_construction = /obj/structure/c_transit_tube/station/reverse
 	reverse_launch = TRUE
 	icon_state = "closed_terminus0"
-	base_icon = "terminus0"
+	base_icon_state = "terminus0"
 
 /obj/structure/transit_tube/station/reverse/init_tube_dirs()
 	switch(dir)
@@ -212,11 +208,11 @@
 			tube_dirs = list(SOUTH)
 		if(WEST)
 			tube_dirs = list(NORTH)
-	boarding_dir = turn(dir, 180)
+	boarding_dir = REVERSE_DIR(dir)
 
 /obj/structure/transit_tube/station/reverse/flipped
 	icon_state = "closed_terminus1"
-	base_icon = "terminus1"
+	base_icon_state = "terminus1"
 	tube_construction = /obj/structure/c_transit_tube/station/reverse/flipped
 
 /obj/structure/transit_tube/station/reverse/flipped/init_tube_dirs()
@@ -231,8 +227,10 @@
 	desc = "The lynchpin of a GOOD transit system."
 	enter_delay = 1
 	tube_construction = /obj/structure/c_transit_tube/station/dispenser
-	base_icon = "dispenser0"
+	base_icon_state = "dispenser0"
 	open_status = STATION_TUBE_OPEN
+	COOLDOWN_DECLARE(freight_output)
+	COOLDOWN_DECLARE(freight_message)
 
 /obj/structure/transit_tube/station/dispenser/close_animation()
 	return
@@ -253,9 +251,17 @@
 /obj/structure/transit_tube/station/dispenser/Bumped(atom/movable/AM)
 	if(!(istype(AM) && AM.dir == boarding_dir) || AM.anchored)
 		return
+	if(!isliving(AM))
+		if(!COOLDOWN_FINISHED(src, freight_output))
+			if(COOLDOWN_FINISHED(src, freight_message))
+				AM.visible_message(span_notice("Freight pod dispenser is recharging. Please wait."))
+				COOLDOWN_START(src, freight_message, 10 SECONDS)
+			return
+		COOLDOWN_START(src, freight_output, 2 SECONDS)
+
 	var/obj/structure/transit_tube_pod/dispensed/pod = new(loc)
 	AM.visible_message(span_notice("[pod] forms around [AM]."), span_notice("[pod] materializes around you."))
-	playsound(src, 'sound/weapons/emitter2.ogg', 50, TRUE)
+	playsound(src, 'sound/items/weapons/emitter2.ogg', 50, TRUE)
 	pod.setDir(turn(src.dir, -90))
 	AM.forceMove(pod)
 	pod.update_appearance()
@@ -267,7 +273,7 @@
 
 /obj/structure/transit_tube/station/dispenser/flipped
 	icon_state = "open_dispenser1"
-	base_icon = "dispenser1"
+	base_icon_state = "dispenser1"
 	tube_construction = /obj/structure/c_transit_tube/station/dispenser/flipped
 
 /obj/structure/transit_tube/station/dispenser/flipped/init_tube_dirs()
@@ -279,7 +285,7 @@
 	tube_construction = /obj/structure/c_transit_tube/station/dispenser/reverse
 	reverse_launch = TRUE
 	icon_state = "open_terminusdispenser0"
-	base_icon = "terminusdispenser0"
+	base_icon_state = "terminusdispenser0"
 
 /obj/structure/transit_tube/station/dispenser/reverse/init_tube_dirs()
 	switch(dir)
@@ -291,11 +297,11 @@
 			tube_dirs = list(SOUTH)
 		if(WEST)
 			tube_dirs = list(NORTH)
-	boarding_dir = turn(dir, 180)
+	boarding_dir = REVERSE_DIR(dir)
 
 /obj/structure/transit_tube/station/dispenser/reverse/flipped
 	icon_state = "open_terminusdispenser1"
-	base_icon = "terminusdispenser1"
+	base_icon_state = "terminusdispenser1"
 	tube_construction = /obj/structure/c_transit_tube/station/dispenser/reverse/flipped
 
 /obj/structure/transit_tube/station/dispenser/reverse/flipped/init_tube_dirs()

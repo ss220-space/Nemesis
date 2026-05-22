@@ -16,7 +16,7 @@
 /area/ruin/space/djstation)
 "k" = (
 /obj/structure/bed,
-/obj/item/bedsheet/random,
+/obj/effect/spawner/random/bedsheet/any,
 /turf/open/floor/iron/grimy,
 /area/ruin/space/djstation)
 "p" = (
@@ -24,18 +24,26 @@
 	name = "Rest Room"
 	},
 /turf/template_noop,
-/area/template_noop)
+/area/space/nearstation)
 "u" = (
 /obj/machinery/duct,
 /turf/open/floor/iron/grimy,
 /area/ruin/space/djstation)
 "v" = (
 /obj/structure/toilet{
-	pixel_y = 8
+	dir = 1
 	},
-/obj/machinery/duct,
 /obj/machinery/light/small/directional/south,
 /turf/open/floor/iron/freezer,
+/area/ruin/space/djstation)
+"A" = (
+/obj/structure/bed{
+	dir = 4
+	},
+/obj/effect/spawner/random/bedsheet/any{
+	dir = 4
+	},
+/turf/open/floor/iron/grimy,
 /area/ruin/space/djstation)
 "B" = (
 /obj/machinery/door/airlock/public/glass{
@@ -43,12 +51,10 @@
 	},
 /obj/modular_map_connector,
 /turf/template_noop,
-/area/template_noop)
+/area/space/nearstation)
 "F" = (
 /obj/structure/curtain,
-/obj/machinery/shower{
-	pixel_y = 12
-	},
+/obj/machinery/shower/directional/south,
 /turf/open/floor/iron/freezer,
 /area/ruin/space/djstation)
 "J" = (
@@ -60,14 +66,10 @@
 "M" = (
 /obj/structure/table,
 /obj/item/flashlight/lamp,
-/obj/machinery/light/small/directional/north,
 /turf/open/floor/iron/grimy,
 /area/ruin/space/djstation)
 "R" = (
-/obj/structure/sink{
-	dir = 8;
-	pixel_x = 11
-	},
+/obj/structure/sink/directional/west,
 /turf/open/floor/iron/freezer,
 /area/ruin/space/djstation)
 "V" = (
@@ -103,7 +105,7 @@ W
 a
 a
 i
-k
+A
 Z
 u
 i
