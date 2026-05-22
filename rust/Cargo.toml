@@ -12,8 +12,8 @@ eyre = "0.6.12"
 slotmap = "1.0.7"
 base64 = "0.22.1"
 chrono = "0.4.41"
-dmmtools = { git = "https://github.com/SpaceManiac/SpacemanDMM", rev = "6c5a751516ae0e8add4b2aa4388a1e84e96e7082", package = "dmm-tools" }
-dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM", rev = "6c5a751516ae0e8add4b2aa4388a1e84e96e7082", package = "dreammaker" }
+dmmtools = { git = "https://github.com/SpaceManiac/SpacemanDMM", rev = "0290db5c752fa292f9824521515b603a2afd11dc", package = "dmm-tools" }
+dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM", rev = "0290db5c752fa292f9824521515b603a2afd11dc", package = "dreammaker" }
 fxhash = "0.2.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
