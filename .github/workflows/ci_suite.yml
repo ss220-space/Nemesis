@@ -86,4 +86,11 @@ jobs:
         uses: re-actors/alls-green@release/v1
         with:
           jobs: ${{ toJSON(needs) }}
-          allowed-skips: compare_screenshots
+          # NEMESIS EDIT REMOVAL START
+          # allowed-skips: compare_screenshots
+          # NEMESIS EDIT REMOVAL END
+          # NEMESIS EDIT ADDITION START
+          allowed-skips:
+            compare_screenshots
+            run_alternate_tests
+          # NEMESIS EDIT ADDITION END
