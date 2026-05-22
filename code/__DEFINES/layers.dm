@@ -273,8 +273,6 @@
 #define GASFIRE_LAYER 5.05
 #define RIPPLE_LAYER 5.1
 
-#define POINT_LAYER 12
-
 // SEETHROUGH_PLANE layers here, tho it has no layer values
 
 //---------- LIGHTING -------------

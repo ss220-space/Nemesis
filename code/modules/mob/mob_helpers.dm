@@ -100,8 +100,26 @@
  *
  * This proc is dangerously laggy, avoid it or die
  */
-/proc/stars(text, probability = 25)
-	return RUSTLIB_CALL(random_replace, text, probability, "*")
+
+/proc/stars(phrase, probability = 25)
+/*// NEMESIS EDIT REMOVAL START
+	if(probability <= 0)
+		return phrase
+	phrase = html_decode(phrase)
+	var/leng = length(phrase)
+	. = ""
+	var/char = ""
+	for(var/i = 1, i <= leng, i += length(char))
+		char = phrase[i]
+		if(char == " " || !prob(probability))
+			. += char
+		else
+			. += "*"
+	return sanitize(.)
+*/// NEMESIS EDIT REMOVAL END
+// NEMESIS EDIT ADDITION START
+	return RUSTLIB_CALL(random_replace, phrase, probability, "*")
+// NEMESIS EDIT ADDITION END
 
 /**
  * For when you're only able to speak a limited amount of words

@@ -56,7 +56,7 @@
 	var/reference
 
 /datum/weakref/New(datum/thing)
-	reference = thing.UID()
+	reference = thing.UID() // NEMESIS EDIT CHANGE - Original: REF(thing)
 
 /datum/weakref/Destroy(force)
 	var/datum/target = resolve()
@@ -73,8 +73,8 @@
  * This will return `null` if the datum was deleted. This MUST be respected.
  */
 /datum/weakref/proc/resolve()
-	var/datum/datum = locateUID(reference)
-	return (!QDELETED(datum) && datum.weak_reference == src) ? datum : null
+	var/datum/D = locateUID(reference) // NEMESIS EDIT CHANGE - ORIGINAL: var/datum/D = locate(reference)
+	return (!QDELETED(D) && D.weak_reference == src) ? D : null
 
 /**
  * SERIOUSLY READ THE AUTODOC COMMENT FOR THIS PROC BEFORE EVEN THINKING ABOUT USING IT
@@ -91,8 +91,8 @@
  * just use resolve instead.
  */
 /datum/weakref/proc/hard_resolve()
-	var/datum/datum = locateUID(reference)
-	return (datum?.weak_reference == src) ? datum : null
+	var/datum/D = locateUID(reference) // NEMESIS EDIT CHANGE - ORIGINAL: var/datum/D = locate(reference)
+	return (D?.weak_reference == src) ? D : null
 
 /datum/weakref/vv_get_dropdown()
 	. = ..()

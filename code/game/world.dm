@@ -130,7 +130,7 @@ GLOBAL_VAR(restart_counter)
 
 	// First possible sleep()
 	InitTgs()
-	__rustlib = __detect_rustlib()
+	__detect_rustlib() // NEMESIS EDIT ADDITION
 
 	config.Load(params[OVERRIDE_CONFIG_DIRECTORY_PARAMETER])
 

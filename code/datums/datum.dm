@@ -97,7 +97,7 @@
 	 */
 	var/abstract_type = /datum
 
-	var/tmp/unique_datum_id = null
+	var/tmp/unique_datum_id = null // NEMESIS EDIT ADDITION - UIDs
 
 /**
  * Called when a href for this datum is clicked
@@ -130,8 +130,10 @@
 	tag = null
 	datum_flags &= ~DF_USE_TAG //In case something tries to REF us
 	weak_reference = null //ensure prompt GCing of weakref.
+	// NEMESIS EDIT ADDITION START
 	if(unique_datum_id)
 		RUSTLIB_CALL(untick_by_uuid, unique_datum_id)
+	// NEMESIS EDIT ADDITION END
 
 	if(_active_timers)
 		var/list/timers = _active_timers

@@ -26,7 +26,7 @@ fi
 # NEMESIS EDIT ADDITION START - Get all the .dmis and json configs from modular_nemesis
 mkdir -p \
 		$1/modular_nemesis \
-		$1/modular_nemesis/modules/GAGS/json_configs 
+		$1/modular_nemesis/modules/GAGS/json_configs
 
 find modular_nemesis/ -name \*.dmi -exec cp --parents {} $1 \;
 find modular_nemesis/modules/GAGS/json_configs -name \*.json -exec cp --parents {} $1 \;
@@ -40,9 +40,11 @@ cp -r sound/runtime/* $1/sound/runtime/
 cp -r strings/* $1/strings/
 cp -r tgui/public/* $1/tgui/public/
 cp -r tgui/packages/tgfont/dist/* $1/tgui/packages/tgfont/dist/
+# NEMESIS EDIT ADDITION START
 cp -r librustlibs.so $1/librustlibs.so
 cp -r librustlibs_prod.so $1/librustlibs_prod.so
 cp -r rustlibs.dll $1/rustlibs.dll
+# NEMESIS EDIT ADDITION END
 
 #remove .dm files from _maps
 
