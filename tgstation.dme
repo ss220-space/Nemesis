@@ -6947,6 +6947,7 @@
 #include "interface\fonts\spess_font.dm"
 #include "interface\fonts\tiny_unicode.dm"
 #include "interface\fonts\vcr_osd_mono.dm"
+#include "modular_nemesis\master_files\code\modules\GAGS\greyscale_configs.dm"
 #include "modular_nemesis\modules\automapper\code\area_spawn_entries.dm"
 #include "modular_nemesis\modules\automapper\code\area_spawn_subsystem.dm"
 #include "modular_nemesis\modules\automapper\code\automap_template.dm"
