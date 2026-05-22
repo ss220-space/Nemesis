@@ -32,6 +32,9 @@ cp -r sound/runtime/* $1/sound/runtime/
 cp -r strings/* $1/strings/
 cp -r tgui/public/* $1/tgui/public/
 cp -r tgui/packages/tgfont/dist/* $1/tgui/packages/tgfont/dist/
+cp -r librustlibs.so $1/librustlibs.so
+cp -r librustlibs_prod.so $1/librustlibs_prod.so
+cp -r rustlibs.dll $1/rustlibs.dll
 
 #remove .dm files from _maps
 

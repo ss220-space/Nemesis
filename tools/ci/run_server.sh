@@ -15,8 +15,6 @@ cp tools/ci/ci_config.txt ci_test/config/config.txt
 #set the map
 cp _maps/$MAP.json ci_test/data/next_map.json
 
-cp tools/ci/librustlibs_ci.so ci_test/librustlibs_ci.so
-
 cd ci_test
 DreamDaemon tgstation.dmb -close -trusted -verbose -params "log-directory=ci"
 

@@ -16,12 +16,6 @@
 
 /proc/__detect_rustlib()
 	if(world.system_type == UNIX)
-#ifdef CIBUILDING
-		// CI override, use librustlibs_ci.so if possible.
-		if(fexists("./tools/ci/librustlibs_ci.so"))
-			SEND_TEXT(world.log, "Selected lib ./librustlibs_ci.so")
-			return __rustlib = "librustlibs_ci.so"
-#endif
 		// First check if it's built in the usual place.
 		// Linx doesnt get the version suffix because if youre using linux you can figure out what server version youre running for
 		if(fexists("./rust/target/i686-unknown-linux-gnu/release/librustlibs[RUSTLIBS_SUFFIX].so"))
@@ -29,10 +23,9 @@
 			return __rustlib = "./rust/target/i686-unknown-linux-gnu/release/librustlibs[RUSTLIBS_SUFFIX].so"
 		// Then check in the current directory.
 		if(fexists("./librustlibs[RUSTLIBS_SUFFIX].so"))
-			SEND_TEXT(world.log, "Selected lib ./librustlibs[RUSTLIBS_SUFFIX].so")
+			SEND_TEXT(world.log, "Selected lib ./rust/target/i686-unknown-linux-gnu/release/librustlibs[RUSTLIBS_SUFFIX].so")
 			return __rustlib = "./librustlibs[RUSTLIBS_SUFFIX].so"
 		// And elsewhere.
-		SEND_TEXT(world.log, "Selected lib librustlibs[RUSTLIBS_SUFFIX].so")
 		return __rustlib = "librustlibs[RUSTLIBS_SUFFIX].so"
 	else
 		// First check if it's built in the usual place.

@@ -91,7 +91,6 @@ jobs:
 
           # Build for CI (без агрессивных оптимизаций)
           cargo build --release --target $LINUX_TARGET
-          cp target/$LINUX_TARGET/release/librustlibs.so ../tools/ci/librustlibs_ci.so
           cp target/$LINUX_TARGET/release/librustlibs.so ../librustlibs.so
 
           # Build for production (с оптимизациями)
@@ -106,7 +105,6 @@ jobs:
           path: |
             librustlibs.so
             librustlibs_prod.so
-            tools/ci/librustlibs_ci.so
 
   build-windows:
     permissions:
@@ -264,7 +262,7 @@ jobs:
           git config --local user.name "Rust Builder"
           git config --local user.email "action@github.com"
 
-          git add --force librustlibs.so librustlibs_prod.so tools/ci/librustlibs_ci.so rustlibs.dll rustlibs_gnu.dll
+          git add --force librustlibs.so librustlibs_prod.so rustlibs.dll rustlibs_gnu.dll
           git commit -m "Build Rust library for Linux and Windows" || echo "No changes to commit"
           git push origin
 
