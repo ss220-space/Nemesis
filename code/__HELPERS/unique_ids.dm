@@ -18,11 +18,11 @@
 GLOBAL_LIST_EMPTY(uid_log)
 
 /**
-  * Gets or creates the UID of a datum
-  *
-  * BYOND refs are recycled, so this system prevents that. If a datum does not have a UID when this proc is ran, one will be created
-  * Returns the UID of the datum
-  */
+ * Gets or creates the UID of a datum
+ *
+ * BYOND refs are recycled, so this system prevents that. If a datum does not have a UID when this proc is ran, one will be created
+ * Returns the UID of the datum
+ */
 /datum/proc/UID()
 	if(!unique_datum_id)
 		unique_datum_id = RUSTLIB_CALL(get_uuid, src)

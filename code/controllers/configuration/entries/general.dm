@@ -169,6 +169,9 @@
 /// log image authoring, such as using the modular computer paint app
 /datum/config_entry/flag/log_image
 
+/// log map manipulations
+/datum/config_entry/flag/log_mapmanip
+
 /// logs all timers in buckets on automatic bucket reset (Useful for timer debugging)
 /datum/config_entry/flag/log_timers_on_bucket_reset
 
