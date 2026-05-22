@@ -100,7 +100,6 @@
  *
  * This proc is dangerously laggy, avoid it or die
  */
-
 /proc/stars(phrase, probability = 25)
 /*// NEMESIS EDIT REMOVAL START
 	if(probability <= 0)
