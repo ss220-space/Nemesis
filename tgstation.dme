@@ -6950,7 +6950,4 @@
 #include "interface\fonts\spess_font.dm"
 #include "interface\fonts\tiny_unicode.dm"
 #include "interface\fonts\vcr_osd_mono.dm"
-#include "rust\src\mapmanip\test\_tiny_test_map.dmm"
-#include "rust\src\mapmanip\test\extracted.dmm"
-#include "rust\src\mapmanip\test\inserted.dmm"
 // END_INCLUDE
