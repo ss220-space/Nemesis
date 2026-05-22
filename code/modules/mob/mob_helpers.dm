@@ -100,20 +100,8 @@
  *
  * This proc is dangerously laggy, avoid it or die
  */
-/proc/stars(phrase, probability = 25)
-	if(probability <= 0)
-		return phrase
-	phrase = html_decode(phrase)
-	var/leng = length(phrase)
-	. = ""
-	var/char = ""
-	for(var/i = 1, i <= leng, i += length(char))
-		char = phrase[i]
-		if(char == " " || !prob(probability))
-			. += char
-		else
-			. += "*"
-	return sanitize(.)
+/proc/stars(text, probability = 25)
+	return RUSTLIB_CALL(random_replace, text, probability, "*")
 
 /**
  * For when you're only able to speak a limited amount of words

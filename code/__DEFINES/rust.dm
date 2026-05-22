@@ -48,7 +48,7 @@
 		// This being spanned over multiple lines is kinda scuffed, but its needed because of https://www.byond.com/forum/post/2072419
 		return assignment_confirmed
 
-#define RUSTLIB (__rustlib || __detect_rustlib())
+#define RUSTLIB (__rustlib)
 #define RUSTLIB_CALL(func, args...) call_ext(RUSTLIB, "byond:[#func]_ffi")(args)
 
 /// Exists by default in 516, but needs to be defined for 515 or byondapi-rs doesn't like it.

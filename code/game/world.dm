@@ -130,6 +130,7 @@ GLOBAL_VAR(restart_counter)
 
 	// First possible sleep()
 	InitTgs()
+	__detect_rustlib()
 
 	config.Load(params[OVERRIDE_CONFIG_DIRECTORY_PARAMETER])
 

@@ -56,7 +56,7 @@
 	var/reference
 
 /datum/weakref/New(datum/thing)
-	reference = REF(thing)
+	reference = thing.UID()
 
 /datum/weakref/Destroy(force)
 	var/datum/target = resolve()
@@ -73,8 +73,8 @@
  * This will return `null` if the datum was deleted. This MUST be respected.
  */
 /datum/weakref/proc/resolve()
-	var/datum/D = locate(reference)
-	return (!QDELETED(D) && D.weak_reference == src) ? D : null
+	var/datum/datum = locateUID(reference)
+	return (!QDELETED(datum) && datum.weak_reference == src) ? datum : null
 
 /**
  * SERIOUSLY READ THE AUTODOC COMMENT FOR THIS PROC BEFORE EVEN THINKING ABOUT USING IT
@@ -91,8 +91,8 @@
  * just use resolve instead.
  */
 /datum/weakref/proc/hard_resolve()
-	var/datum/D = locate(reference)
-	return (D?.weak_reference == src) ? D : null
+	var/datum/datum = locateUID(reference)
+	return (datum?.weak_reference == src) ? datum : null
 
 /datum/weakref/vv_get_dropdown()
 	. = ..()

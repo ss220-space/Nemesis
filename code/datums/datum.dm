@@ -87,7 +87,7 @@
 
 	/**
 	 * Parent types.
-	 * 
+	 *
 	 * Abstract-ness is a meta-property of a class that is used to indicate
 	 * that the class is intended to be used as a base class for others, and
 	 * should not (or cannot) be instantiated.
@@ -96,6 +96,8 @@
 	 * like that to be the case, such as base behavior providers.
 	 */
 	var/abstract_type = /datum
+
+	var/tmp/unique_datum_id = null
 
 /**
  * Called when a href for this datum is clicked
@@ -128,6 +130,8 @@
 	tag = null
 	datum_flags &= ~DF_USE_TAG //In case something tries to REF us
 	weak_reference = null //ensure prompt GCing of weakref.
+	if(unique_datum_id)
+		RUSTLIB_CALL(untick_by_uuid, unique_datum_id)
 
 	if(_active_timers)
 		var/list/timers = _active_timers
