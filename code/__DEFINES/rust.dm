@@ -19,8 +19,8 @@
 #ifdef CIBUILDING
 		// CI override, use librustlibs_ci.so if possible.
 		if(fexists("./tools/ci/librustlibs_ci.so"))
-			SEND_TEXT(world.log, "Selected lib ./tools/ci/librustlibs_ci.so")
-			return __rustlib = "tools/ci/librustlibs_ci.so"
+			SEND_TEXT(world.log, "Selected lib ./librustlibs_ci.so")
+			return __rustlib = "librustlibs_ci.so"
 #endif
 		// First check if it's built in the usual place.
 		// Linx doesnt get the version suffix because if youre using linux you can figure out what server version youre running for
