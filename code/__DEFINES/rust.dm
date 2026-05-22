@@ -23,7 +23,7 @@
 			return __rustlib = "./rust/target/i686-unknown-linux-gnu/release/librustlibs[RUSTLIBS_SUFFIX].so"
 		// Then check in the current directory.
 		if(fexists("./librustlibs[RUSTLIBS_SUFFIX].so"))
-			SEND_TEXT(world.log, "Selected lib ./rust/target/i686-unknown-linux-gnu/release/librustlibs[RUSTLIBS_SUFFIX].so")
+			SEND_TEXT(world.log, "Selected lib librustlibs[RUSTLIBS_SUFFIX].so")
 			return __rustlib = "./librustlibs[RUSTLIBS_SUFFIX].so"
 		// And elsewhere.
 		return __rustlib = "librustlibs[RUSTLIBS_SUFFIX].so"
