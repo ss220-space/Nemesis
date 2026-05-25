@@ -9,6 +9,15 @@ on:
     branches:
       - master
 
+  # NEMESIS EDIT ADDITION START
+  push:
+    branches:
+      - master
+  workflow_run:
+    workflows: ["Build and verify Rust library"]
+    types: [completed]
+  # NEMESIS EDIT ADDITION END
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

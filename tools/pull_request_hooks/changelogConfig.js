@@ -12,8 +12,8 @@ export const CHANGELOG_ENTRIES = [
     ["rscadd", "add", "adds"],
     {
       placeholders: [
-        "Added new mechanics or gameplay changes",
-        "Added more things",
+        "Добавлены новые механики или изменения в игровом процессе.",
+        "Добавлено что-то новое.",
       ],
     },
   ],
@@ -21,91 +21,107 @@ export const CHANGELOG_ENTRIES = [
   [
     ["bugfix", "fix", "fixes"],
     {
-      placeholders: ["fixed a few things"],
+      placeholders: ["Исправлен какой-то баг."],
     },
   ],
 
   [
     ["rscdel", "del", "dels"],
     {
-      placeholders: ["Removed old things"],
+      placeholders: ["Удалено что-то старое."],
     },
   ],
 
   [
     ["qol"],
     {
-      placeholders: ["made something easier to use"],
+      placeholders: ["Сделано что-то более простым в использовании."],
     },
   ],
 
   [
-    ["sound"],
+    ["sound", "soundadd", "sounddel"],
     {
-      placeholders: ["added/modified/removed audio or sound effects"],
+      placeholders: ["Добавлены/изменены/удалены какие-то аудио или звуковые эффекты."],
     },
   ],
 
   [
-    ["image"],
+    ["image", "imageadd", "imagedel"],
     {
-      placeholders: ["added/modified/removed some icons or images"],
+      placeholders: ["Добавлены/изменены/удалены какие-то спрайты или изображения."],
     },
   ],
 
   [
     ["map"],
     {
-      placeholders: ["added/modified/removed map content"],
+      placeholders: ["Добавлены/изменены/удалены какие-то карты или их содержимое."],
     },
   ],
 
   [
     ["spellcheck", "typo"],
     {
-      placeholders: ["fixed a few typos"],
+      placeholders: ["Исправлена какая-то очепятка."],
+    },
+  ],
+
+  [
+    ["local"],
+    {
+      placeholders: ["Произошла локализация на русский язык."],
     },
   ],
 
   [
     ["balance"],
     {
-      placeholders: ["rebalanced something"],
+      placeholders: ["Произошёл ребаланс."],
     },
   ],
 
   [
     ["code_imp", "code"],
     {
-      placeholders: ["changed some code"],
+      placeholders: ["Что-то добавлено в код, без изменения имеющихся механик."],
     },
   ],
 
   [
     ["refactor"],
     {
-      placeholders: ["refactored some code"],
+      placeholders: ["Отрефакторен какой-то код."],
     },
   ],
 
   [
     ["config"],
     {
-      placeholders: ["changed some config setting"],
+      placeholders: ["Изменены какие-то настройки в конфиге."],
     },
   ],
 
   [
     ["admin"],
     {
-      placeholders: ["messed with admin stuff"],
+      placeholders: ["Изменено что-то связанное с администрацией."],
+    },
+  ],
+
+  [
+    ["experiment", "experimental"],
+    {
+      placeholders: [
+        "Экспериментальные изменения, которые могут повлиять на стабильность.",
+      ],
     },
   ],
 
   [
     ["server"],
     {
-      placeholders: ["something server ops should know"],
+      placeholders: ["Изменено что-то связанное с серверной частью или Github."],
     },
   ],
 ];
@@ -117,4 +133,4 @@ export const CHANGELOG_OPEN_TAGS = [":cl:", "??"];
 export const CHANGELOG_CLOSE_TAGS = ["/:cl:", "/ :cl:", ":/cl:", "/??", "/ ??"];
 
 // Placeholder value for an author
-export const CHANGELOG_AUTHOR_PLACEHOLDER_NAME = "optional name here";
+export const CHANGELOG_AUTHOR_PLACEHOLDER_NAME = "необязательное имя здесь";
