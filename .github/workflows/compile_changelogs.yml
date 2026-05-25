@@ -70,3 +70,4 @@ jobs:
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ steps.app-token-generation.outputs.token || secrets.GITHUB_TOKEN }}
+          branch: master # NEMESIS EDIT ADDITION
