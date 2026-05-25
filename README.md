@@ -14,7 +14,7 @@
 | Ресурс                       | Ссылка                                                                       |
 | ---------------------------- | ---------------------------------------------------------------------------- |
 | Код                          | https://github.com/ss220-space/Nemesis/                                      |
-| Руководство по модуляризации | [./modular_nemesis/readme.md](./modular_nemesis/readme.md)                   |
+| Руководство по модуляризации | [./modular_nemesis/README.md](./modular_nemesis/README.md)                   |
 | Руководство по зеркалированию| [./modular_nemesis/mirroring_guide.md](./modular_nemesis/mirroring_guide.md) |
 | Wiki                         | Отсутствует                                                                  |
 | Документация по коду         | https://ss220-space.github.io/Nemesis/                                       |
