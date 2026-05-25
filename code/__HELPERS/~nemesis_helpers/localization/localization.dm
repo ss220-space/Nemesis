@@ -129,6 +129,7 @@
 		var/postfix = findtext_char(msg, ")%")
 		if(!postfix)
 			stack_trace("Genderize string is missing proper ending, expected )%.")
+			break
 		var/list/pieces = splittext(copytext_char(msg, prefix + 2, postfix), ",")
 		switch(length(pieces))
 			if(2) // pluralize if only two parts present
@@ -175,7 +176,7 @@
 
 /// Turns russian text into proper directions
 /proc/text2dir_rus(direction)
-	switch(uppertext(direction))
+	switch(direction)
 		if(DIR_NAME_RUS_NORTH)
 			return NORTH
 		if(DIR_NAME_RUS_SOUTH)
