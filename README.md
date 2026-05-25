@@ -6,8 +6,8 @@
 </p>
 
 <p align="center">
-	<img src=".github/images/badges/built-with-bugs.svg" alt="Bugs">
-	<img src=".github/images/badges/contains-copypaste.svg" alt="Copypaste">
+	<img src=".github/images/badges/nemesis/built-with-bugs.svg" alt="Bugs">
+	<img src=".github/images/badges/nemesis/contains-copypaste.svg" alt="Copypaste">
 	<a href="https://www.reddit.com/r/SS13/comments/5oplxp/what_is_the_main_problem_with_byond_as_an_engine/dclbu1a/"><img src=".github/images/badges/made-in-byond.gif" alt="Made in BYOND"></a>
 </p>
 
