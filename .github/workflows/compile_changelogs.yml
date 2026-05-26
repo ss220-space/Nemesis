@@ -59,14 +59,14 @@ jobs:
         uses: actions/create-github-app-token@v3.2.0
         if: env.APP_PRIVATE_KEY != '' && env.APP_ID != ''
         with:
-          client-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.CHANGELOGBOT_APPID }} # NEMESIS EDIT CHANGE - Original: secrets.APP_ID
+          private-key: ${{ secrets.CHANGELOGBOT_PRIVATEKEY }} # NEMESIS EDIT CHANGE - Original: secrets.APP_PRIVATE_KEY
         env:
-          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.CHANGELOGBOT_PRIVATEKEY }} # NEMESIS EDIT CHANGE - Original: secrets.APP_PRIVATE_KEY
+          APP_ID: ${{ secrets.CHANGELOGBOT_APPID }} # NEMESIS EDIT CHANGE - Original: secrets.APP_ID
 
       - name: "Push"
         if: steps.value_holder.outputs.ACTIONS_ENABLED
         uses: ad-m/github-push-action@master
         with:
-          github_token: ${{ steps.app-token-generation.outputs.token || secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.app-token-generation.outputs.token || secrets.CHANGELOGBOT_TOKEN }} # NEMESIS EDIT CHANGE - Original: secrets.GITHUB_TOKEN

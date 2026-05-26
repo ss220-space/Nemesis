@@ -244,9 +244,20 @@ jobs:
           name: windows-libraries
           path: .
 
+      - name: Generate App Token
+        id: app-token-generation
+        uses: actions/create-github-app-token@v3.2.0
+        if: env.APP_PRIVATE_KEY != '' && env.APP_ID != ''
+        with:
+          client-id: ${{ secrets.CHANGELOGBOT_APPID }}
+          private-key: ${{ secrets.CHANGELOGBOT_PRIVATEKEY }}
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.CHANGELOGBOT_PRIVATEKEY }}
+          APP_ID: ${{ secrets.CHANGELOGBOT_APPID }}
+
       - name: Commit and push changes
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token-generation.outputs.token || secrets.CHANGELOGBOT_TOKEN }}
         run: |
           git config --local user.name "Rust Builder"
           git config --local user.email "action@github.com"

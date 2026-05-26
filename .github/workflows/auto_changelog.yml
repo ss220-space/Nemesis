@@ -21,11 +21,11 @@ jobs:
         uses: actions/create-github-app-token@v3.2.0
         if: env.APP_PRIVATE_KEY != '' && env.APP_ID != ''
         with:
-          client-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.CHANGELOGBOT_APPID }} # NEMESIS EDIT CHANGE - Original: secrets.APP_ID
+          private-key: ${{ secrets.CHANGELOGBOT_PRIVATEKEY }} # NEMESIS EDIT CHANGE - Original: secrets.APP_PRIVATE_KEY
         env:
-          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.CHANGELOGBOT_PRIVATEKEY }} # NEMESIS EDIT CHANGE - Original: secrets.APP_PRIVATE_KEY
+          APP_ID: ${{ secrets.CHANGELOGBOT_APPID }} # NEMESIS EDIT CHANGE - Original: secrets.APP_ID
 
       - name: Run auto changelog
         uses: actions/github-script@v9
@@ -33,7 +33,7 @@ jobs:
           script: |
             const { processAutoChangelog } = await import('${{ github.workspace }}/tools/pull_request_hooks/autoChangelog.js')
             await processAutoChangelog({ github, context })
-          github-token: ${{ steps.app-token-generation.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token-generation.outputs.token || secrets.CHANGELOGBOT_TOKEN }} # NEMESIS EDIT CHANGE - Original: secrets.GITHUB_TOKEN
       # NEMESIS EDIT ADDITION START
       - name: "Check for CHANGELOG_DISCORD_WEBHOOK secret"
         id: check_changelog_discord_webhook
