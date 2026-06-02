@@ -1,4 +1,3 @@
-<a align="center" href="#"><img src=".github/images/badges/nemesis/ss1984.gif" alt="Nemesis"></a>
 # <p align="center"> Добро пожаловать на Nemesis! </p>
 
 <p align="center">
@@ -16,14 +15,12 @@
 | Код                          | https://github.com/ss220-space/Nemesis/                                      |
 | Руководство по модуляризации | [./modular_nemesis/README.md](./modular_nemesis/README.md)                   |
 | Руководство по зеркалированию| [./modular_nemesis/mirroring_guide.md](./modular_nemesis/mirroring_guide.md) |
-| Wiki                         | Отсутствует                                                                  |
+| Wiki                         | Временно отсутствует                                                         |
 | Документация по коду         | https://ss220-space.github.io/Nemesis/                                       |
 | Discord Nemesis              | https://discord.ss220.space                                                  |
 | Discord Coderbus             | https://discord.gg/Vh8TJp9                                                   |
 
-Это Nemesis — downstream-форк /tg/station, написанный на BYOND.
-
-Space Station 13 — пропитанная паранойей раундовая ролевая игра, действие которой разворачивается на фоне абсурдной металлической ловушки, маскирующейся под космическую станцию, с очаровательным пиксель-артом, передающим её научно-фантастический сеттинг и зловещие подтексты. Веселитесь и постарайтесь выжить!
+Nemesis — это попытка перенести [Russian Paradise](https://github.com/ss220-space/Paradise) на новые рельсы или же кодбазу.
 
 # Загрузка
 
@@ -35,7 +32,7 @@ Space Station 13 — пропитанная паранойей раундова�
 
 # Полезная документация
 
-- ### [Правила контрибьюции](.github/CONTRIBUTING.md)
+- ### [Руководство для контрибьюторов](.github/CONTRIBUTING.md)
   Руководство по внесению вклада в проект, советы по работе с Github и стандарты разработки/написания кода. **Обязательно к ознакомлению!**
 
 - ### [Руководство по стилю](/.github/guides/STYLE.md)
@@ -46,6 +43,9 @@ Space Station 13 — пропитанная паранойей раундова�
 
 - ### [Руководство по локализации](/.github/guides/LOCALIZATION.md)
   Правила и стандарты локализации, руководство по инструментам локализации. (ТРЕБУЕТ ОБНОВЛЕНИЯ!)
+
+- ### [Руководство по разработке (HackMD)](https://hackmd.io/@tgstation/HJ8OdjNBc#tgstation-Development-Guide)
+  Настройка окружения разработчика и компиляция проекта.
 
 # Компиляция
 
@@ -61,21 +61,7 @@ Space Station 13 — пропитанная паранойей раундова�
 > [!WARNING]
 > Сборка напрямую через DreamMaker устарела и может вызывать ошибки, например `'tgui.bundle.js': cannot find file`.
 
-# С чего начать?
-
-- ### [Руководство для контрибьюторов](.github/CONTRIBUTING.md)
-  Гайдлайны по внесению вклада в проект.
-
-- ### [Гайд по разработке (HackMD)](https://hackmd.io/@tgstation/HJ8OdjNBc#tgstation-Development-Guide)
-  Настройка окружения разработчика и компиляция проекта.
-
-- ### [Общая документация по дизайну (HackMD)](https://hackmd.io/@tgstation)
-  Документация по архитектуре и дизайну проекта.
-
-- ### [Common Core](https://github.com/tgstation/common_core)
-  Лор и сеттинг.
-
-### LICENSE
+# LICENSE
 
 ---
 
@@ -111,5 +97,3 @@ Space Station 13 — пропитанная паранойей раундова�
 
 >All assets including icons and sound files are licensed under the [Creative Commons 3.0 BY-SA license](https://creativecommons.org/licenses/by-sa/3.0/), unless otherwise specified within the folder or file.
 </details>
-
-See LICENSE and GPLv3.txt for more details.
