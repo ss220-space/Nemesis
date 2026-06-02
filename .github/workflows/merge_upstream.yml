@@ -1,0 +1,46 @@
+# Создаёт PR, вливающий весь upstream (tgstation/tgstation) в master.
+# Запускается вручную через Actions -> Merge Upstream -> Run workflow.
+# Changelog и Discord-уведомление сгенерируются автоматически штатным
+# workflow auto_changelog.yml, когда созданный здесь PR будет смержен в master.
+name: Merge Upstream
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge-upstream:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate App Token
+        id: app-token-generation
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          client-id: ${{ secrets.CHANGELOGBOT_APPID }}
+          private-key: ${{ secrets.CHANGELOGBOT_PRIVATEKEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token-generation.outputs.token }}
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "Upstream Sync"
+
+      - name: Run merge_upstream
+        env:
+          GH_TOKEN: ${{ steps.app-token-generation.outputs.token }}
+          TARGET_REPO: ${{ github.repository }}
+          TARGET_BRANCH: master
+          UPSTREAM_REPO: tgstation/tgstation
+          UPSTREAM_BRANCH: master
+          MERGE_BRANCH: merge-upstream
+          CHANGELOG_AUTHOR: tgstation
+        run: |
+          chmod +x modular_nemesis/tools/merge_upstream.sh
+          bash modular_nemesis/tools/merge_upstream.sh
