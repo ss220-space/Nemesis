@@ -19,7 +19,7 @@
 #
 # Требует: git, gh, jq.
 
-set -u # ошибка при использовании неинициализированной переменной
+set -u # error on use of an uninitialized variable
 set -o pipefail
 
 readonly TARGET_REPO="${TARGET_REPO:-${GITHUB_REPOSITORY:-ss220-space/Nemesis}}"
@@ -31,53 +31,53 @@ readonly CHANGELOG_AUTHOR="${CHANGELOG_AUTHOR:-tgstation}"
 readonly MAX_PRS="${MAX_PRS:-400}"
 
 log() { echo "[merge_upstream] $*"; }
-die() { echo "[merge_upstream] ОШИБКА: $*" >&2; exit 1; }
+die() { echo "[merge_upstream] ERROR: $*" >&2; exit 1; }
 
-# --- Проверки окружения ---------------------------------------------------
+# --- Environment checks ---------------------------------------------------
 
-[ -d .git ] || die "запускать нужно из корня git-репозитория"
-type git >/dev/null 2>&1 || die "требуется git"
-type gh  >/dev/null 2>&1 || die "требуется gh (GitHub CLI)"
-type jq  >/dev/null 2>&1 || die "требуется jq"
+[ -d .git ] || die "must be run from the root of a git repository"
+type git >/dev/null 2>&1 || die "git is required"
+type gh  >/dev/null 2>&1 || die "gh (GitHub CLI) is required"
+type jq  >/dev/null 2>&1 || die "jq is required"
 
-# --- Настройка remote'ов --------------------------------------------------
+# --- Remote setup ---------------------------------------------------------
 
 if ! git remote | grep -qx upstream; then
-  log "Добавляю remote upstream -> https://github.com/${UPSTREAM_REPO}.git"
+  log "Adding upstream remote -> https://github.com/${UPSTREAM_REPO}.git"
   git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
 else
   git remote set-url upstream "https://github.com/${UPSTREAM_REPO}.git"
 fi
 
-log "Получаю апстрим (${UPSTREAM_REPO}@${UPSTREAM_BRANCH})..."
-git fetch --no-tags upstream "${UPSTREAM_BRANCH}" || die "не удалось fetch upstream"
-git fetch --no-tags origin || die "не удалось fetch origin"
+log "Fetching upstream (${UPSTREAM_REPO}@${UPSTREAM_BRANCH})..."
+git fetch --no-tags upstream "${UPSTREAM_BRANCH}" || die "failed to fetch upstream"
+git fetch --no-tags origin || die "failed to fetch origin"
 
-# --- Пересоздание ветки merge-upstream ------------------------------------
+# --- Recreate the merge-upstream branch -----------------------------------
 
 if git ls-remote --exit-code --heads origin "${MERGE_BRANCH}" >/dev/null 2>&1; then
-  log "Ветка ${MERGE_BRANCH} существует, сбрасываю её на upstream/${UPSTREAM_BRANCH}"
-  git checkout -B "${MERGE_BRANCH}" "upstream/${UPSTREAM_BRANCH}"
+  log "Branch ${MERGE_BRANCH} exists, resetting it to upstream/${UPSTREAM_BRANCH}"
+  git checkout -f -B "${MERGE_BRANCH}" "upstream/${UPSTREAM_BRANCH}"
   git push --force origin "${MERGE_BRANCH}"
 else
-  log "Создаю ветку ${MERGE_BRANCH} из upstream/${UPSTREAM_BRANCH}"
-  git checkout -B "${MERGE_BRANCH}" "upstream/${UPSTREAM_BRANCH}"
+  log "Creating branch ${MERGE_BRANCH} from upstream/${UPSTREAM_BRANCH}"
+  git checkout -f -B "${MERGE_BRANCH}" "upstream/${UPSTREAM_BRANCH}"
   git push -u origin "${MERGE_BRANCH}"
 fi
 
-# --- Поиск новых коммитов и номеров PR ------------------------------------
+# --- Detect new commits and PR numbers ------------------------------------
 
-log "Ищу коммиты upstream, которых нет в ${TARGET_BRANCH}..."
-# Хронологический порядок (старые -> новые), чтобы changelog шёл по порядку мержа.
+log "Detecting upstream commits not present in ${TARGET_BRANCH}..."
+# Chronological order (old -> new) so the changelog follows merge order.
 mapfile -t COMMIT_LOG < <(git log --reverse --pretty=format:'%s' \
   "origin/${TARGET_BRANCH}..${MERGE_BRANCH}")
 
 if [ "${#COMMIT_LOG[@]}" -eq 0 ]; then
-  log "Новых коммитов нет — Nemesis уже синхронизирован с ${UPSTREAM_REPO}. Выходим."
+  log "No new commits — Nemesis is already in sync with ${UPSTREAM_REPO}. Exiting."
   exit 0
 fi
 
-# Собираем уникальные номера PR из сабжей коммитов вида "Title (#12345)".
+# Collect unique PR numbers from commit subjects like "Title (#12345)".
 declare -A SEEN_PR=()
 PR_NUMBERS=()
 for subject in "${COMMIT_LOG[@]}"; do
@@ -92,12 +92,12 @@ for subject in "${COMMIT_LOG[@]}"; do
   fi
 done
 
-log "Найдено новых PR апстрима: ${#PR_NUMBERS[@]}"
+log "Found new upstream PRs: ${#PR_NUMBERS[@]}"
 
-# --- Сбор changelog из тел PR ---------------------------------------------
+# --- Collect changelog from PR bodies -------------------------------------
 
-# Извлекает строки changelog (key: description) из :cl: блока тела PR.
-# Переиспользует тот же формат тегов, что и tools/pull_request_hooks/changelogConfig.js.
+# Extracts changelog lines (key: description) from the :cl: block of a PR body.
+# Reuses the same tag format as tools/pull_request_hooks/changelogConfig.js.
 extract_changelog() {
   awk '
     function ltrim(s){ sub(/^[ \t\r]+/, "", s); return s }
@@ -119,11 +119,11 @@ CHANGELOG_LINES=()
 collected=0
 for num in "${PR_NUMBERS[@]}"; do
   if [ "${MAX_PRS}" -ne 0 ] && [ "${collected}" -ge "${MAX_PRS}" ]; then
-    log "Достигнут лимит MAX_PRS=${MAX_PRS}, остальные PR в changelog не попадут."
+    log "Reached MAX_PRS=${MAX_PRS} limit, remaining PRs won't be included in the changelog."
     break
   fi
   body="$(gh api "repos/${UPSTREAM_REPO}/pulls/${num}" --jq '.body // ""' 2>/dev/null)" || {
-    log "Не удалось получить PR #${num}, пропускаю."
+    log "Failed to fetch PR #${num}, skipping."
     continue
   }
   while IFS= read -r cl; do
@@ -132,25 +132,25 @@ for num in "${PR_NUMBERS[@]}"; do
   collected=$((collected + 1))
 done
 
-log "Собрано строк changelog: ${#CHANGELOG_LINES[@]}"
+log "Collected changelog lines: ${#CHANGELOG_LINES[@]}"
 
-# --- Формирование тела PR -------------------------------------------------
+# --- Build the PR body ----------------------------------------------------
 
 BODY_FILE="$(mktemp)"
 trap 'rm -f "$BODY_FILE"' EXIT
 
 {
-  echo "Этот PR подтягивает upstream \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` в \`${TARGET_BRANCH}\`."
-  echo "Разрешите возможные конфликты вручную и убедитесь, что все изменения применились корректно."
+  echo "This PR merges upstream \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` into \`${TARGET_BRANCH}\`."
+  echo "Resolve any conflicts manually and make sure all changes are applied correctly."
   echo
-  echo "Новых PR апстрима: **${#PR_NUMBERS[@]}**."
+  echo "New upstream PRs: **${#PR_NUMBERS[@]}**."
   echo
 
   if [ "${#PR_NUMBERS[@]}" -gt 0 ]; then
-    echo "<details><summary>Включённые PR апстрима</summary>"
+    echo "<details><summary>Included upstream PRs</summary>"
     echo
     for num in "${PR_NUMBERS[@]}"; do
-      # www. вместо https:// — чтобы GitHub не превращал ссылки в кросс-реф апстрима.
+      # www. instead of https:// so GitHub doesn't turn links into upstream cross-references.
       echo "- www.github.com/${UPSTREAM_REPO}/pull/${num}"
     done
     echo
@@ -165,34 +165,34 @@ trap 'rm -f "$BODY_FILE"' EXIT
   fi
 } > "$BODY_FILE"
 
-# Защита от лимита тела PR в GitHub (~65536 символов).
+# Guard against GitHub's PR body size limit (~65536 characters).
 if [ "$(wc -c < "$BODY_FILE")" -gt 60000 ]; then
-  log "Тело PR слишком большое, обрезаю changelog."
+  log "PR body too large, trimming the changelog."
   {
-    echo "Этот PR подтягивает upstream \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` в \`${TARGET_BRANCH}\`."
-    echo "Разрешите возможные конфликты вручную."
+    echo "This PR merges upstream \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` into \`${TARGET_BRANCH}\`."
+    echo "Resolve any conflicts manually."
     echo
-    echo "Новых PR апстрима: **${#PR_NUMBERS[@]}** (changelog опущен — слишком большой объём)."
+    echo "New upstream PRs: **${#PR_NUMBERS[@]}** (changelog omitted — too large)."
   } > "$BODY_FILE"
 fi
 
-readonly PR_TITLE="Merge Upstream ${UPSTREAM_REPO} ($(date +%d.%m.%Y))"
+readonly PR_TITLE="[IDB IGNORE][MDB IGNORE] Merge Upstream ${UPSTREAM_REPO} ($(date +%d.%m.%Y))"
 
-# --- Создание/обновление PR -----------------------------------------------
+# --- Create/update the PR -------------------------------------------------
 
 existing="$(gh pr list --repo "${TARGET_REPO}" --state open \
   --base "${TARGET_BRANCH}" --head "${MERGE_BRANCH}" \
   --json number --jq '.[0].number // ""' 2>/dev/null || echo "")"
 
 if [ -n "${existing}" ]; then
-  log "PR #${existing} уже открыт — обновляю его тело."
+  log "PR #${existing} is already open — updating its body."
   gh pr edit "${existing}" --repo "${TARGET_REPO}" --body-file "${BODY_FILE}" \
-    || die "не удалось обновить PR #${existing}"
-  log "Готово: https://github.com/${TARGET_REPO}/pull/${existing}"
+    || die "failed to update PR #${existing}"
+  log "Done: https://github.com/${TARGET_REPO}/pull/${existing}"
 else
-  log "Создаю PR ${MERGE_BRANCH} -> ${TARGET_BRANCH}"
+  log "Creating PR ${MERGE_BRANCH} -> ${TARGET_BRANCH}"
   gh pr create --repo "${TARGET_REPO}" \
     --base "${TARGET_BRANCH}" --head "${MERGE_BRANCH}" \
     --title "${PR_TITLE}" --body-file "${BODY_FILE}" \
-    || die "не удалось создать PR"
+    || die "failed to create PR"
 fi

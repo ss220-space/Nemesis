@@ -41,6 +41,4 @@ jobs:
           UPSTREAM_BRANCH: master
           MERGE_BRANCH: merge-upstream
           CHANGELOG_AUTHOR: tgstation
-        run: |
-          chmod +x modular_nemesis/tools/merge_upstream.sh
-          bash modular_nemesis/tools/merge_upstream.sh
+        run: bash modular_nemesis/tools/merge_upstream.sh
