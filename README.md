@@ -63,14 +63,8 @@ Nemesis — это попытка перенести [Russian Paradise](https://
 
 # LICENSE
 
----
-
 > [!CAUTION]
 > If you wish to use our code in a closed source manner (i.e. not make it available to the public and/or those who connect to services you offer using this code) you must **only** use code prior to commit [333c566b88108de218d882840e61928a9b759d8f on 2014/12/31 at 4:38 PM PST](https://github.com/ss220-space/Nemesis/commit/333c566b88108de218d882840e61928a9b759d8f), which is licenced under GPLv3.
-
-### Click each banner for further information
-
----
 
 <details>
 <summary><a href="#"><img src="https://img.shields.io/badge/licence-AGPL_3-red?style=for-the-badge" alt="AGPLv3 license"></a></summary>
