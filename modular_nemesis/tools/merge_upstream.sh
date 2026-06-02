@@ -58,11 +58,11 @@ git fetch --no-tags origin || die "failed to fetch origin"
 if git ls-remote --exit-code --heads origin "${MERGE_BRANCH}" >/dev/null 2>&1; then
   log "Branch ${MERGE_BRANCH} exists, resetting it to upstream/${UPSTREAM_BRANCH}"
   git checkout -f -B "${MERGE_BRANCH}" "upstream/${UPSTREAM_BRANCH}"
-  git push --force origin "${MERGE_BRANCH}"
+  git push --force origin "${MERGE_BRANCH}" || die "failed to push ${MERGE_BRANCH}; the token needs 'contents' AND 'workflows' write (upstream changes .github/workflows/* files)"
 else
   log "Creating branch ${MERGE_BRANCH} from upstream/${UPSTREAM_BRANCH}"
   git checkout -f -B "${MERGE_BRANCH}" "upstream/${UPSTREAM_BRANCH}"
-  git push -u origin "${MERGE_BRANCH}"
+  git push -u origin "${MERGE_BRANCH}" || die "failed to push ${MERGE_BRANCH}; the token needs 'contents' AND 'workflows' write (upstream changes .github/workflows/* files)"
 fi
 
 # --- Detect new commits and PR numbers ------------------------------------
