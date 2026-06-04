@@ -5,7 +5,7 @@
 		new /atom/movable/screen/escape_menu/lobby_button/small(
 			null,
 			/* hud_owner = */ null,
-			"Back",
+			"Вернутся",
 			/* tooltip_text = */ null,
 			/* button_screen_loc = */ "TOP:-30,LEFT:30",
 			CALLBACK(src, PROC_REF(open_home_page)),
