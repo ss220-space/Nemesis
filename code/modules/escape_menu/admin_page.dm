@@ -46,7 +46,7 @@
 		)
 	)
 
-	if(CONFIG_GET(flag/see_own_notes)) //вырезать мб
+	if(CONFIG_GET(flag/see_own_notes))
 		page_holder.give_screen_object(
 			new /atom/movable/screen/escape_menu/text/clickable(
 				null,
