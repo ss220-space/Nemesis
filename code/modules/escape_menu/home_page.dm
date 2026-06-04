@@ -129,7 +129,7 @@
 		))
 		offset_order -= offset_order[1]
 
-	var/forumurl = CONFIG_GET(string/forumurl) //вырезать
+	var/forumurl = CONFIG_GET(string/forumurl)
 	if(forumurl)
 		resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 			null,
@@ -171,7 +171,7 @@
 		))
 		offset_order -= offset_order[1]
 
-	var/configurl = CONFIG_GET(string/configurl) //вырезать
+	var/configurl = CONFIG_GET(string/configurl)
 	if(configurl)
 		resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 			null,

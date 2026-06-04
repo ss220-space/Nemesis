@@ -23,7 +23,7 @@
 	page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button(
 		null,
 		/* hud_owner = */ null,
-		"Суцидид",
+		"Суицид",
 		"Совершить драматичный суицид, оставив тело позади",
 		/* button_screen_loc = */ "CENTER:-55,CENTER:-1",
 		CALLBACK(src, PROC_REF(leave_suicide)),
@@ -35,7 +35,7 @@
 			null,
 			/* hud_owner = */ null,
 			"Призрак",
-			"Выход тихо, оставляя ваше тело",
+			"Тихо выйти, оставляя ваше тело",
 			/* button_screen_loc = */ "CENTER:55,CENTER:-1",
 			CALLBACK(src, PROC_REF(leave_ghost)),
 			/* button_overlay = */ "ghost",

@@ -23,27 +23,13 @@
 		)
 	)
 
-/* Заготовка для ментор тикетов
-	page_holder.give_screen_object(
-		new /atom/movable/screen/escape_menu/text/clickable/mentor_help(
-			null,
-			/* hud_owner = */ null,
-			/* escape_menu = */ src,
-			/* button_text = */ "Создать ментор тикет",
-			/* offset = */ list(-171, 28),
-			/* font_size = */ 24,
-			/* on_click_callback = */ CALLBACK(src, PROC_REF(view_latest_ticket)),
-		)
-	)
-*/
-
 	page_holder.give_screen_object(
 		new /atom/movable/screen/escape_menu/text/clickable/admin_ticket_notification(
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
 			/* button_text = */ "Посмотреть последний тикет",
-			/* offset = */ list(-206, 28),
+			/* offset = */ list(-171, 28),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(view_latest_ticket)),
 		)
@@ -54,7 +40,7 @@
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
 			/* button_text = */ "Молиться",
-			/* offset = */ list(-241, 28),
+			/* offset = */ list(-206, 28),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(pray)),
 		)
@@ -67,7 +53,7 @@
 				/* hud_owner = */ null,
 				/* escape_menu = */ src,
 				/* button_text = */ "Просмотреть заметки",
-				/* offset = */ list(-281, 30),
+				/* offset = */ list(-241, 28),
 				/* font_size = */ 24,
 				/* on_click_callback = */ CALLBACK(src, PROC_REF(see_notes)),
 			)
