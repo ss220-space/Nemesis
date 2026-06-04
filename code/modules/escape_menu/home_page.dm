@@ -5,7 +5,7 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Resume",
+			/* button_text = */ "Продолжить",
 			/* offset = */ list(-136, 30),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(home_resume)),
@@ -17,7 +17,7 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Character",
+			/* button_text = */ "Персонаж",
 			/* offset = */ list(-171, 28),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(home_open_character_settings)),
@@ -29,7 +29,7 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Settings",
+			/* button_text = */ "Настройки",
 			/* offset = */ list(-206, 30),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(home_open_game_settings)),
@@ -41,7 +41,7 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Admin Help",
+			/* button_text = */ "Помощь админа",
 			/* offset = */ list(-241, 30),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(open_admin_page)),
@@ -53,7 +53,7 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Leave Body",
+			/* button_text = */ "Покинуть тело",
 			/* offset = */ list(-276, 30),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(open_leave_body)),
@@ -65,7 +65,7 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Quit",
+			/* button_text = */ "Выйти",
 			/* offset = */ list(-311, 30),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(quit_game_prompt)),
@@ -76,8 +76,8 @@
 	page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small(
 		null,
 		/* hud_owner = */ null,
-		"Resources",
-		"Open/Close list of resources",
+		"Ссылки",
+		"Открыть/закрыть список полезных ссылок",
 		/* button_screen_loc */ "BOTTOM:30,RIGHT:-20",
 		CALLBACK(src, PROC_REF(toggle_resources)),
 		/* button_overlay = */ "resources",
@@ -109,8 +109,8 @@
 		resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 			null,
 			/* hud_owner = */ null,
-			"Report Bug",
-			"Report a bug/issue",
+			"Баг репорт",
+			"Сообщить о баге",
 			/* button_screen_loc */ "BOTTOM:30,RIGHT:-20",
 			CALLBACK(client, TYPE_VERB_REF(/client, reportissue)),
 			/* button_overlay = */ "bug",
@@ -121,7 +121,7 @@
 			null,
 			/* hud_owner = */ null,
 			"Github",
-			"Open the repository for the game",
+			"Открыть репозиторий игры",
 			/* button_screen_loc */ "BOTTOM:30,RIGHT:-20",
 			CALLBACK(client, TYPE_VERB_REF(/client, github)),
 			/* button_overlay = */ "github",
@@ -129,7 +129,7 @@
 		))
 		offset_order -= offset_order[1]
 
-	var/forumurl = CONFIG_GET(string/forumurl)
+	var/forumurl = CONFIG_GET(string/forumurl) //вырезать
 	if(forumurl)
 		resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 			null,
@@ -148,8 +148,8 @@
 		resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 			null,
 			/* hud_owner = */ null,
-			"Rules",
-			"View the server rules",
+			"Правила",
+			"Посмотреть правила сервера",
 			/* button_screen_loc */ "BOTTOM:30,RIGHT:-20",
 			CALLBACK(client, TYPE_VERB_REF(/client, rules)),
 			/* button_overlay = */ "rules",
@@ -162,8 +162,8 @@
 		resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 			null,
 			/* hud_owner = */ null,
-			"Wiki",
-			"See the wiki for the game",
+			"Вики",
+			"Посмотреть вики по игре",
 			/* button_screen_loc */ "BOTTOM:30,RIGHT:-20",
 			CALLBACK(client, TYPE_VERB_REF(/client, wiki)),
 			/* button_overlay = */ "wiki",
@@ -171,7 +171,7 @@
 		))
 		offset_order -= offset_order[1]
 
-	var/configurl = CONFIG_GET(string/configurl)
+	var/configurl = CONFIG_GET(string/configurl) //вырезать
 	if(configurl)
 		resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 			null,
@@ -188,8 +188,8 @@
 	resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 		null,
 		/* hud_owner = */ null,
-		"Change Log",
-		"See all changes to the server",
+		"Ченжлог",
+		"Посмотреть список изменений в билде",
 		/* button_screen_loc */ "BOTTOM:30,RIGHT:-20",
 		CALLBACK(client, TYPE_VERB_REF(/client, changelog)),
 		/* button_overlay = */ "changelog",

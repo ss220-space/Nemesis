@@ -3,7 +3,7 @@
 		new /atom/movable/screen/escape_menu/lobby_button/small(
 			null,
 			/* hud_owner = */ null,
-			"Back",
+			"Вернуться",
 			/* tooltip_text = */ null,
 			/* button_screen_loc = */ "TOP:-30,LEFT:30",
 			CALLBACK(src, PROC_REF(open_home_page)),
@@ -16,20 +16,34 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Create Admin Ticket",
+			/* button_text = */ "Создать админ тикет",
 			/* offset = */ list(-136, 28),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(create_ticket)),
 		)
 	)
 
+/* Заготовка для ментор тикетов
+	page_holder.give_screen_object(
+		new /atom/movable/screen/escape_menu/text/clickable/mentor_help(
+			null,
+			/* hud_owner = */ null,
+			/* escape_menu = */ src,
+			/* button_text = */ "Создать ментор тикет",
+			/* offset = */ list(-171, 28),
+			/* font_size = */ 24,
+			/* on_click_callback = */ CALLBACK(src, PROC_REF(view_latest_ticket)),
+		)
+	)
+*/
+
 	page_holder.give_screen_object(
 		new /atom/movable/screen/escape_menu/text/clickable/admin_ticket_notification(
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "View Latest Ticket",
-			/* offset = */ list(-171, 28),
+			/* button_text = */ "Посмотреть последний тикет",
+			/* offset = */ list(-206, 28),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(view_latest_ticket)),
 		)
@@ -39,21 +53,21 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Pray",
-			/* offset = */ list(-206, 30),
+			/* button_text = */ "Молиться",
+			/* offset = */ list(-241, 28),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(pray)),
 		)
 	)
 
-	if(CONFIG_GET(flag/see_own_notes))
+	if(CONFIG_GET(flag/see_own_notes)) //вырезать мб
 		page_holder.give_screen_object(
 			new /atom/movable/screen/escape_menu/text/clickable(
 				null,
 				/* hud_owner = */ null,
 				/* escape_menu = */ src,
-				/* button_text = */ "See Notes",
-				/* offset = */ list(-241, 30),
+				/* button_text = */ "Просмотреть заметки",
+				/* offset = */ list(-281, 30),
 				/* font_size = */ 24,
 				/* on_click_callback = */ CALLBACK(src, PROC_REF(see_notes)),
 			)
@@ -77,7 +91,7 @@
 
 /datum/escape_menu/proc/see_notes()
 	if(!CONFIG_GET(flag/see_own_notes))
-		to_chat(client.mob, span_notice("Seeing notes has been disabled on this server."))
+		to_chat(client.mob, span_notice("Просмотр своих заметок отключен на этом сервере."))
 		return
 	browse_messages(null, client.ckey, null, TRUE)
 	qdel(src)

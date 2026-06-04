@@ -23,8 +23,8 @@
 	page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button(
 		null,
 		/* hud_owner = */ null,
-		"Suicide",
-		"Perform a dramatic suicide in game",
+		"Суцидид",
+		"Совершить драматичный суицид, оставив тело позади",
 		/* button_screen_loc = */ "CENTER:-55,CENTER:-1",
 		CALLBACK(src, PROC_REF(leave_suicide)),
 		/* button_overlay = */ dead_clown,
@@ -34,8 +34,8 @@
 		new /atom/movable/screen/escape_menu/lobby_button(
 			null,
 			/* hud_owner = */ null,
-			"Ghost",
-			"Exit quietly, leaving your body",
+			"Призрак",
+			"Выход тихо, оставляя ваше тело",
 			/* button_screen_loc = */ "CENTER:55,CENTER:-1",
 			CALLBACK(src, PROC_REF(leave_ghost)),
 			/* button_overlay = */ "ghost",
