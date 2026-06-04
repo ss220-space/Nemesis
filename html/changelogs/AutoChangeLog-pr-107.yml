@@ -1,0 +1,4 @@
+author: "Ksaikok46"
+delete-after: True
+changes:
+  - local: "Шрифты с поддержкой кириллицы"

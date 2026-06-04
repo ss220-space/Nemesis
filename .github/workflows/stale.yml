@@ -22,8 +22,8 @@ jobs:
         id: stale
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          stale-pr-message: "Данный PR считается устаревшим, так как не обновлялся достаточно долгое время. Это означает, что он будет автоматически закрыт в течении 7 дней. Если это ошибка и PR в разработке, то сообщите об этом @Ревьювер в Discord." # NEMESIS EDIT CHANGE - localization
-          close-pr-message: "Этот PR не получил обновлений после того, как был помечен как устаревший, и поэтому автоматически закрыт. Вы можете переоткрыть этот PR или создать новый, когда у вас появятся новые обновления." # NEMESIS EDIT CHANGE - localization
+          stale-pr-message: "Данный PR считается устаревшим, так как не обновлялся достаточно долгое время. Это означает, что он будет автоматически закрыт в течении 7 дней. Если это ошибка и PR в разработке, то сообщите об этом @Ревьювер в Discord." # NEMESIS EDIT CHANGE - LOCALIZATION
+          close-pr-message: "Этот PR не получил обновлений после того, как был помечен как устаревший, и поэтому автоматически закрыт. Вы можете переоткрыть этот PR или создать новый, когда у вас появятся новые обновления." # NEMESIS EDIT CHANGE - LOCALIZATION
           days-before-stale: 14 # NEMESIS EDIT CHANGE - ORIGINAL: days-before-stale: 7
           days-before-close: 7
           days-before-issue-stale: 14
@@ -73,7 +73,7 @@ jobs:
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
           title: ${{ matrix.pull_request.title }}
-          message: ${{ format('**PR \#{0} автоматически помечается как устаревший.**', matrix.pull_request.number) }} # NEMESIS EDIT CHANGE - localization
+          message: ${{ format('**PR \#{0} автоматически помечается как устаревший.**', matrix.pull_request.number) }} # NEMESIS EDIT CHANGE - LOCALIZATION
           include_image: false
           show_author: false
           avatar_url: https://avatars.githubusercontent.com/u/1363778?s=200&v=4
