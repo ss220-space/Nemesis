@@ -16,7 +16,7 @@
 			null,
 			/* hud_owner = */ null,
 			/* escape_menu = */ src,
-			/* button_text = */ "Создать админ тикет",
+			/* button_text = */ "Создать админ-тикет",
 			/* offset = */ list(-136, 28),
 			/* font_size = */ 24,
 			/* on_click_callback = */ CALLBACK(src, PROC_REF(create_ticket)),

@@ -692,20 +692,21 @@
 		return
 
 	var/new_maptext
+	var/client_count = LAZYLEN(GLOB.clients)
 	if(round_started)
 		new_maptext = "<span style='text-align: center; vertical-align: middle'>[SSmapping.current_map.map_name]<br /> \
-			[LAZYLEN(GLOB.clients)] игрок[DECL_CREDIT(length(GLOB.clients))]<br /> \
+			[client_count] игрок[DECL_CREDIT(client_count)]<br /> \
 			[round_timestamp()]<br />"
 		new_maptext += "</span>"
 	else
 		if(hud.mymob.client?.holder)
 			new_maptext = "<span style='text-align: center; vertical-align: middle'>Старт через [time_remaining_str()]<br /> \
-				[LAZYLEN(GLOB.clients)] игрок[DECL_CREDIT(length(GLOB.clients))]<br /> \
+				[client_count] игрок[DECL_CREDIT(client_count)]<br /> \
 				[SSticker.totalPlayersReady] игрок[DECL_CREDIT(SSticker.totalPlayersReady)] готов[declension_ru(SSticker.totalPlayersReady, "", "ы", "ы")]<br /> \
-				[SSticker.total_admins_ready] / [length(GLOB.admins)] админов готово</span>"
+				[SSticker.total_admins_ready] / [LAZYLEN(GLOB.admins)] админов готово</span>"
 		else
 			new_maptext = "<span style='text-align: center; vertical-align: middle; font-size: 18px'>[time_remaining_str()]</span><br /> \
-				<span style='text-align: center; vertical-align: middle'>[LAZYLEN(GLOB.clients)] игрок[DECL_CREDIT(length(GLOB.clients))]</span>"
+				<span style='text-align: center; vertical-align: middle'>[client_count] игрок[DECL_CREDIT(client_count)]</span>"
 
 	maptext = MAPTEXT(new_maptext)
 

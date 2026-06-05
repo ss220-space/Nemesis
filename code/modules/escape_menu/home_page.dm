@@ -109,7 +109,7 @@
 		resource_panels += page_holder.give_screen_object(new /atom/movable/screen/escape_menu/lobby_button/small/collapsible(
 			null,
 			/* hud_owner = */ null,
-			"Баг репорт",
+			"Баг-репорт",
 			"Сообщить о баге",
 			/* button_screen_loc */ "BOTTOM:30,RIGHT:-20",
 			CALLBACK(client, TYPE_VERB_REF(/client, reportissue)),

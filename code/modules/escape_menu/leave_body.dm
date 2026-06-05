@@ -5,7 +5,7 @@
 		new /atom/movable/screen/escape_menu/lobby_button/small(
 			null,
 			/* hud_owner = */ null,
-			"Вернутся",
+			"Вернуться",
 			/* tooltip_text = */ null,
 			/* button_screen_loc = */ "TOP:-30,LEFT:30",
 			CALLBACK(src, PROC_REF(open_home_page)),
@@ -35,7 +35,7 @@
 			null,
 			/* hud_owner = */ null,
 			"Призрак",
-			"Тихо выйти, оставляя ваше тело",
+			"Тихо выйти, оставляя своё тело",
 			/* button_screen_loc = */ "CENTER:55,CENTER:-1",
 			CALLBACK(src, PROC_REF(leave_ghost)),
 			/* button_overlay = */ "ghost",
