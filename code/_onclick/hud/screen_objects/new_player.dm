@@ -683,29 +683,29 @@
 
 	var/round_started = SSticker.HasRoundStarted()
 	if(!MC_RUNNING())
-		maptext = MAPTEXT("<span style='text-align: center; vertical-align: middle'>[(round_started ? null : "Starting in [time_remaining_str()]<br />")]Loading...</span>")
+		maptext = MAPTEXT("<span style='text-align: center; vertical-align: middle'>[(round_started ? null : "Старт через [time_remaining_str()]<br />")]Загрузка...</span>")
 		return
 
 	if(SSticker.IsPostgame())
-		maptext = MAPTEXT("<span style='text-align: center; vertical-align: middle'>Game ended, <br /> \
-			restart soon</span>")
+		maptext = MAPTEXT("<span style='text-align: center; vertical-align: middle'>Игра окончена, <br /> \
+			перезапуск скоро</span>")
 		return
 
 	var/new_maptext
 	if(round_started)
 		new_maptext = "<span style='text-align: center; vertical-align: middle'>[SSmapping.current_map.map_name]<br /> \
-			[LAZYLEN(GLOB.clients)] player\s online<br /> \
-			[round_timestamp()] in<br />"
+			[LAZYLEN(GLOB.clients)] игрок[DECL_CREDIT(length(GLOB.clients))]<br /> \
+			[round_timestamp()]<br />"
 		new_maptext += "</span>"
 	else
 		if(hud.mymob.client?.holder)
-			new_maptext = "<span style='text-align: center; vertical-align: middle'>Starting in [time_remaining_str()]<br /> \
-				[LAZYLEN(GLOB.clients)] player\s<br /> \
-				[SSticker.totalPlayersReady] players ready<br /> \
-				[SSticker.total_admins_ready] / [length(GLOB.admins)] admins ready</span>"
+			new_maptext = "<span style='text-align: center; vertical-align: middle'>Старт через [time_remaining_str()]<br /> \
+				[LAZYLEN(GLOB.clients)] игрок[DECL_CREDIT(length(GLOB.clients))]<br /> \
+				[SSticker.totalPlayersReady] игрок[DECL_CREDIT(SSticker.totalPlayersReady)] готов[declension_ru(SSticker.totalPlayersReady, "", "ы", "ы")]<br /> \
+				[SSticker.total_admins_ready] / [length(GLOB.admins)] админов готово</span>"
 		else
 			new_maptext = "<span style='text-align: center; vertical-align: middle; font-size: 18px'>[time_remaining_str()]</span><br /> \
-				<span style='text-align: center; vertical-align: middle'>[LAZYLEN(GLOB.clients)] player\s</span>"
+				<span style='text-align: center; vertical-align: middle'>[LAZYLEN(GLOB.clients)] игрок[DECL_CREDIT(length(GLOB.clients))]</span>"
 
 	maptext = MAPTEXT(new_maptext)
 
@@ -714,8 +714,8 @@
 	if(time_remaining > 0)
 		return "[round(time_remaining/10)]s"
 	if(time_remaining == -10)
-		return "DELAYED"
-	return "SOON"
+		return "ЗАДЕРЖАНО"
+	return "СКОРО"
 
 #undef OVERLAY_X_DIFF
 #undef OVERLAY_Y_DIFF
