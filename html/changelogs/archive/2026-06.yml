@@ -1,3 +1,8 @@
 2026-06-01:
   littleboobs:
   - server: HUI
+2026-06-08:
+  Ksaikok46:
+  - local: Шрифты с поддержкой кириллицы
+  littleboobs:
+  - refactor: Локализация.
